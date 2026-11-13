@@ -4,25 +4,25 @@ import { useState, useCallback, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useLaunchReadinessWebMcp } from "./launch-readiness-webmcp"
+import { ReleaseCheckSummary } from "./release-check-summary"
 import {
   Rocket,
+  ChevronDown,
   ShieldCheck,
   ShieldAlert,
   ShieldX,
-  TrendingUp,
   AlertTriangle,
-  CheckCircle2,
   Info,
 } from "lucide-react"
-import { Card, Badge, Button, Spinner, EmptyState } from "@lyrashield/ui"
+import { Card, Button, Spinner, EmptyState } from "@lyrashield/ui"
 import { PageHeader } from "@/components/page-header"
 import { z } from "zod"
 import { apiGet } from "@/lib/api-client"
 import { launchReadinessReportSchema } from "@/lib/api-schemas"
-import { ScoreGauge } from "@/components/security-visuals"
+import { LaunchReadinessDetails, LaunchVerdictCard } from "./launch-readiness-summary"
 import {
-  gateReasonSentence,
   parseReleaseReference,
+  readinessTargetPageHref,
   type ReleaseCheckResult,
 } from "@/lib/launch-readiness"
 
@@ -62,6 +62,9 @@ const releaseCheckSchema = z
 
 const launchReadinessResponseSchema = launchReadinessReportSchema.extend({
   releaseCheck: releaseCheckSchema.optional(),
+  targets: z.array(z.object({ targetId: z.string(), targetName: z.string() })),
+  nextCursor: z.string().nullable(),
+  partial: z.boolean(),
 })
 
 const VERDICT_CONFIG = {
@@ -143,26 +146,17 @@ function SeverityBreakdown({ bySeverity }: { bySeverity: Record<string, number> 
   )
 }
 
-const HISTORICAL_STATE_LABEL: Record<string, string> = {
-  READY: "Ready to launch",
-  NOT_READY: "Not ready",
-  INSUFFICIENT_EVIDENCE: "Not enough evidence",
-}
-
-function identityText(identity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null) {
-  if (!identity) return null
-  return identity.kind === "COMMIT" ? `commit ${identity.value}` : `artifact ${identity.value}`
-}
-
 export function LaunchReadinessClient({
   workspaceId,
   initialReport,
-  targets,
+  targets: initialTargets,
   initialTargetId,
   initialReleaseRef,
   initialReleaseCheck,
   initialCheckError,
   checkNeedsTarget,
+  nextTargetsHref: initialNextTargetsHref = null,
+  firstTargetsHref: initialFirstTargetsHref = null,
 }: {
   workspaceId: string
   initialReport: LaunchReadinessReport
@@ -172,9 +166,14 @@ export function LaunchReadinessClient({
   initialReleaseCheck: ReleaseCheckResult | null
   initialCheckError: string | null
   checkNeedsTarget: boolean
+  nextTargetsHref?: string | null
+  firstTargetsHref?: string | null
 }) {
   const router = useRouter()
   const [report, setReport] = useState<LaunchReadinessReport>(initialReport)
+  const [targets, setTargets] = useState(initialTargets)
+  const [nextTargetsHref, setNextTargetsHref] = useState(initialNextTargetsHref)
+  const [firstTargetsHref, setFirstTargetsHref] = useState(initialFirstTargetsHref)
   const [releaseCheck, setReleaseCheck] = useState<ReleaseCheckResult | null>(initialReleaseCheck)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -183,13 +182,15 @@ export function LaunchReadinessClient({
   const [formError, setFormError] = useState<string | null>(initialCheckError)
   const [draftDirty, setDraftDirty] = useState(false)
   const draftVersion = useRef(0)
+  const requestVersion = useRef(0)
 
-  useLaunchReadinessWebMcp({ workspaceId, onReport: setReport })
+  useLaunchReadinessWebMcp({ workspaceId })
 
   const loadReport = useCallback(
     (signal?: AbortSignal, options?: { silent?: boolean; refreshCheck?: boolean }) => {
       const silent = options?.silent === true
       const refreshCheck = options?.refreshCheck === true || !draftDirty
+      const request = ++requestVersion.current
       if (!silent) setLoading(true)
       // Carry the URL's check state so a refresh re-runs the same check rather
       // than silently dropping back to the informational view.
@@ -200,12 +201,30 @@ export function LaunchReadinessClient({
         params.set("targetId", initialTargetId)
       }
       params.set("workspaceId", workspaceId)
-      apiGet<LaunchReadinessReport & { releaseCheck?: ReleaseCheckResult | null }>(
-        `/api/launch-readiness?${params.toString()}`,
-        { signal, schema: launchReadinessResponseSchema }
-      )
+      apiGet<
+        LaunchReadinessReport & {
+          releaseCheck?: ReleaseCheckResult | null
+          targets: { targetId: string; targetName: string }[]
+          nextCursor: string | null
+          partial: boolean
+        }
+      >(`/api/launch-readiness?${params.toString()}`, {
+        signal,
+        schema: launchReadinessResponseSchema,
+      })
         .then((data) => {
+          if (request !== requestVersion.current) return
           setReport(data)
+          setTargets(data.targets)
+          const pageHref = (cursor?: string | null) =>
+            readinessTargetPageHref({
+              targetId: params.get("targetId") ?? undefined,
+              commit: params.get("commit") ?? undefined,
+              artifactDigest: params.get("artifactDigest") ?? undefined,
+              cursor,
+            })
+          setNextTargetsHref(data.nextCursor ? pageHref(data.nextCursor) : null)
+          setFirstTargetsHref(params.has("cursor") && data.partial ? pageHref() : null)
           if (refreshCheck && refreshVersion === draftVersion.current) {
             setReleaseCheck(data.releaseCheck ?? null)
             setFormError(null)
@@ -213,20 +232,13 @@ export function LaunchReadinessClient({
           setError(null)
         })
         .catch(() => {
-          // A silent background refresh must not replace a perfectly good report
-          // with an error screen; the explicit Refresh action still surfaces it.
-          if (!silent) {
-            setError("Failed to load launch readiness report. Please try again.")
-            setReleaseCheck(null)
-          } else if (checkRequested && refreshCheck && refreshVersion === draftVersion.current) {
-            setReleaseCheck(null)
-            setFormError(
-              "Could not refresh release applicability. Current applicability is unavailable; try again."
-            )
-          }
+          if (request !== requestVersion.current) return
+          // A failed revalidation cannot establish that an earlier verdict is still current.
+          setError("Current readiness could not be verified. Please try again.")
+          setReleaseCheck(null)
         })
         .finally(() => {
-          if (!silent) setLoading(false)
+          if (request === requestVersion.current) setLoading(false)
         })
     },
     [draftDirty, initialTargetId, workspaceId]
@@ -268,8 +280,28 @@ export function LaunchReadinessClient({
     )
   }
 
-  const config = VERDICT_CONFIG[report.verdict] ?? VERDICT_CONFIG.NO_GO
-  const VerdictIcon = config.icon
+  const releaseRequested = Boolean(initialReleaseRef) || Boolean(releaseCheck?.requested)
+  const releaseNeedsAttention =
+    releaseRequested &&
+    (draftDirty ||
+      !releaseCheck ||
+      releaseCheck.match !== "match" ||
+      !releaseCheck.applicable ||
+      releaseCheck.state !== "READY")
+  const config = releaseNeedsAttention
+    ? releaseCheck?.match === "match" &&
+      releaseCheck.applicable &&
+      releaseCheck.state === "NOT_READY"
+      ? VERDICT_CONFIG.NO_GO
+      : VERDICT_CONFIG.INCONCLUSIVE
+    : (VERDICT_CONFIG[report.verdict] ?? VERDICT_CONFIG.NO_GO)
+  const verdictSummary = releaseNeedsAttention
+    ? draftDirty || !releaseCheck
+      ? "Check this release with the current selection to confirm applicability."
+      : releaseCheck.match === "mismatch"
+        ? "The retained assessment covers a different release. Review the reference and assessment below before making a launch decision."
+        : "The retained assessment does not establish current readiness for this release. Review the reasons below."
+    : report.summary
 
   function submitCheck(event: React.FormEvent) {
     event.preventDefault()
@@ -316,6 +348,42 @@ export function LaunchReadinessClient({
     router.push(destination)
   }
 
+  const scopedTarget = targets.find((target) => target.targetId === initialTargetId)
+  const scopeQuery = scopedTarget ? `&target=${encodeURIComponent(scopedTarget.targetId)}` : ""
+  const nextAction =
+    targets.length === 0
+      ? { href: "/dashboard/scans?new=1", label: "Start your first scan" }
+      : releaseRequested && draftDirty
+        ? { href: "#release-check-reference", label: "Check this release" }
+        : releaseNeedsAttention && !(releaseCheck?.targetId || initialTargetId)
+          ? { href: "#release-check-target", label: "Choose a target for this release" }
+          : releaseNeedsAttention
+            ? {
+                href: `/dashboard/scans?target=${encodeURIComponent(releaseCheck?.targetId ?? initialTargetId)}`,
+                label: "Review target assessments",
+              }
+            : report.blockingFindings > 0
+              ? {
+                  href: `/dashboard/findings?status=ALL${scopeQuery}`,
+                  label: "Review findings",
+                }
+              : !scopedTarget &&
+                  report.verdict === "INCONCLUSIVE" &&
+                  (nextTargetsHref || firstTargetsHref)
+                ? {
+                    href: (nextTargetsHref ?? firstTargetsHref)!,
+                    label: nextTargetsHref ? "Review next targets" : "Review first targets",
+                  }
+                : report.verdict === "INCONCLUSIVE" || report.verdict === "NOT_EVALUATED"
+                  ? {
+                      href: `/dashboard/scans?new=1${scopeQuery}`,
+                      label: scopedTarget ? "Scan this target" : "Choose a target to scan",
+                    }
+                  : {
+                      href: `/dashboard/reports${scopedTarget ? `?targetId=${encodeURIComponent(scopedTarget.targetId)}` : ""}`,
+                      label: "Review assurance report",
+                    }
+
   const checkActive = Boolean(releaseRef) || Boolean(releaseCheck?.requested) || Boolean(formError)
 
   function changeTarget(value: string) {
@@ -338,8 +406,49 @@ export function LaunchReadinessClient({
     <div className="space-y-6">
       <PageHeader title="Launch Readiness" icon={Rocket} />
 
-      {/* Release check — an identity-checked read, not a deployment gate */}
-      <Card className="p-5">
+      {(firstTargetsHref || nextTargetsHref) && (
+        <nav aria-label="Target pages" className="flex flex-wrap gap-4 text-sm">
+          <span>Targets are shown in pages.</span>
+          {firstTargetsHref && (
+            <Link className="underline" href={firstTargetsHref}>
+              First targets
+            </Link>
+          )}
+          {nextTargetsHref && (
+            <Link className="underline" href={nextTargetsHref}>
+              Next targets
+            </Link>
+          )}
+        </nav>
+      )}
+
+      <LaunchVerdictCard
+        report={report}
+        config={config}
+        summary={verdictSummary}
+        scope={
+          scopedTarget?.targetName ??
+          (initialTargetId
+            ? "Selected target unavailable"
+            : firstTargetsHref || nextTargetsHref
+              ? "Targets on this page"
+              : "All workspace targets")
+        }
+        releaseNeedsAttention={releaseNeedsAttention}
+        action={nextAction}
+      />
+
+      <details
+        open={checkActive || checkNeedsTarget}
+        className="group bg-card rounded-xl border p-5"
+      >
+        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2">
+          Check a specific release (optional)
+          <ChevronDown
+            aria-hidden="true"
+            className="ml-auto size-4 shrink-0 transition-transform group-open:rotate-180"
+          />
+        </summary>
         <form onSubmit={submitCheck} noValidate>
           <label htmlFor="release-check-reference" className="text-sm font-medium">
             Check a specific release (optional)
@@ -356,7 +465,7 @@ export function LaunchReadinessClient({
               id="release-check-target"
               value={selectedTargetId}
               onChange={(event) => changeTarget(event.target.value)}
-              className="border-border bg-background text-foreground rounded-md border px-3 py-2 text-sm sm:w-56"
+              className="border-border bg-background text-foreground min-h-11 rounded-md border px-3 py-2 text-base md:text-sm sm:w-56"
             >
               <option value="">Select a target</option>
               {targets.map((target) => (
@@ -373,10 +482,10 @@ export function LaunchReadinessClient({
               placeholder="Commit SHA or sha256: artifact digest"
               spellCheck={false}
               autoComplete="off"
-              className="border-border bg-background text-foreground min-w-0 flex-1 rounded-md border px-3 py-2 font-mono text-sm"
+              className="border-border bg-background text-foreground min-w-0 flex-1 rounded-md border px-3 py-2 font-mono text-base md:text-sm"
             />
             <div className="flex gap-2">
-              <Button type="submit" size="sm" className="h-9">
+              <Button type="submit" size="sm" className="min-h-11">
                 Check release
               </Button>
               {checkActive && (
@@ -384,7 +493,7 @@ export function LaunchReadinessClient({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-9"
+                  className="min-h-11"
                   onClick={clearCheck}
                 >
                   Clear
@@ -409,174 +518,11 @@ export function LaunchReadinessClient({
             Choose the target this release belongs to, then check again.
           </p>
         )}
-      </Card>
+      </details>
 
-      {/* Release check result — match state, identities, and applicability */}
-      {releaseCheck?.requested && (
-        <Card
-          className={`p-5 ${
-            releaseCheck.match === "match"
-              ? "border-emerald-500/20 bg-emerald-500/5"
-              : releaseCheck.match === "mismatch"
-                ? "border-destructive/20 bg-destructive/5"
-                : "border-border bg-muted/30"
-          }`}
-        >
-          <div role="status" aria-live="polite">
-            <h3 className="font-semibold">
-              {releaseCheck.match === "match"
-                ? "Release reference matches this assessment."
-                : releaseCheck.match === "mismatch"
-                  ? "This assessment covers a different release."
-                  : "Cannot confirm this release from the retained assessment."}
-            </h3>
-            <dl className="text-muted-foreground mt-3 space-y-1 text-sm">
-              <div className="flex flex-wrap gap-x-2">
-                <dt className="font-medium">Target:</dt>
-                <dd>{releaseCheck.targetName ?? "Unknown target"}</dd>
-              </div>
-              <div className="flex flex-wrap gap-x-2">
-                <dt className="font-medium">Requested:</dt>
-                <dd>
-                  <code className="break-all">{identityText(releaseCheck.requested)}</code>
-                </dd>
-              </div>
-              <div className="flex flex-wrap gap-x-2">
-                <dt className="font-medium">Assessed:</dt>
-                <dd>
-                  {releaseCheck.assessed ? (
-                    <code className="break-all">{identityText(releaseCheck.assessed)}</code>
-                  ) : (
-                    "No release identity is retained in this assessment."
-                  )}
-                </dd>
-              </div>
-              {releaseCheck.historicalState && (
-                <div className="flex flex-wrap gap-x-2">
-                  <dt className="font-medium">Historical verdict:</dt>
-                  <dd>
-                    {HISTORICAL_STATE_LABEL[releaseCheck.historicalState] ??
-                      releaseCheck.historicalState}
-                    {" · effective now: "}
-                    {HISTORICAL_STATE_LABEL[releaseCheck.state] ?? releaseCheck.state}
-                  </dd>
-                </div>
-              )}
-            </dl>
-            {releaseCheck.reasons.length > 0 && (
-              <ul className="mt-3 space-y-1">
-                {releaseCheck.reasons.map((reason) => (
-                  <li key={reason.code} className="text-foreground/80 text-sm">
-                    {gateReasonSentence(reason)}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-4 flex flex-wrap gap-3 text-sm">
-              {releaseCheck.blockingFindings > 0 && (
-                <Link
-                  href={`/dashboard/findings?target=${encodeURIComponent(releaseCheck.targetId)}`}
-                  className="text-accent font-medium underline underline-offset-4"
-                >
-                  Inspect blocking findings
-                </Link>
-              )}
-              {releaseCheck.reasons.some((r) => r.code === "NEWER_ASSESSMENT_ATTEMPT") && (
-                <Link
-                  href={`/dashboard/scans?target=${encodeURIComponent(releaseCheck.targetId)}`}
-                  className="text-accent font-medium underline underline-offset-4"
-                >
-                  Review the newer assessment
-                </Link>
-              )}
-              {(releaseCheck.match !== "match" || !releaseCheck.applicable) && (
-                <Link
-                  href={`/dashboard/scans?new=1&target=${encodeURIComponent(releaseCheck.targetId)}`}
-                  className="text-accent font-medium underline underline-offset-4"
-                >
-                  Open scan creation
-                </Link>
-              )}
-            </div>
-          </div>
-        </Card>
-      )}
+      <ReleaseCheckSummary releaseCheck={releaseCheck} />
 
-      {/* Verdict Card */}
-      <Card className={`p-6 ${config.bg} ${config.border}`}>
-        <div className="flex flex-col items-center gap-6 sm:flex-row">
-          <ScoreGauge
-            score={report.triageScore}
-            grade="Triage"
-            neutral={report.verdict === "INCONCLUSIVE" || report.verdict === "NOT_EVALUATED"}
-          />
-          <div className="flex-1 text-center sm:text-left">
-            <div className="mb-2 flex items-center justify-center gap-2 sm:justify-start">
-              <VerdictIcon className={`h-7 w-7 ${config.color}`} aria-hidden="true" />
-              <h2 className={`text-2xl font-bold ${config.color}`}>{config.label}</h2>
-            </div>
-            <p className="text-muted-foreground mb-4 text-sm">{report.summary}</p>
-            <p className="text-muted-foreground mb-4 text-xs">
-              Triage counts open findings; it is not the launch verdict.
-            </p>
-            <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
-              <Badge variant={config.badgeVariant}>
-                Triage only — not a readiness score ·{" "}
-                {report.triageScore === null
-                  ? "Triage score pending"
-                  : `Triage score: ${report.triageScore}/100`}
-              </Badge>
-              <Badge variant="muted">{report.totalFindings} total findings</Badge>
-              <Badge variant="muted">{report.blockingFindings} blocking</Badge>
-              <Badge variant="muted">{report.verifiedFindings} independently verified</Badge>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Conditions & Recommendations */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {report.conditions.length > 0 && (
-          <Card className="p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" aria-hidden="true" />
-              <h3 className="font-semibold">Conditions</h3>
-            </div>
-            <ul className="space-y-2">
-              {report.conditions.map((cond, i) => (
-                <li key={i} className="text-foreground/80 flex items-start gap-2 text-sm">
-                  <span className="mt-0.5 text-amber-500" aria-hidden="true">
-                    •
-                  </span>
-                  {cond}
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-
-        {report.recommendations.length > 0 && (
-          <Card className="p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-sky-500" aria-hidden="true" />
-              <h3 className="font-semibold">Recommendations</h3>
-            </div>
-            <ul className="space-y-2">
-              {report.recommendations.map((rec, i) => (
-                <li key={i} className="text-foreground/80 flex items-start gap-2 text-sm">
-                  <span className="mt-0.5 text-sky-500" aria-hidden="true">
-                    •
-                  </span>
-                  {rec}
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-      </div>
-
-      {/* Severity Breakdown */}
-      {report.totalFindings > 0 && (
+      <LaunchReadinessDetails report={report}>
         <Card className="p-5">
           <div className="mb-4 flex items-center gap-2">
             <Info className="text-muted-foreground h-5 w-5" aria-hidden="true" />
@@ -584,19 +530,7 @@ export function LaunchReadinessClient({
           </div>
           <SeverityBreakdown bySeverity={report.bySeverity} />
         </Card>
-      )}
-
-      {/* Completed scope */}
-      {report.verdict === "GO" && report.totalFindings === 0 && (
-        <Card className="p-6 text-center">
-          <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-emerald-500" aria-hidden="true" />
-          <h3 className="mb-1 text-lg font-semibold">No blocking findings in completed scope</h3>
-          <p className="text-muted-foreground text-sm">
-            No findings were reported within completed scan coverage. Review the retained coverage
-            and limitations before making your launch decision.
-          </p>
-        </Card>
-      )}
+      </LaunchReadinessDetails>
     </div>
   )
 }

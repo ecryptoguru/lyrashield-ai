@@ -15,6 +15,11 @@ vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
   useCallback: (fn: unknown) => fn,
   useEffect: () => {},
+  useRef: (initial: unknown) => {
+    const index = hooks.cursor++
+    if (!(index in hooks.values)) hooks.values[index] = { current: initial }
+    return hooks.values[index]
+  },
   useState: (initial: unknown) => {
     const index = hooks.cursor++
     if (!(index in hooks.values)) hooks.values[index] = initial
@@ -62,6 +67,8 @@ import { ApiKeysSection } from "./api-keys"
 type Element = ReactElement<{
   children?: ReactNode
   id?: string
+  htmlFor?: string
+  role?: string
   name?: string
   checked?: boolean
   value?: string
@@ -93,7 +100,12 @@ function renderTwoFactor(): Element[] {
 
 function renderApiKeys(): Element[] {
   hooks.cursor = 0
-  return elements(ApiKeysSection({ workspaceId: "workspace-1", canManage: true }))
+  const root = ApiKeysSection({ workspaceId: "workspace-1", canManage: true })
+  const workspace = elements(root).find(
+    (element) => typeof element.type === "function" && "startCreate" in element.props
+  )
+  if (!workspace || typeof workspace.type !== "function") throw new Error("Missing key section")
+  return elements((workspace.type as (props: Element["props"]) => ReactNode)(workspace.props))
 }
 
 describe("security settings request bodies", () => {
@@ -184,4 +196,80 @@ describe("security settings request bodies", () => {
       expect.any(Object)
     )
   })
+  it.each([4, 24, 720])(
+    "sends a fixed-clock %s-hour read-only expiry and retains a failed draft",
+    async (hours) => {
+      const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-03T12:00:00.000Z"))
+      try {
+        api.post.mockRejectedValue(new Error("Unavailable"))
+        renderApiKeys()
+          .find((element) => element.props["aria-controls"] === "api-key-create-form")
+          ?.props.onClick?.()
+        renderApiKeys()
+          .find((element) => element.props.id === "api-key-name")
+          ?.props.onChange?.({ target: { value: "Acceptance reader" } })
+        renderApiKeys()
+          .find((element) => element.props.id === "api-key-expiry")
+          ?.props.onChange?.({ target: { value: String(hours) } })
+        renderApiKeys()
+          .find(
+            (element) =>
+              element.type === controls.Button &&
+              textContent(element.props.children) === "Create key"
+          )
+          ?.props.onClick?.()
+        await vi.waitFor(() => expect(api.post).toHaveBeenCalledOnce())
+        expect(api.post).toHaveBeenCalledWith(
+          "/api/api-keys",
+          {
+            workspaceId: "workspace-1",
+            name: "Acceptance reader",
+            scopes: ["read"],
+            expiresAt: new Date(
+              Date.parse("2026-11-03T12:00:00.000Z") + hours * 3600000
+            ).toISOString(),
+          },
+          expect.any(Object)
+        )
+        await vi.waitFor(() =>
+          expect(
+            renderApiKeys().find((element) => element.props.id === "api-key-name")?.props.value
+          ).toBe("Acceptance reader")
+        )
+        await vi.waitFor(() =>
+          expect(
+            renderApiKeys().some(
+              (element) =>
+                element.props.role === "alert" &&
+                textContent(element.props.children) === "Failed to create API key"
+            )
+          ).toBe(true)
+        )
+        expect(
+          textContent(
+            renderApiKeys().find(
+              (element) => element.type === "label" && element.props.htmlFor === "api-key-expiry"
+            )?.props.children
+          )
+        ).toBe("Expires after")
+        expect(
+          renderApiKeys().find((element) => element.props.id === "api-key-expiry")?.props.value
+        ).toBe(hours)
+        renderApiKeys()
+          .find(
+            (element) =>
+              element.type === controls.Button && textContent(element.props.children) === "Cancel"
+          )
+          ?.props.onClick?.()
+        renderApiKeys()
+          .find((element) => element.props["aria-controls"] === "api-key-create-form")
+          ?.props.onClick?.()
+        expect(
+          renderApiKeys().find((element) => element.props.id === "api-key-expiry")?.props.value
+        ).toBe(0)
+      } finally {
+        clock.mockRestore()
+      }
+    }
+  )
 })

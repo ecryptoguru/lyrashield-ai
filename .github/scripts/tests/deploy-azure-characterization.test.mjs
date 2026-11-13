@@ -4,6 +4,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
+import { runInNewContext } from "node:vm"
 
 const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
 const caller = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
@@ -35,6 +36,64 @@ const normalizedIf = (name) => {
   return folded[1].trim().replace(/\s+/g, " ")
 }
 
+test("scanner deployment binds the prepared digest-only web image to its exact source", (t) => {
+  const directory = mkdtempSync(path.join(tmpdir(), "lyra-scanner-source-"))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const azPath = path.join(directory, "az")
+  const updateArgsPath = path.join(directory, "update-args")
+  const outputPath = path.join(directory, "github-output")
+  const source = "de92b93a2bef1c44e5837b15949c453f0d8a28c6"
+  const image =
+    "ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-web@sha256:e0e53a32c37b3bb84ce5832663411f59bbe542faa406c3517983c1a0b4385b9b"
+  writeFileSync(
+    azPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1 $2" = "containerapp update" ]; then
+  printf '%s\\n' "$@" > "$FAKE_AZ_UPDATE_ARGS"
+elif [ "$1 $2" = "containerapp show" ]; then
+  printf 'scanner-candidate\\n'
+elif [ "$1 $2 $3" = "containerapp revision show" ]; then
+  printf 'scanner-candidate.example.test\\n'
+else
+  exit 91
+fi
+`,
+    { mode: 0o700 }
+  )
+  const env = {
+    PATH: `${directory}${path.delimiter}${process.env.PATH}`,
+    FAKE_AZ_UPDATE_ARGS: updateArgsPath,
+    GITHUB_OUTPUT: outputPath,
+    IMAGE: image,
+    DEPLOY_SHA: source,
+    AZURE_RESOURCE_GROUP: "fixture-rg",
+    AZURE_SCANNER_CONTAINER_APP_NAME: "fixture-scanner",
+    EMAIL_VERIFICATION_REQUIRED: "1",
+    REQUIRE_EMAIL_VERIFICATION: "1",
+    SCANNER_URL: "https://scanner.example.test",
+    APP_URL: "https://app.example.test",
+    MARKETING_URL: "https://example.test",
+    PLATFORM_ADMIN_EMAILS: "operator@example.test",
+    POLAR_BILLING_ADMISSION: "off",
+    POLAR_LOCAL_BILLING_ADMISSION: "off",
+    RAZORPAY_BILLING_ADMISSION: "off",
+    RAZORPAY_LOCAL_BILLING_ADMISSION: "off",
+  }
+  execFileSync(
+    "bash",
+    [".github/scripts/deploy-azure-rollout.sh", "deploy-scanner-container-app"],
+    {
+      env,
+      encoding: "utf8",
+    }
+  )
+  const args = readFileSync(updateArgsPath, "utf8").trim().split("\n")
+  assert.equal(args[args.indexOf("--image") + 1], image)
+  assert.ok(args.includes(`LYRASHIELD_PRODUCT_REVISION=${source}`))
+  assert.match(readFileSync(outputPath, "utf8"), /^revision=scanner-candidate$/m)
+})
+
 test("Azure caller passes reusable-workflow inputs through supported contexts", () => {
   const deploy = caller.slice(caller.indexOf("\n  deploy:"))
   const inputsStart = deploy.indexOf("\n    with:\n")
@@ -44,7 +103,12 @@ test("Azure caller passes reusable-workflow inputs through supported contexts", 
 
   const reusableInputs = deploy.slice(inputsStart, inputsEnd)
   assert.match(reusableInputs, /source_sha: \$\{\{ inputs\.source_sha \|\| github\.sha \}\}/)
-  assert.match(reusableInputs, /engine_revision: \$\{\{ needs\.build\.outputs\.engine_revision \}\}/)
+  assert.match(
+    reusableInputs,
+    /engine_revision: \$\{\{ needs\.resolve-images\.outputs\.engine_revision \}\}/
+  )
+  assert.match(caller, /\[ "\$BUILD_RESULT" = success \] && \[ "\$PREPARED_RESULT" = skipped \]/)
+  assert.match(caller, /BUILT_ENGINE_REVISION: \$\{\{ needs\.build\.outputs\.engine_revision \}\}/)
   assert.doesNotMatch(reusableInputs, /\$\{\{\s*env\./)
   assert.match(caller, /engine_revision: \$\{\{ steps\.meta\.outputs\.engine_revision \}\}/)
   assert.match(caller, /echo "engine_revision=\$\{\{ env\.ENGINE_REVISION \}\}"/)
@@ -105,9 +169,13 @@ fi
 `,
     { mode: 0o700 }
   )
-  writeFileSync(path.join(bin, "curl"), '#!/usr/bin/env bash\nprintf "curl\\n" >> "$FAKE_AZ_CALLS"\n', {
-    mode: 0o700,
-  })
+  writeFileSync(
+    path.join(bin, "curl"),
+    '#!/usr/bin/env bash\nprintf "curl\\n" >> "$FAKE_AZ_CALLS"\n',
+    {
+      mode: 0o700,
+    }
+  )
   writeFileSync(path.join(bin, "sleep"), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o700 })
   for (const name of ["az", "curl", "sleep"]) chmodSync(path.join(bin, name), 0o700)
   const script = `
@@ -145,28 +213,25 @@ ca_deactivate_superseded app app current-r rollback-r rg
     if (parts[1] === "ingress") return `containerapp ingress ${parts[2]} ${parts[3]}`
     return `containerapp ${parts[1]}`
   }
-  assert.deepEqual(
-    commands.map(operation).filter(Boolean),
-    [
-      "containerapp show",
-      "containerapp revision show",
-      "rest get",
-      "rest patch",
-      "rest get",
-      "containerapp ingress traffic set",
-      "containerapp revision activate",
-      "containerapp ingress traffic set",
-      "containerapp ingress traffic show",
-      "containerapp revision show",
-      "containerapp revision deactivate",
-      "containerapp ingress traffic show",
-      "containerapp ingress traffic show",
-      "containerapp revision list",
-      "containerapp ingress traffic show",
-      "containerapp revision deactivate",
-      "containerapp revision list",
-    ]
-  )
+  assert.deepEqual(commands.map(operation).filter(Boolean), [
+    "containerapp show",
+    "containerapp revision show",
+    "rest get",
+    "rest patch",
+    "rest get",
+    "containerapp ingress traffic set",
+    "containerapp revision activate",
+    "containerapp ingress traffic set",
+    "containerapp ingress traffic show",
+    "containerapp revision show",
+    "containerapp revision deactivate",
+    "containerapp ingress traffic show",
+    "containerapp ingress traffic show",
+    "containerapp revision list",
+    "containerapp ingress traffic show",
+    "containerapp revision deactivate",
+    "containerapp revision list",
+  ])
   assert.match(readFileSync(calls, "utf8"), /patch-body:.*clientCertificateMode.*Require/)
   assert.equal(readFileSync(mode, "utf8").trim(), "Require")
 
@@ -200,21 +265,110 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   ]
   const positions = orderedSteps.map((name) => runtime.indexOf(`      - name: ${name}\n`))
   assert.ok(positions.every((position) => position >= 0))
-  assert.deepEqual(positions, [...positions].sort((a, b) => a - b))
+  assert.deepEqual(
+    positions,
+    [...positions].sort((a, b) => a - b)
+  )
 
-  assert.equal(normalizedIf("Deactivate superseded Container App revisions"), "steps.smoke-public.outcome == 'success'")
-  assert.equal(
-    normalizedIf("Roll back production traffic on health failure"),
-    "inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
-  )
-  assert.equal(
-    normalizedIf("Restore prior ingress mode after failed rollout"),
-    "inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
-  )
-  assert.equal(
-    normalizedIf("Deactivate zero-traffic candidates after failed rollout"),
-    "inputs.webhook_claims_cutover != true && failure() && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
-  )
+  const evaluate = (
+    name,
+    {
+      cold = false,
+      held = false,
+      cutover = false,
+      v26 = "false",
+      failed = false,
+      failureStep,
+      contained = "success",
+      finished = "success",
+    } = {}
+  ) => {
+    const stepNames = [
+      "deploy-app",
+      "deploy-scanner",
+      "deploy-egress-proxy",
+      "smoke-candidates",
+      "worker-preflight",
+      "promote",
+      "smoke-public",
+      "ordinary-worker-login",
+      "worker-vm",
+      "cold-finish",
+      "cold-contain",
+    ]
+    const steps = Object.fromEntries(
+      stepNames.map((step) => [
+        step,
+        { outcome: "success", outputs: { previous_client_cert_mode: "Ignore" } },
+      ])
+    )
+    steps["cold-contain"].outcome = contained
+    steps["cold-finish"].outcome = finished
+    if (failureStep) steps[failureStep].outcome = "failure"
+    return runInNewContext(
+      normalizedIf(name).replace(/steps\.([a-z0-9-]+)/g, 'steps["$1"]'),
+      {
+        inputs: { cold_release: cold, held_recovery: held, webhook_claims_cutover: cutover },
+        env: { V26_CUTOVER: v26 },
+        steps,
+        failure: () => failed,
+      },
+      { timeout: 1000 }
+    )
+  }
+  const revisionCleanup = "Deactivate superseded Container App revisions"
+  assert.equal(evaluate(revisionCleanup), true)
+  assert.equal(evaluate(revisionCleanup, { held: true }), false)
+  assert.equal(evaluate(revisionCleanup, { failureStep: "smoke-public" }), false)
+  assert.equal(evaluate(revisionCleanup, { cold: true, finished: "skipped" }), false)
+  assert.equal(evaluate(revisionCleanup, { cold: true }), true)
+  const cleanup = [
+    "Roll back production traffic on health failure",
+    "Restore prior ingress mode after failed rollout",
+    "Deactivate zero-traffic candidates after failed rollout",
+  ]
+  for (const name of cleanup) {
+    assert.equal(evaluate(name), false, name)
+    for (const failureStep of ["promote", "smoke-public", "ordinary-worker-login", "worker-vm"]) {
+      assert.equal(evaluate(name, { failed: true, failureStep }), true, name + failureStep)
+      for (const boundary of [{ held: true }, { cutover: true }, { v26: "true" }])
+        assert.equal(evaluate(name, { failed: true, failureStep, ...boundary }), false, name)
+    }
+    for (const failureStep of [
+      "deploy-app",
+      "deploy-scanner",
+      "deploy-egress-proxy",
+      "smoke-candidates",
+      "worker-preflight",
+    ])
+      assert.equal(
+        evaluate(name, { failed: true, failureStep }),
+        name !== cleanup[0],
+        name + failureStep
+      )
+    for (const contained of ["failure", "cancelled", "skipped"])
+      assert.equal(
+        evaluate(name, { cold: true, failed: true, finished: "failure", contained }),
+        false,
+        name
+      )
+    assert.equal(evaluate(name, { cold: true, failed: true, finished: "failure" }), true, name)
+    assert.equal(
+      evaluate(name, { cold: true, finished: "cancelled" }),
+      true,
+      name + " must handle a lost post-release result only after verified containment"
+    )
+  }
+
+  for (const name of [
+    "Roll back production traffic on health failure",
+    "Restore prior ingress mode after failed rollout",
+    "Deactivate zero-traffic candidates after failed rollout",
+  ])
+    assert.ok(
+      normalizedIf(name).includes("env.V26_CUTOVER != 'true'"),
+      `${name} must exclude one-time v26 maintenance`
+    )
 
   const app = functionBody(rollout, "deploy-app-container-app")
   const scanner = functionBody(rollout, "deploy-scanner-container-app")
@@ -252,29 +406,87 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "MYRA_AZURE_OPENAI_DEPLOYMENT",
   ])
   assert.deepEqual(envKeys(app, "--set-env-vars"), [
-    "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_MARKETING_URL", "BETTER_AUTH_URL", "PLATFORM_ADMIN_EMAILS",
-    "IP_HASH_SALT", "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION", "LYRASHIELD_PRODUCT_REVISION",
-    "CLOUDFLARE_ORIGIN_MTLS", "CLOUDFLARE_AOP_CERT_SHA256", "DEPLOY_PROBE_CERT_SHA256",
-    "POLAR_ENVIRONMENT", "POLAR_ACCESS_TOKEN", "POLAR_WEBHOOK_SECRET", "POLAR_PRODUCT_IDS",
-    "POLAR_LOCAL_PRODUCT_IDS", "POLAR_BILLING_ADMISSION", "POLAR_LOCAL_BILLING_ADMISSION",
-    "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET", "RAZORPAY_PLAN_IDS",
-    "RAZORPAY_BILLING_ADMISSION", "RAZORPAY_LOCAL_BILLING_ADMISSION", "BILLING_CANARY_WORKSPACE_IDS",
-    "REDIS_URL", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "LYRASHIELD_EVIDENCE_KEK",
-    "LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF", "LYRASHIELD_EVIDENCE_KEK_KEYRING", "S3_ENDPOINT", "S3_BUCKET",
-    "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_REGION", "GITHUB_APP_ID", "GITHUB_APP_SLUG",
-    "GITHUB_APP_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET", "MYRA_PUBLIC_ENABLED", "MYRA_DASHBOARD_ENABLED",
-    "MYRA_OPERATOR_ENABLED", "MYRA_WRITES_ENABLED", "MYRA_PUBLIC_BOOKING_ENABLED", "MYRA_GENERATION_ENABLED",
-    "MYRA_PROVIDER", "MYRA_CALENDAR_PROVIDER", "MYRA_AZURE_OPENAI_ENDPOINT", "MYRA_MODEL",
-    "MYRA_MONTHLY_BUDGET_USD", "MYRA_GOOGLE_CLIENT_ID", "MYRA_GOOGLE_CALENDAR_ID", "MYRA_SUPPORT_NOTIFY_EMAIL",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_MARKETING_URL",
+    "TURNSTILE_ENFORCE_ACTION",
+    "BETTER_AUTH_URL",
+    "PLATFORM_ADMIN_EMAILS",
+    "IP_HASH_SALT",
+    "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION",
+    "LYRASHIELD_PRODUCT_REVISION",
+    "CLOUDFLARE_ORIGIN_MTLS",
+    "CLOUDFLARE_AOP_CERT_SHA256",
+    "DEPLOY_PROBE_CERT_SHA256",
+    "POLAR_ENVIRONMENT",
+    "POLAR_ACCESS_TOKEN",
+    "POLAR_WEBHOOK_SECRET",
+    "POLAR_PRODUCT_IDS",
+    "POLAR_LOCAL_PRODUCT_IDS",
+    "POLAR_BILLING_ADMISSION",
+    "POLAR_LOCAL_BILLING_ADMISSION",
+    "RAZORPAY_KEY_ID",
+    "RAZORPAY_KEY_SECRET",
+    "RAZORPAY_WEBHOOK_SECRET",
+    "RAZORPAY_PLAN_IDS",
+    "RAZORPAY_BILLING_ADMISSION",
+    "RAZORPAY_LOCAL_BILLING_ADMISSION",
+    "BILLING_CANARY_WORKSPACE_IDS",
+    "REDIS_URL",
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
+    "LYRASHIELD_EVIDENCE_KEK",
+    "LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF",
+    "LYRASHIELD_EVIDENCE_KEK_KEYRING",
+    "S3_ENDPOINT",
+    "S3_BUCKET",
+    "S3_ACCESS_KEY",
+    "S3_SECRET_KEY",
+    "S3_REGION",
+    "GITHUB_APP_ID",
+    "GITHUB_APP_SLUG",
+    "GITHUB_APP_PRIVATE_KEY",
+    "GITHUB_WEBHOOK_SECRET",
+    "MYRA_PUBLIC_ENABLED",
+    "MYRA_DASHBOARD_ENABLED",
+    "MYRA_OPERATOR_ENABLED",
+    "MYRA_WRITES_ENABLED",
+    "MYRA_PUBLIC_BOOKING_ENABLED",
+    "MYRA_GENERATION_ENABLED",
+    "MYRA_PROVIDER",
+    "MYRA_CALENDAR_PROVIDER",
+    "MYRA_AZURE_OPENAI_ENDPOINT",
+    "MYRA_MODEL",
+    "MYRA_MONTHLY_BUDGET_USD",
+    "MYRA_GOOGLE_CLIENT_ID",
+    "MYRA_GOOGLE_CALENDAR_ID",
+    "MYRA_SUPPORT_NOTIFY_EMAIL",
   ])
   assert.deepEqual(envKeys(scanner, "--set-env-vars"), [
-    "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_MARKETING_URL", "BETTER_AUTH_URL", "PLATFORM_ADMIN_EMAILS",
-    "IP_HASH_SALT", "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION", "POLAR_BILLING_ADMISSION",
-    "POLAR_LOCAL_BILLING_ADMISSION", "RAZORPAY_BILLING_ADMISSION", "RAZORPAY_LOCAL_BILLING_ADMISSION",
-    "BILLING_CANARY_WORKSPACE_IDS", "CLOUDFLARE_ORIGIN_MTLS", "CLOUDFLARE_AOP_CERT_SHA256",
-    "DEPLOY_PROBE_CERT_SHA256", "REDIS_URL", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_MARKETING_URL",
+    "TURNSTILE_ENFORCE_ACTION",
+    "BETTER_AUTH_URL",
+    "PLATFORM_ADMIN_EMAILS",
+    "IP_HASH_SALT",
+    "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION",
+    "LYRASHIELD_PRODUCT_REVISION",
+    "POLAR_BILLING_ADMISSION",
+    "POLAR_LOCAL_BILLING_ADMISSION",
+    "RAZORPAY_BILLING_ADMISSION",
+    "RAZORPAY_LOCAL_BILLING_ADMISSION",
+    "BILLING_CANARY_WORKSPACE_IDS",
+    "CLOUDFLARE_ORIGIN_MTLS",
+    "CLOUDFLARE_AOP_CERT_SHA256",
+    "DEPLOY_PROBE_CERT_SHA256",
+    "REDIS_URL",
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
   ])
+  assert.doesNotMatch(scanner, /LYRASHIELD_AI_(?:RESULT_CACHE|CACHE_)/)
 
+  // Nine bounded federated-login renewals protect the long ordinary and
+  // maintenance paths. Cold promotion reuses this pipeline without another controller.
+  assert.equal((runtime.match(/^      - name: Refresh Azure OIDC login /gm) ?? []).length, 9)
   for (const file of [
     ".github/workflows/deploy-azure.yml",
     ".github/workflows/deploy-azure-runtime.yml",
@@ -283,7 +495,10 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "ops/deployment/containerapp.sh",
   ]) {
     const lineCount = readFileSync(file, "utf8").split("\n").length - 1
-    assert.ok(lineCount < 900, `${file} has ${lineCount} lines; expected fewer than 900`)
+    // The reviewed cold evidence, host barrier and post-release monitoring steps
+    // extend the existing v26 runtime. Other scripts keep the 900-line cap.
+    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 1300 : 900
+    assert.ok(lineCount < limit, `${file} has ${lineCount} lines; expected fewer than ${limit}`)
   }
 
   const appDeploy = stepYaml("Deploy app Container App")
@@ -295,7 +510,10 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "MYRA_GOOGLE_CLIENT_SECRET",
     "MYRA_GOOGLE_REFRESH_TOKEN",
   ]) {
-    assert.doesNotMatch(appDeploy, new RegExp(`^[ \\t]+[A-Z0-9_]+: \\$\\{\\{ secrets\\.${secret} \\}\\}`, "m"))
+    assert.doesNotMatch(
+      appDeploy,
+      new RegExp(`^[ \\t]+[A-Z0-9_]+: \\$\\{\\{ secrets\\.${secret} \\}\\}`, "m")
+    )
     assert.match(runtime, new RegExp(`secrets\\.${secret} != ''`))
   }
 })
@@ -304,7 +522,10 @@ test("scanner update never binds GitHub App credentials", () => {
   const scanner = functionBody(rollout, "deploy-scanner-container-app")
   const update = scanner.split("--set-env-vars")[1]?.split("--output none")[0]
   assert.ok(update)
-  assert.doesNotMatch(update, /GITHUB_APP_ID|GITHUB_APP_SLUG|GITHUB_APP_PRIVATE_KEY|GITHUB_WEBHOOK_SECRET|GITHUB_APP_CLIENT_ID|GITHUB_APP_CLIENT_SECRET/)
+  assert.doesNotMatch(
+    update,
+    /GITHUB_APP_ID|GITHUB_APP_SLUG|GITHUB_APP_PRIVATE_KEY|GITHUB_WEBHOOK_SECRET|GITHUB_APP_CLIENT_ID|GITHUB_APP_CLIENT_SECRET/
+  )
   assert.match(scanner, /--remove-env-vars[\s\S]*GITHUB_APP_PRIVATE_KEY/)
 })
 

@@ -4,8 +4,8 @@ import { prisma } from "./client"
 import { createBoundedPgAdapter } from "./pool"
 import { registerSlowQueryLogging } from "./slow-query-log"
 
-const globalForSystemPrisma = globalThis as unknown as {
-  systemPrisma: ReturnType<typeof createSystemPrismaClient> | undefined
+const globalForSystemPrisma = globalThis as typeof globalThis & {
+  systemPrisma?: ReturnType<typeof createSystemPrismaClient>
 }
 
 function createSystemPrismaClient() {
@@ -39,7 +39,8 @@ export function getSystemPrisma(): typeof prisma {
 
   const client = globalForSystemPrisma.systemPrisma ?? createSystemPrismaClient()
   if (!globalForSystemPrisma.systemPrisma) globalForSystemPrisma.systemPrisma = client
-  // Keep the shared client type for callers. The configured system client is plain PrismaClient,
-  // without workspace or audit query extensions.
+  // The privileged client intentionally skips Prisma query extensions. Prisma's
+  // extension generics still give callers the shared delegate surface, but the
+  // plain and extended clients are not structurally assignable.
   return client as unknown as typeof prisma
 }

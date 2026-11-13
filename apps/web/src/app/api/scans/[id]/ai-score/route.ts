@@ -1,11 +1,12 @@
-import { getAiSecurityScoreSnapshot } from "@lyrashield/db"
+import { getAiSecurityScoreSnapshot, withDelegatedReadAuthority } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError } from "../../../../../lib/api-response"
+import { jsonWithEtag } from "../../../../../lib/http-etag"
 import { z } from "zod"
-import { NextResponse } from "next/server"
+import { delegatedReadPrincipal, delegatedScanAccess } from "@/lib/delegated-target-read-scope"
 
 const WorkspaceSchema = z.string().min(1)
 
@@ -22,20 +23,31 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const workspaceId = parsedWorkspace.data
 
   try {
-    await requirePermission(workspaceId, PERMISSIONS.scan.view)
-    const snapshot = await getAiSecurityScoreSnapshot(id, workspaceId)
-
-    if (!snapshot) {
-      return NextResponse.json(
-        { success: true, data: { score: null } },
-        { headers: { "Cache-Control": "private, no-store" } }
-      )
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const principal = delegatedReadPrincipal(session, workspace)
+    const load = async (
+      client?: Parameters<typeof getAiSecurityScoreSnapshot>[2],
+      authority?: { allowedProfiles: string[] }
+    ) => {
+      if (principal) {
+        const access = await delegatedScanAccess(session, workspace, id, client)
+        if (!access || access.statusOnly) return undefined
+        return getAiSecurityScoreSnapshot(id, workspaceId, client, {
+          requireActiveTarget: true,
+          allowedProfiles: authority!.allowedProfiles,
+        })
+      }
+      return getAiSecurityScoreSnapshot(id, workspaceId)
+    }
+    const snapshot = principal
+      ? await withDelegatedReadAuthority(principal, (tx, authority) => load(tx, authority))
+      : await load()
+    if (snapshot === undefined) {
+      return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
+    const data = snapshot
+      ? {
           score: snapshot.score,
           methodology: snapshot.methodology,
           assessedCount: snapshot.assessedCount,
@@ -45,10 +57,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           reason: (snapshot.breakdown as Record<string, unknown>)?.reason,
           computedAt: snapshot.computedAt,
           shareEligible: false,
-        },
-      },
-      { headers: { "Cache-Control": "private, no-store" } }
-    )
+        }
+      : { score: null }
+
+    // W2.4: the score snapshot is a report representation — ETag on 200 and
+    // a bodyless 304 for a matching conditional GET.
+    return jsonWithEtag(request, data, {
+      headers: { "Cache-Control": "private, no-store" },
+    })
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

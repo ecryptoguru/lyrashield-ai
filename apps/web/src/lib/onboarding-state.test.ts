@@ -4,8 +4,10 @@ const prisma = {
   $executeRaw: vi.fn(),
   onboardingState: { findUnique: vi.fn() },
 }
+const deliver = vi.hoisted(() => vi.fn())
 
 vi.mock("@lyrashield/db", () => ({ prisma }))
+vi.mock("./onboarding-workspace-audit", () => ({ deliverOnboardingWorkspaceAudit: deliver }))
 
 const { getOrCreateOnboardingState } = await import("./onboarding-state")
 
@@ -34,5 +36,19 @@ describe("getOrCreateOnboardingState", () => {
     )
 
     expect(prisma.onboardingState.findUnique).toHaveBeenCalledOnce()
+  })
+
+  it("repairs the retained creation audit on onboarding access", async () => {
+    const state = {
+      userId: "user-1",
+      workspaceId: "selected-workspace",
+      pendingWorkspaceCreatedAuditId: "original-workspace",
+    }
+    prisma.onboardingState.findUnique.mockResolvedValue(state)
+    await expect(getOrCreateOnboardingState("user-1")).resolves.toEqual({
+      ...state,
+      pendingWorkspaceCreatedAuditId: null,
+    })
+    expect(deliver).toHaveBeenCalledExactlyOnceWith("user-1", "original-workspace")
   })
 })

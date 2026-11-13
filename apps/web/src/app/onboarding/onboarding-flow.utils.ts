@@ -17,6 +17,14 @@ import { TARGET_SINGULAR } from "@/lib/terminology"
 
 export type OnboardingPath = "github" | "url" | "api" | "skip" | null
 
+/**
+ * The environment every onboarding target is stored with. It is metadata on the
+ * target — it never changes scanner eligibility, authorization or execution —
+ * and the details step states it plainly so a production site is not silently
+ * labelled Staging. The user changes it in target settings.
+ */
+export const ONBOARDING_ENVIRONMENT = "STAGING"
+
 export function onboardingPathForTargetType(targetType: string | null): OnboardingPath {
   if (targetType === "REPO") return "github"
   if (targetType === "WEB_APP") return "url"
@@ -114,13 +122,17 @@ const URL_API_STEPS = {
 
 /**
  * The ordered steps a given flow renders — the one list the wizard draws its
- * progress bar from. `path === null` (user still on the chooser, or restored
- * with an unknown target type) renders the longer GitHub list: step 2 is then
- * only reachable through the GitHub connect redirect, and falling back to the
- * two-item list would repeat the original off-by-one ("Step 3 of 2").
+ * progress bar from. At the initial chooser the path is not known, so show a
+ * generic two-step model. An unset path at persisted step 2 is the GitHub
+ * return from OAuth, where the repo-select step must be shown.
  */
-export function stepModelForPath(path: OnboardingPath): readonly OnboardingStepDef[] {
-  if (path === "url" || path === "api") return [URL_API_STEPS.chooser, URL_API_STEPS.details]
+export function stepModelForPath(
+  path: OnboardingPath,
+  currentStep = 1
+): readonly OnboardingStepDef[] {
+  if (path === "url" || path === "api" || (path === null && currentStep !== 2)) {
+    return [URL_API_STEPS.chooser, URL_API_STEPS.details]
+  }
   return [GITHUB_STEPS.chooser, GITHUB_STEPS.repoSelect, GITHUB_STEPS.details]
 }
 
@@ -130,11 +142,18 @@ export function stepModelForPath(path: OnboardingPath): readonly OnboardingStepD
  * the live region's "Step N of M" always names a step the list shows.
  */
 export function displayStepForPath(step: number, path: OnboardingPath): number {
-  const model = stepModelForPath(path)
+  const model = stepModelForPath(path, step)
   const match = model.find((entry) => entry.index === step)
   // A step the model does not know (stale persisted value) still needs a sane
   // announcement: clamp into range rather than point past the last item.
   return match ? model.indexOf(match) : Math.min(Math.max(step, 1), model.length) - 1
+}
+
+/** Accessible progress copy uses the visible list position, not the stored step index. */
+export function onboardingStepEyebrow(step: number, path: OnboardingPath): string {
+  const model = stepModelForPath(path, step)
+  const displayStep = displayStepForPath(step, path)
+  return `Step ${displayStep + 1} of ${model.length} · ${model[displayStep]!.label}`
 }
 
 /**
@@ -166,6 +185,40 @@ export function buildUrlTargetPayload(input: {
     environment: input.environment,
     ownershipAttested: true,
   }
+}
+
+/**
+ * Which onboarding paths take their source from the URL / API form. The GitHub
+ * path names a repository instead, so the field rules below abstain for it.
+ */
+export function isUrlTargetPath(path: OnboardingPath): boolean {
+  return path === "url" || path === "api"
+}
+
+/**
+ * The URL / API form's own input rules, answered without a workspace.
+ *
+ * `buildUrlTargetPayload` needs a workspace id, so it can never answer "is what
+ * the user typed submittable?" before the workspace exists. That question lives
+ * here instead. Both surfaces that gate on this form — the Continue button on
+ * the entry step and the start action on the details step — read their message
+ * from here, so the two cannot drift (P1-1). Precedence matches
+ * `buildUrlTargetPayload`: a missing name or URL outranks missing attestation.
+ */
+export function urlTargetFieldError(input: {
+  path: OnboardingPath
+  name: string
+  url: string
+  ownershipAttested: boolean
+}): string | null {
+  if (!isUrlTargetPath(input.path)) return null
+  if (!input.name.trim() || !input.url.trim()) {
+    return "Enter a name and a valid URL to continue."
+  }
+  if (!input.ownershipAttested) {
+    return "Confirm you own or are authorized to scan this target."
+  }
+  return null
 }
 
 /** Human label for the chosen path, used in the step-3 heading and hints. */

@@ -1,23 +1,23 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import Link from "next/link"
-import { Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lucide-react"
-import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
+import { Braces, Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lucide-react"
+import { Button, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
 import type { OperationFailurePresentation } from "@/lib/operation-failure"
 import type { ManualScanOption } from "@/lib/scan-presets"
-import { getWorkspacePlanLabel } from "@/lib/enum-labels"
+import { getEnvironmentKindLabel } from "@/lib/enum-labels"
+import { SCAN_SINGULAR, TARGET_DETAILS_LABEL, TARGET_SINGULAR } from "@/lib/terminology"
 import {
-  SCAN_SINGULAR,
-  TARGET_DETAILS_LABEL,
-  TARGET_NAME_LABEL,
-  TARGET_SINGULAR,
-} from "@/lib/terminology"
-import {
-  pathLabel,
-  pathNeedsRepo,
+  ONBOARDING_ENVIRONMENT,
   stepModelForPath,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
+import { detailsCopy } from "./onboarding-step-copy"
+import { eligibilitySection, reviewPickerSection } from "./onboarding-details-sections"
+import { TargetNameSection } from "./onboarding-target-name-section"
+import { UrlTargetView } from "./onboarding-url-target-view"
+export { UrlTargetView } from "./onboarding-url-target-view"
 
 export interface Repo {
   id: number
@@ -117,12 +117,33 @@ export function OnboardingAlerts({
   loading: boolean
   onRetryFailure: (retry: () => void) => void
 }) {
+  const alertRef = useRef<HTMLDivElement | null>(null)
+  const failureKey = failure
+    ? `${failure.presentation.cause}|${failure.presentation.recovery}`
+    : null
+  // The alert renders above a step that stacks the review card, the checks
+  // list, the eligibility panel and the warning. On a phone the button the user
+  // pressed is off-screen when the alert appears, so the spinner stops and
+  // nothing else happens. Move focus and scroll the alert into view, exactly as
+  // the scan sheet does for its footer error (scan-submission-feedback).
+  useEffect(() => {
+    if (!failureKey && !error) return
+    const element = alertRef.current
+    if (!element) return
+    element.focus({ preventScroll: true })
+    element.scrollIntoView({ block: "center", behavior: "smooth" })
+  }, [failureKey, error])
+
   return (
     <>
       {failure && (
         <div
+          ref={alertRef}
+          tabIndex={-1}
           role="alert"
-          className="border-destructive bg-destructive/10 mb-4 space-y-2 border-l-2 p-4 text-sm"
+          aria-live="assertive"
+          aria-atomic="true"
+          className="border-destructive bg-destructive/10 mb-4 space-y-2 border-l-2 p-4 text-sm focus:outline-none"
         >
           <p className="font-medium">{failure.presentation.cause}</p>
           <p className="text-muted-foreground">{failure.presentation.effect}</p>
@@ -136,7 +157,7 @@ export function OnboardingAlerts({
                 disabled={loading}
                 onClick={() => onRetryFailure(failure.retry!)}
               >
-                Try again
+                {failure.presentation.retryLabel ?? "Try again"}
               </Button>
             )}
             {failure.presentation.recoveryHref && (
@@ -158,8 +179,12 @@ export function OnboardingAlerts({
       )}
       {error && !failure && (
         <p
+          ref={alertRef}
+          tabIndex={-1}
           role="alert"
-          className="border-destructive bg-destructive/10 mb-4 border-l-2 p-3 text-sm"
+          aria-live="assertive"
+          aria-atomic="true"
+          className="border-destructive bg-destructive/10 mb-4 border-l-2 p-3 text-sm focus:outline-none"
         >
           {error}
         </p>
@@ -189,7 +214,7 @@ export function PathChooserView({
         <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">{eyebrow}</p>
         <h2 className="mt-1 text-2xl font-bold tracking-tight">Add your first target</h2>
         <p className="text-muted-foreground mt-2 text-sm">
-          Choose what LyraShield reviews first. You can connect GitHub, point at a live app or API,
+          Choose what LyraShield reviews first. You can connect GitHub or point at a live app or API
           or set this up later.
         </p>
       </div>
@@ -254,7 +279,7 @@ export function PathChooserView({
           disabled={loading}
           className="hover:bg-accent rounded-lg border p-4 text-left transition-colors disabled:opacity-60"
         >
-          <Globe className="text-primary mb-2 size-6" aria-hidden="true" />
+          <Braces className="text-primary mb-2 size-6" aria-hidden="true" />
           <span className="block text-sm font-medium">Add an API</span>
           <span className="text-muted-foreground mt-1 block text-xs">
             Scan an API&apos;s public surface — no repo access needed.
@@ -262,117 +287,6 @@ export function PathChooserView({
         </button>
       </div>
     </div>
-  )
-}
-
-export function UrlTargetView({
-  eyebrow,
-  path,
-  productName,
-  onProductNameChange,
-  url,
-  ownershipAttested,
-  onUrlChange,
-  onOwnershipChange,
-  loading,
-  onBack,
-  onSubmit,
-}: {
-  eyebrow: string
-  path: "url" | "api"
-  productName: string
-  onProductNameChange: (name: string) => void
-  url: string
-  ownershipAttested: boolean
-  onUrlChange: (url: string) => void
-  onOwnershipChange: (attested: boolean) => void
-  loading: boolean
-  onBack: () => void
-  onSubmit: () => void
-}) {
-  return (
-    <form
-      className="space-y-5"
-      onSubmit={(e) => {
-        e.preventDefault()
-        onSubmit()
-      }}
-    >
-      <div>
-        {/* Same step model as the progress list — the eyebrow and the
-            highlighted item always describe the same step (v16 3.1). */}
-        <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">{eyebrow}</p>
-        <h2 className="mt-1 text-2xl font-bold tracking-tight">
-          {path === "api" ? "Add your API" : "Add your app URL"}
-        </h2>
-        <p className="text-muted-foreground mt-2 text-sm">
-          {path === "api"
-            ? "Point LyraShield at the API's base URL. Scans run over HTTP against the public surface."
-            : "Point LyraShield at the app's URL. Scans run over HTTP against the public surface."}{" "}
-          You can connect GitHub later from Connections.
-        </p>
-      </div>
-
-      {/* The name asked here is the name saved: the details step shows it
-          read-only instead of asking again (v16 3.1). */}
-      <FormField label={TARGET_NAME_LABEL} htmlFor="url-name">
-        <Input
-          id="url-name"
-          type="text"
-          value={productName}
-          onChange={(e) => onProductNameChange(e.target.value)}
-          maxLength={100}
-          autoFocus
-          placeholder={path === "api" ? "Production API" : "Staging Site"}
-        />
-      </FormField>
-
-      <FormField label="URL" htmlFor="url-input">
-        <Input
-          id="url-input"
-          type="url"
-          value={url}
-          onChange={(e) => onUrlChange(e.target.value)}
-          placeholder={path === "api" ? "https://api.example.com" : "https://staging.example.com"}
-        />
-      </FormField>
-
-      <div className="flex items-start gap-2">
-        <input
-          id="ownership-check"
-          type="checkbox"
-          name="ownershipAttested"
-          checked={ownershipAttested}
-          onChange={(e) => onOwnershipChange(e.target.checked)}
-          required
-          aria-required="true"
-          aria-describedby="ownership-help"
-          className="border-border text-primary focus:ring-ring mt-1 h-4 w-4 rounded focus:ring-2"
-        />
-        <div className="flex-1">
-          <label htmlFor="ownership-check" className="text-sm">
-            I own or am authorized to scan this target.
-          </label>
-          <p id="ownership-help" className="text-muted-foreground text-xs">
-            This confirms you have permission to test this target.
-          </p>
-        </div>
-      </div>
-
-      <div className="flex justify-between gap-3">
-        <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
-          <ChevronLeft className="size-4" /> Back
-        </Button>
-        <Button type="submit" disabled={loading || !ownershipAttested}>
-          {loading ? (
-            <Spinner className="mr-2" />
-          ) : (
-            <ChevronRight className="size-4" aria-hidden="true" />
-          )}
-          Continue
-        </Button>
-      </div>
-    </form>
   )
 }
 
@@ -470,6 +384,7 @@ export function TargetDetailsView({
   productName,
   onProductNameChange,
   retryingExistingTarget,
+  hasFailedScanAttempt,
   reviewOptions,
   selectedReview,
   eligibility,
@@ -485,6 +400,7 @@ export function TargetDetailsView({
   productName: string
   onProductNameChange: (name: string) => void
   retryingExistingTarget: boolean
+  hasFailedScanAttempt: boolean
   reviewOptions: ManualScanOption[]
   selectedReview: ManualScanOption | undefined
   eligibility: OnboardingEligibilityState
@@ -495,200 +411,40 @@ export function TargetDetailsView({
   onStart: (skipEligibilityCheck?: boolean) => void
   onStartTrial: () => void
 }) {
+  const description = detailsCopy(path, productName, retryingExistingTarget, hasFailedScanAttempt)
+
   return (
     <div className="space-y-5">
       <div>
         <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">{eyebrow}</p>
         <h2 className="mt-1 text-2xl font-bold tracking-tight">{TARGET_DETAILS_LABEL}</h2>
-        <p className="text-muted-foreground mt-2 text-sm">
-          {retryingExistingTarget
-            ? `Retry the review for ${productName || `this ${TARGET_SINGULAR.toLowerCase()}`}. The target stays locked so the retry cannot create or scan a different target.`
-            : pathNeedsRepo(path)
-              ? `Name your ${TARGET_SINGULAR.toLowerCase()}. You can classify its environment later in target settings.`
-              : `Reviewing your ${pathLabel(path)}. Confirm the details and choose what you need from this ${SCAN_SINGULAR.toLowerCase()}.`}
-        </p>
+        <p className="text-muted-foreground mt-2 text-sm">{description}</p>
       </div>
 
-      {retryingExistingTarget ? (
-        <div className="bg-muted/40 rounded-lg border p-4">
-          <p className="text-sm font-medium">{productName || `Existing ${TARGET_SINGULAR}`}</p>
-          <p className="text-muted-foreground mt-1 text-xs">
-            Existing {pathLabel(path)} · target details are locked for this retry
-          </p>
-        </div>
-      ) : pathNeedsRepo(path) ? (
-        // GitHub flow: the name is chosen here (v16 3.1 — asked once).
-        <FormField label={TARGET_NAME_LABEL} htmlFor="product-name">
-          <Input
-            id="product-name"
-            value={productName}
-            onChange={(e) => onProductNameChange(e.target.value)}
-            placeholder="My web app"
-          />
-        </FormField>
-      ) : (
-        // URL/API flow: the name was asked on the previous screen and is
-        // the name saved — shown here for confirmation only.
-        <div className="bg-muted/40 rounded-lg border p-4">
-          <p className="text-muted-foreground text-xs font-medium">{TARGET_NAME_LABEL}</p>
-          <p className="mt-1 text-sm font-medium">{productName || "Unnamed target"}</p>
-        </div>
-      )}
+      <TargetNameSection
+        path={path}
+        productName={productName}
+        retryingExistingTarget={retryingExistingTarget}
+        onProductNameChange={onProductNameChange}
+      />
 
-      {/* W2-04: one recommended eligible review, with alternatives behind
-          an explicit "Change review" toggle. Essential scope, limitation,
-          and usage information stays outside the collapsed details. */}
-      <fieldset>
-        <legend className="mb-2 text-sm font-medium">
-          Recommended review for this {pathLabel(path)}
-        </legend>
-        {selectedReview && (
-          <div className="border-primary bg-primary/8 rounded-lg border p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-medium">{selectedReview.label}</span>
-              <Badge variant="info">{selectedReview.mode.toLowerCase()}</Badge>
-            </div>
-            <p className="text-muted-foreground mt-1 text-sm">{selectedReview.description}</p>
-            <p className="text-muted-foreground mt-1 text-xs">
-              Scope: {selectedReview.scopeSummary} {selectedReview.limitsSummary}. A clean result is
-              not a security guarantee.
-            </p>
-            {selectedReview.authorizationHint && (
-              <p className="text-muted-foreground mt-1 text-xs">
-                Setup required: {selectedReview.authorizationHint}
-              </p>
-            )}
-            <p className="text-muted-foreground mt-2 text-xs font-medium">Applicable checks</p>
-            <ul className="text-muted-foreground mt-1 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
-              {selectedReview.applicableChecks.map((check) => (
-                <li key={check} className="flex items-start gap-2">
-                  <span aria-hidden="true">•</span>
-                  <span>{check}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <details className="mt-2">
-          <summary className="text-muted-foreground flex min-h-11 cursor-pointer items-center text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
-            Change review
-          </summary>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {reviewOptions.map((option) => (
-              <button
-                type="button"
-                key={option.id}
-                onClick={() => onSelectGoal(option.goal)}
-                disabled={loading}
-                aria-pressed={selectedReview?.id === option.id}
-                className={`min-h-11 rounded-lg border p-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                  selectedReview?.id === option.id
-                    ? "border-primary bg-primary/8"
-                    : "hover:bg-accent"
-                }`}
-              >
-                <span className="block font-medium">{option.label}</span>
-                <span className="text-muted-foreground text-xs">{option.description}</span>
-                <span className="text-muted-foreground mt-1 block text-xs">
-                  {option.limitsSummary} · {option.mode.toLowerCase()}
-                </span>
-              </button>
-            ))}
-          </div>
-        </details>
-        {path === "api" && (
-          <p className="text-muted-foreground mt-2 text-xs">
-            Add an OpenAPI document after setup to unlock Contract and Contract Behavior reviews.
-          </p>
-        )}
-      </fieldset>
+      {reviewPickerSection({
+        path,
+        reviewOptions,
+        selectedReview,
+        loading,
+        onSelectGoal,
+      })}
 
-      <section aria-labelledby="onboarding-eligibility-heading" aria-live="polite">
-        <h3 id="onboarding-eligibility-heading" className="text-sm font-semibold">
-          Account usage and eligibility
-        </h3>
-        {!targetId && eligibility.status === "idle" && (
-          <p className="text-muted-foreground mt-1 text-sm">
-            Check your current account allowance and setup before starting. The server checks again
-            when the scan is submitted.
-          </p>
-        )}
-        {eligibility.status === "checking" && (
-          <p className="text-muted-foreground mt-1 text-sm" role="status">
-            Checking current account usage and scan requirements…
-          </p>
-        )}
-        {eligibility.status === "error" && (
-          <div className="border-warning/50 bg-warning/10 mt-2 rounded-lg border p-3 text-sm">
-            <p role="status">
-              Eligibility could not be checked because the service is temporarily unavailable. No
-              scan was started.
-            </p>
-            <p className="text-muted-foreground mt-1">
-              You can retry this check or continue. The scan service checks eligibility again before
-              any scan starts.
-            </p>
-          </div>
-        )}
-        {eligibility.status === "ready" && eligibility.eligibility.allowed && (
-          <p className="mt-2 rounded-lg border p-3 text-sm" role="status">
-            Current plan:{" "}
-            <span className="font-medium">
-              {getWorkspacePlanLabel(eligibility.eligibility.plan)}
-            </span>{" "}
-            · Agent-minutes available:{" "}
-            <span className="font-medium">{eligibility.eligibility.remainingMinutes}</span>
-            {eligibility.eligibility.isTrial ? " (trial)" : ""}. This advisory can change; the
-            server checks eligibility again when you start.
-          </p>
-        )}
-        {eligibility.status === "ready" && !eligibility.eligibility.allowed && (
-          <div
-            className="border-destructive/40 bg-destructive/5 mt-2 rounded-lg border p-3 text-sm"
-            role="alert"
-          >
-            <p className="font-medium">This review cannot start yet</p>
-            <p className="text-muted-foreground mt-1">
-              {eligibility.eligibility.message ??
-                "Required setup or account eligibility is missing."}
-            </p>
-            {eligibility.eligibility.code === "DOMAIN_VERIFICATION_REQUIRED" && targetId && (
-              <Link
-                href={`/dashboard/targets/${encodeURIComponent(targetId)}#domain-verification`}
-                className="text-primary mt-2 inline-flex min-h-11 items-center font-medium underline underline-offset-4"
-              >
-                Verify this domain
-              </Link>
-            )}
-            {["NO_MINUTES_REMAINING", "TRIAL_EXPIRED", "DEEP_NOT_ALLOWED"].includes(
-              eligibility.eligibility.code ?? ""
-            ) && (
-              <Link
-                href="/dashboard/billing"
-                className="text-primary mt-2 inline-flex min-h-11 items-center font-medium underline underline-offset-4"
-              >
-                Review account usage
-              </Link>
-            )}
-            {[
-              "TARGET_AUTHORIZATION_FAILED",
-              "VERIFICATION_REQUIRED",
-              "GITHUB_INSTALLATION_REQUIRED",
-              "NO_REPOSITORIES",
-              "CONNECTION_EXPIRED",
-            ].includes(eligibility.eligibility.code ?? "") && (
-              <Link
-                href="/dashboard/connections"
-                className="text-primary mt-2 inline-flex min-h-11 items-center font-medium underline underline-offset-4"
-              >
-                Review connected access
-              </Link>
-            )}
-          </div>
-        )}
-      </section>
+      {eligibilitySection({ targetId, eligibility })}
 
       <p className="border-warning bg-warning/10 border-l-2 p-3 text-sm">
+        The default {TARGET_SINGULAR.toLowerCase()} environment is{" "}
+        <span className="font-medium">{getEnvironmentKindLabel(ONBOARDING_ENVIRONMENT)}</span>. You
+        can change it in target settings after setup.
+      </p>
+
+      <p className="text-muted-foreground text-xs">
         A {SCAN_SINGULAR.toLowerCase()} reports evidence and limitations. A clean result is not a
         universal security guarantee.
       </p>
@@ -696,13 +452,9 @@ export function TargetDetailsView({
       <div className="flex justify-between gap-3">
         {/* GitHub path backs into repo-select (step 2); URL/API back into
             the URL form (step 1, path kept). */}
-        {retryingExistingTarget ? (
-          <span />
-        ) : (
-          <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
-            <ChevronLeft className="size-4" /> Back
-          </Button>
-        )}
+        <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
+          <ChevronLeft className="size-4" /> Back
+        </Button>
         <Button
           type="button"
           onClick={() =>
@@ -717,19 +469,21 @@ export function TargetDetailsView({
           disabled={loading || eligibility.status === "checking"}
         >
           <ShieldCheck className="size-4" aria-hidden="true" />
+          {/* One action, named from the first render: the click checks
+              eligibility and starts the scan when the server allows it. The
+              previous "Check availability" / "Check eligibility again" labels
+              described the internal step and asked for a second click. */}
           {loading
             ? eligibility.status === "checking"
               ? "Checking eligibility…"
               : "Starting…"
-            : eligibility.status === "ready" && eligibility.eligibility.allowed
-              ? `Start ${selectedReview?.label.toLowerCase() ?? "review"}`
-              : eligibility.status === "error"
-                ? `Continue to start ${selectedReview?.label.toLowerCase() ?? "review"}`
-                : eligibility.status === "ready" && !eligibility.eligibility.allowed
-                  ? eligibility.eligibility.code === "TRIAL_AVAILABLE"
-                    ? "Start your free trial"
-                    : "Check eligibility again"
-                  : "Check availability"}
+            : eligibility.status === "error"
+              ? `Continue to start ${selectedReview?.label.toLowerCase() ?? "review"}`
+              : eligibility.status === "ready" &&
+                  !eligibility.eligibility.allowed &&
+                  eligibility.eligibility.code === "TRIAL_AVAILABLE"
+                ? "Start your free trial"
+                : `Start ${selectedReview?.label.toLowerCase() ?? "review"}`}
         </Button>
       </div>
     </div>
@@ -756,5 +510,159 @@ function RefreshCwIcon() {
       <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
       <path d="M3 21v-5h5" />
     </svg>
+  )
+}
+
+/**
+ * The wizard's step surface: swaps the four step views inside the bordered
+ * section and keeps the always-present "skip / finish later" escape. All
+ * handlers come from the wizard — this component holds no state.
+ */
+export function OnboardingStepSection({
+  step,
+  path,
+  eyebrow,
+  busy,
+  loading,
+  buildTool,
+  onBuildTool,
+  githubUnavailable,
+  onChoosePath,
+  urlForm,
+  productName,
+  onProductNameChange,
+  onUrlChange,
+  onOwnershipChange,
+  onUrlBack,
+  onUrlSubmit,
+  repos,
+  reposLoaded,
+  selectedRepoId,
+  onSelectRepo,
+  reposLoadFailed,
+  onLoadRepos,
+  onReconnect,
+  onRepoBack,
+  onRepoContinue,
+  retryingExistingTarget,
+  hasFailedScanAttempt,
+  reviewOptions,
+  selectedReview,
+  eligibility,
+  targetId,
+  onSelectGoal,
+  onDetailsBack,
+  onStart,
+  onStartTrial,
+  onSkip,
+}: {
+  step: number
+  path: OnboardingPath
+  eyebrow: string
+  busy: boolean
+  loading: boolean
+  buildTool: string | null
+  onBuildTool: (tool: string | null) => void
+  githubUnavailable: boolean
+  onChoosePath: (next: Exclude<OnboardingPath, null>) => void
+  urlForm: { url: string; ownershipAttested: boolean }
+  productName: string
+  onProductNameChange: (name: string) => void
+  onUrlChange: (url: string) => void
+  onOwnershipChange: (attested: boolean) => void
+  onUrlBack: () => void
+  onUrlSubmit: () => void
+  repos: Repo[]
+  reposLoaded: boolean
+  selectedRepoId: number | null
+  onSelectRepo: (repo: Repo | null) => void
+  reposLoadFailed: boolean
+  onLoadRepos: () => void
+  onReconnect: () => void
+  onRepoBack: () => void
+  onRepoContinue: () => void
+  retryingExistingTarget: boolean
+  hasFailedScanAttempt: boolean
+  reviewOptions: ManualScanOption[]
+  selectedReview: ManualScanOption | undefined
+  eligibility: OnboardingEligibilityState
+  targetId: string | null
+  onSelectGoal: (goal: string) => void
+  onDetailsBack: () => void
+  onStart: (skipEligibilityCheck?: boolean) => void
+  onStartTrial: () => void
+  onSkip: () => void
+}) {
+  return (
+    <section className="rounded-xl border p-5 sm:p-7" aria-live="polite">
+      {step === 1 && path !== "url" && path !== "api" && (
+        <PathChooserView
+          eyebrow={eyebrow}
+          buildTool={buildTool}
+          onBuildTool={onBuildTool}
+          loading={busy}
+          githubUnavailable={githubUnavailable}
+          onChoosePath={onChoosePath}
+        />
+      )}
+
+      {step === 1 && (path === "url" || path === "api") && (
+        <UrlTargetView
+          eyebrow={eyebrow}
+          path={path}
+          productName={productName}
+          onProductNameChange={onProductNameChange}
+          url={urlForm.url}
+          ownershipAttested={urlForm.ownershipAttested}
+          onUrlChange={onUrlChange}
+          onOwnershipChange={onOwnershipChange}
+          loading={loading}
+          onBack={onUrlBack}
+          onSubmit={onUrlSubmit}
+        />
+      )}
+
+      {step === 2 && (
+        <RepoSelectView
+          eyebrow={eyebrow}
+          repos={repos}
+          reposLoaded={reposLoaded}
+          selectedRepoId={selectedRepoId}
+          onSelectRepo={onSelectRepo}
+          loading={loading}
+          loadFailed={reposLoadFailed}
+          onLoadRepos={onLoadRepos}
+          onReconnect={onReconnect}
+          onBack={onRepoBack}
+          onContinue={onRepoContinue}
+        />
+      )}
+
+      {step === 3 && (
+        <TargetDetailsView
+          eyebrow={eyebrow}
+          path={path}
+          productName={productName}
+          onProductNameChange={onProductNameChange}
+          retryingExistingTarget={retryingExistingTarget}
+          hasFailedScanAttempt={hasFailedScanAttempt}
+          reviewOptions={reviewOptions}
+          selectedReview={selectedReview}
+          eligibility={eligibility}
+          targetId={targetId}
+          onSelectGoal={onSelectGoal}
+          loading={busy}
+          onBack={onDetailsBack}
+          onStart={onStart}
+          onStartTrial={onStartTrial}
+        />
+      )}
+
+      <div className="mt-6 flex justify-center border-t pt-4">
+        <Button type="button" variant="ghost" size="sm" onClick={onSkip} disabled={loading}>
+          Skip / finish later
+        </Button>
+      </div>
+    </section>
   )
 }

@@ -1,19 +1,36 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
+import { listPreferredAgents } from "@lyrashield/agent-registry"
 import { agentOnboarding, renderAgentOnboardingMarkdown } from "../lib/agent-onboarding"
+import { buildLlmsPricingSummary } from "../lib/llms-pricing"
 
 describe("agent onboarding contract", () => {
   it("labels supported workflows and delegated authorization accurately", () => {
-    expect(agentOnboarding.commands).toEqual([
-      "npx lyrashield login --oauth",
-      "npx lyrashield init",
-    ])
+    expect(agentOnboarding.commands).toEqual(["npx --yes lyrashield@0.2.14 login --oauth"])
+    expect(agentOnboarding.setupHeading).toBe("Set up and authenticate")
+    expect(agentOnboarding.setupDescription).toContain("Use the pinned CLI installer")
     expect(agentOnboarding.safety.join(" ")).toContain("Read-only")
     expect(agentOnboarding.safety.join(" ")).toContain("browser-confirmed connection grant")
-    expect(agentOnboarding.clients).toHaveLength(26)
+    expect(agentOnboarding.safety.join(" ")).toContain(
+      "exact client contracts recorded by the installer"
+    )
+    expect(
+      agentOnboarding.clients.find((client) => client.href === "/docs/integrations/vscode")
+        ?.strategyLabel
+    ).toBe("CLI config installer")
+    expect(agentOnboarding.clients).toHaveLength(listPreferredAgents().length)
+    expect(agentOnboarding.clients.map((client) => client.href)).toContain(
+      "/docs/integrations/claude-web"
+    )
+    expect(agentOnboarding.clients.map((client) => client.href)).toContain(
+      "/docs/integrations/replit-agent"
+    )
+    expect(agentOnboarding.clientGroups.map((group) => group.strategy)).toEqual(
+      expect.arrayContaining(["agent-plugin", "config-file", "guided-manual", "vendor-cli"])
+    )
     expect(
       agentOnboarding.clients.filter((client) => client.integrationKind === "standalone-cli")
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(
       agentOnboarding.clients.every(
         (client) =>
@@ -25,12 +42,26 @@ describe("agent onboarding contract", () => {
     )
   })
 
+  it("publishes the manual VS Code plugin fallback and current Pi native setup", () => {
+    const client = agentOnboarding.clients.find(
+      (entry) => entry.href === "/docs/integrations/vscode-agent-plugin"
+    )
+    expect(client?.strategyLabel).toBe("Manual Agent Plugin setup")
+    const body = renderAgentOnboardingMarkdown("https://lyrashieldai.com")
+    expect(body).toContain("Manual Agent Plugin setup")
+    expect(body).toContain("Pi has built-in MCP and OAuth support")
+    expect(body).toContain("/docs/integrations/pi")
+  })
+
   it("publishes matching visual and Markdown onboarding surfaces", () => {
     const agentPage = readFileSync(new URL("../pages/agents.astro", import.meta.url), "utf8")
     const markdownRoute = readFileSync(new URL("../pages/agents.md.ts", import.meta.url), "utf8")
 
     expect(agentPage).toContain("agentOnboarding")
     expect(agentPage).toContain('data-cta-id="agents-start-setup"')
+    expect(agentPage).toContain("Use the pinned CLI installer")
+    expect(agentPage).not.toContain("init --dry-run")
+    expect(agentPage).not.toContain("npx lyrashield init")
     expect(markdownRoute).toContain('"Content-Type": "text/markdown; charset=utf-8"')
     expect(markdownRoute).toContain("renderAgentOnboardingMarkdown(origin)")
   })
@@ -47,8 +78,12 @@ describe("agent onboarding contract", () => {
 
     expect(response.headers.get("Content-Type")).toContain("text/markdown")
     const body = await response.text()
-    expect(body).toContain("# Release assurance for coding agents")
+    expect(body).toContain("# Launch gate for coding agents")
     expect(body).toContain("https://lyrashieldai.com/docs/integrations/agent-plugins")
+    expect(body).not.toContain("init --dry-run")
+    expect(body).toContain("## Set up and authenticate")
+    expect(body).toContain("Use the pinned CLI installer")
+    expect(body).toContain("exact client contracts recorded by the installer")
     expect(body).not.toContain("${origin}")
   })
 
@@ -66,6 +101,12 @@ describe("agent onboarding contract", () => {
     const body = await response.text()
     expect(body).toContain("https://lyrashieldai.com/agents")
     expect(body).toContain("https://lyrashieldai.com/agents.md")
+    expect(body).toContain(buildLlmsPricingSummary())
+    for (const slug of new Set(listPreferredAgents().map((agent) => agent.docsSlug))) {
+      expect(body, `llms.txt must include the ${slug} integration guide`).toContain(
+        `https://lyrashieldai.com/docs/integrations/${slug}`
+      )
+    }
     expect(body).not.toContain("${origin}")
   })
 
@@ -83,8 +124,9 @@ describe("agent onboarding contract", () => {
     expect(header.match(/href="\/agents"/g)).toHaveLength(2)
     expect(header).toContain('data-cta-id="header-for-agents"')
     expect(header).toContain('data-cta-id="header-for-agents-mobile"')
-    expect(hero).toContain('data-cta-id="premium-hero-agent-setup"')
-    expect(finalCta).toContain('data-cta-id="final-cta-agent-setup"')
+    const home = readFileSync(new URL("../pages/index.astro", import.meta.url), "utf8")
+    expect(home).toContain('href="/agents"')
+    expect(finalCta).toContain("CTA_LABEL.signUp")
     expect(hero).not.toContain("data-switch-mode")
   })
 })

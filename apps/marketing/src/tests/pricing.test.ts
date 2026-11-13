@@ -49,6 +49,18 @@ describe("pricing page", () => {
     expect("AGENCY" in CLOUD_PLAN_MAP).toBe(false)
   })
 
+  it("states the trial once per section instead of repeating a muted strip", () => {
+    // The trial used to appear three times: the top banner, the "Not sure yet?"
+    // CTA block and a second muted strip directly below it. The strip is gone;
+    // the banner and the CTA block remain.
+    const trialLineUses = pricingPage.match(/Start with a free trial: \{TRIAL_LINE\}/g) ?? []
+    expect(trialLineUses, "the trial line appears once, in the top banner").toHaveLength(1)
+    expect(pricingPage).toContain("Not sure yet? Start with a free trial.")
+    expect(pricingPage).toContain("{TRIAL_SUMMARY}.")
+    const mutedStrips = pricingPage.match(/bg-accent-dim\/30 p-4 text-center/g) ?? []
+    expect(mutedStrips, "no duplicate muted trial strip under the CTA block").toHaveLength(0)
+  })
+
   it("states agent-native surfaces on each self-serve paid card", () => {
     // Trial availability is covered by the shared-capabilities note below.
     const SURFACES_LINE = "CLI, GitHub Action and MCP server access"

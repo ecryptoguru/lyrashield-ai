@@ -1,0 +1,15 @@
+{
+  "name": "lyrashield-marketplace",
+  "description": "Preparation marketplace for LyraShield AI Auggie plugins.",
+  "version": "0.1.0",
+  "plugins": [
+    {
+      "name": "lyrashield",
+      "description": "Read LyraShield evidence and run explicitly requested security workflows.",
+      "version": "0.1.0",
+      "source": "./plugins/lyrashield",
+      "category": "security",
+      "tags": ["security", "mcp", "skills", "release-readiness"]
+    }
+  ]
+}

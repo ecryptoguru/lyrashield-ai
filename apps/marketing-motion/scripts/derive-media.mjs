@@ -6,7 +6,6 @@ import {
   MOTION_CHAPTER_DURATION,
   MOTION_DURATION,
   MOTION_FPS,
-  MOTION_GOP,
   MOTION_VARIANTS,
   motionPosterRelativePath,
   motionTrackRelativePath,
@@ -21,7 +20,7 @@ function run(command, args) {
   if (result.status !== 0) throw new Error(`${command} failed with status ${result.status}`)
 }
 
-function encodeTrack(input, target, scale) {
+function encodeTrack(input, target, contract) {
   mkdirSync(dirname(target), { recursive: true })
   run("ffmpeg", [
     "-y",
@@ -31,20 +30,20 @@ function encodeTrack(input, target, scale) {
     "-i",
     input,
     "-vf",
-    `scale=${scale}:force_original_aspect_ratio=decrease,fps=${MOTION_FPS}`,
+    `scale=${contract.scale}:force_original_aspect_ratio=decrease,fps=${MOTION_FPS}`,
     "-an",
     "-c:v",
     "libx264",
     "-preset",
     "slow",
     "-crf",
-    "26",
+    String(contract.crf),
     "-pix_fmt",
     "yuv420p",
     "-g",
-    String(MOTION_GOP),
+    String(contract.gop),
     "-keyint_min",
-    String(MOTION_GOP),
+    String(contract.gop),
     "-sc_threshold",
     "0",
     "-movflags",
@@ -92,14 +91,14 @@ rmSync(output, { recursive: true, force: true })
 for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
   const input = resolve(masters, contract.master)
   const target = resolve(output, motionTrackRelativePath(variant))
-  encodeTrack(input, target, contract.scale)
+  encodeTrack(input, target, contract)
 
   MOTION_CHAPTERS.forEach((chapter, index) => {
     const poster = resolve(output, motionPosterRelativePath(chapter, variant, "webp"))
     makePoster(
       target,
       poster.slice(0, -".webp".length),
-      index * MOTION_CHAPTER_DURATION + MOTION_CHAPTER_DURATION / 2,
+      index * MOTION_CHAPTER_DURATION,
       contract.scale
     )
   })
@@ -114,7 +113,7 @@ run("ffmpeg", [
   "-i",
   resolve(masters, "assurance-world-desktop.mp4"),
   "-vf",
-  "setpts=PTS/1.4,fps=30",
+  `setpts=PTS/${MOTION_DURATION / 30},fps=${MOTION_FPS}`,
   "-t",
   "30",
   "-an",
@@ -138,7 +137,7 @@ run("ffmpeg", [
   "-i",
   resolve(masters, "assurance-world-portrait.mp4"),
   "-vf",
-  "setpts=PTS/2.8,fps=30",
+  `setpts=PTS/${MOTION_DURATION / 15},fps=${MOTION_FPS}`,
   "-t",
   "15",
   "-an",
@@ -155,4 +154,4 @@ run("ffmpeg", [
   resolve(output, "launch/lyrashield-launch-15s-portrait.mp4"),
 ])
 
-console.log(`Derived ${MOTION_DURATION}-second continuous Motion V2 tracks and chapter posters.`)
+console.log(`Derived ${MOTION_DURATION}-second continuous Motion V3 tracks and chapter posters.`)

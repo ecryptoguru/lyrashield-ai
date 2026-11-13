@@ -16,6 +16,9 @@ describe("trial contract", () => {
     expect(CLOUD_PLAN_MAP.TRIAL.agentMinutes).toBe(60)
     expect(CLOUD_PLAN_MAP.TRIAL.targetCaps).toBe(3)
     expect(CLOUD_PLAN_MAP.TRIAL.deepAllowed).toBe(false)
+    // The trial length lives on the plan, so the copy and the grant cannot
+    // disagree about how long the trial runs.
+    expect(CLOUD_PLAN_MAP.TRIAL.trialDays).toBe(7)
     expect(CLOUD_PLAN_MAP.TRIAL.price.usd).toEqual({ monthly: 0, annual: 0 })
   })
 
@@ -25,6 +28,10 @@ describe("trial contract", () => {
       read("../pages/pricing.astro"),
       read("../pages/terms-of-sale.astro"),
       read("../pages/llms.txt.ts"),
+      // The seven tool pages share the trial CTA, and the homepage carries the
+      // audience-path cards — both must stay inside the 60-minute/3-target box.
+      read("../layouts/ToolLayout.astro"),
+      read("../pages/index.astro"),
     ]
     for (const surface of surfaces) {
       const lower = surface.toLowerCase()
@@ -34,6 +41,10 @@ describe("trial contract", () => {
       expect(lower).not.toContain("100 agent minutes")
       expect(lower).not.toContain("100 minutes")
       expect(surface).not.toMatch(/unlimited|everything you need/i)
+      // Trial coverage is plan- and target-bounded; "every review layer" is
+      // the exact overclaim the SEO audit flagged on the tool pages.
+      expect(surface).not.toMatch(/run every review layer/i)
+      expect(surface).not.toMatch(/a full review from a free/i)
     }
   })
 

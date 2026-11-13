@@ -85,6 +85,28 @@ async function extractActionChecks(): Promise<ActionCheck[]> {
   return checks
 }
 
+async function extractWorkflowEvalExecChecks(): Promise<ActionCheck[]> {
+  const workflowPath = fileURLToPath(
+    new URL("../../../../.github/workflows/lyrashield-scan.yml", import.meta.url)
+  )
+  const yml = await readFile(workflowPath, "utf-8")
+  const checks: ActionCheck[] = []
+
+  for (const line of yml.split("\n")) {
+    const grepMatch = line.match(/grep -q(i?)E '(.*)' <<< "\$ADDED"; then\s*$/)
+    if (!grepMatch || !grepMatch[2]?.includes("(eval|exec)")) continue
+    checks.push({
+      caseInsensitive: grepMatch[1] === "i",
+      pattern: bashPatternToJs(grepMatch[2]),
+      ruleId: "eval-exec",
+      level: "",
+      message: "",
+      severity: "",
+    })
+  }
+  return checks
+}
+
 interface WebMcpActionCheck {
   ruleId: string
   level: string
@@ -179,7 +201,7 @@ describe("action.yml risky-pattern drift guard (source of truth: src/diff-core.t
     for (const check of checks) {
       const tsPattern = RISKY_PATTERNS.find((p) => p.ruleId === check.ruleId)
       expect(check.severity, `severity drift for rule "${check.ruleId}"`).toBe(tsPattern?.severity)
-      // Mirrors the level derivation in runRiskyPatternChecks().
+      // The CLI maps HIGH/CRITICAL patterns to SARIF errors.
       const expectedLevel =
         tsPattern?.severity === "HIGH" || tsPattern?.severity === "CRITICAL" ? "error" : "warning"
       expect(check.level, `SARIF level drift for rule "${check.ruleId}"`).toBe(expectedLevel)
@@ -187,6 +209,24 @@ describe("action.yml risky-pattern drift guard (source of truth: src/diff-core.t
         check.message.replaceAll("$file", "FILE"),
         `message drift for rule "${check.ruleId}"`
       ).toBe(tsPattern?.message("FILE"))
+    }
+  })
+})
+
+describe("workflow eval/exec gate parity", () => {
+  it("keeps both workflow checks aligned with the reusable action and diff-core", async () => {
+    const actionCheck = (await extractActionChecks()).find((check) => check.ruleId === "eval-exec")
+    const workflowChecks = await extractWorkflowEvalExecChecks()
+    const sourceRule = RISKY_PATTERNS.find((pattern) => pattern.ruleId === "eval-exec")
+
+    expect(actionCheck).toBeDefined()
+    expect(sourceRule).toBeDefined()
+    expect(workflowChecks).toHaveLength(2)
+    for (const check of workflowChecks) {
+      expect(check.pattern).toBe(actionCheck?.pattern)
+      expect(check.caseInsensitive).toBe(actionCheck?.caseInsensitive)
+      expect(check.pattern).toBe(sourceRule?.regex.source)
+      expect(check.caseInsensitive).toBe(sourceRule?.regex.flags.includes("i"))
     }
   })
 })

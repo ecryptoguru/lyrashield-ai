@@ -96,7 +96,7 @@ test("requires Turnstile verification for public Myra", () => {
 test("requires one exact Azure Luna deployment before enabling generation", () => {
   const enabled = { MYRA_GENERATION_ENABLED: "1", MYRA_PROVIDER: "azure" }
   fails(enabled, "MYRA_MODEL")
-  fails({ ...enabled, MYRA_MODEL: "gpt-5.6-luna" }, "MYRA_MODEL")
+  fails({ ...enabled, MYRA_MODEL: "gpt-4o" }, "MYRA_MODEL")
   fails({ ...enabled, MYRA_MODEL: "gpt-6-luna" }, "Azure endpoint and credential")
   assert.match(
     run({

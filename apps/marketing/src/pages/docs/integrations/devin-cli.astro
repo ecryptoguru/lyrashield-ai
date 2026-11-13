@@ -1,13 +1,14 @@
 ---
 import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
+import CliConfigPreview from "@components/integrations/CliConfigPreview.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for Devin CLI — Setup Guide"
 const description =
   "Connect LyraShield to Devin CLI using its current dedicated MCP config files, local stdio or remote HTTP with OAuth."
-const updatedDate = "2026-09-19"
+const updatedDate = "2026-10-02"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
@@ -34,7 +35,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 2,
         name: "Add the mcpServers entry",
-        text: 'Add the mcpServers key with command "npx" and args ["-y","@lyrashield/mcp@0.2.11"]. Set LYRASHIELD_API_KEY in the env block.',
+        text: 'Add the mcpServers key with command "npx" and args ["-y","@lyrashield/mcp@0.2.12"]. Set LYRASHIELD_API_KEY in the env block.',
       },
       {
         "@type": "HowToStep",
@@ -64,13 +65,7 @@ const jsonLd: unknown[] = [
     remote HTTP and OAuth.
   </p>
 
-  <h2>Install with the CLI (fastest)</h2>
-  <p>
-    Run <code>npx lyrashield install devin-cli</code> from your project root. It detects Devin CLI,
-    writes the current dedicated config. Add <code>--dry-run</code> first to preview the change with no write or run{" "}
-    <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
-  </p>
-  <pre><code>npx lyrashield install devin-cli</code></pre>
+  <CliConfigPreview agentId="devin-cli" />
   <p>Prefer to see exactly what gets written or set it up without Node.js? Configure it by hand below.</p>
 
   <h2>Local stdio setup</h2>
@@ -81,10 +76,10 @@ const jsonLd: unknown[] = [
 
   <AgentSnippet agentId="devin-cli" transport="stdio" />
   <p>
-    Devin CLI versions before v3000.3 stored <code>mcpServers</code> in
+    Devin CLI versions before v3000.3 stored <code>mcpServers</code> in{" "}
     <code>.devin/config.local.json</code> or another main config file. Current Devin migrates
     those entries on startup. Inspect the migrated entry before adding a second server.
-    Project-shared and user-level alternatives are <code>.devin/mcp_config.json</code> and
+    Project-shared and user-level alternatives are <code>.devin/mcp_config.json</code> and{" "}
     <code>~/.config/devin/mcp_config.json</code>.
   </p>
 
@@ -108,12 +103,12 @@ const jsonLd: unknown[] = [
   <div class="callout callout--warn">
     <strong>Local stdio requirements:</strong> Node.js 24+ and a local OAuth login or workspace API key. Remote OAuth does not require a local API key. The{" "}
     <code>@lyrashield/mcp</code> package is published on npm, so{" "}
-    <code>npx -y @lyrashield/mcp@0.2.11</code> resolves directly.
+    <code>npx -y @lyrashield/mcp@0.2.12</code> resolves directly.
   </div>
   <h2>Review the app before release</h2>
   <p>
-    After confirming the connection, use the <a href="/blog/devin-cli-app-security-checklist">Devin CLI app security checklist</a>
-    to review secrets, permissions, dependencies and application tests. The <a href="/blog/devin-cli-mcp-security-workflow">Devin CLI MCP workflow</a>
+    After confirming the connection, use the <a href="/blog/devin-cli-app-security-checklist">Devin CLI app security checklist</a>{" "}
+    to review secrets, permissions, dependencies and application tests. The <a href="/blog/devin-cli-mcp-security-workflow">Devin CLI MCP workflow</a>{" "}
     explains how scan results and retests fit that review. Connection success alone is not release evidence.
   </p>
 </DocsLayout>

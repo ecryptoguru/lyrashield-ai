@@ -7,6 +7,8 @@ const nextConfig = nextVitals.find((config) => config.name === "next")
 export default [
   {
     ignores: [
+      "**/.next/**",
+      "**/dist/**",
       "**/*.test.{ts,tsx,mts,cts}",
       "**/__tests__/**",
       "**/*.d.ts",
@@ -18,6 +20,22 @@ export default [
       "apps/worker/src/engine/engine-output-schema.ts",
       "packages/types/src/index.ts",
     ],
+  },
+  {
+    files: [
+      "apps/**/*.mjs",
+      "packages/**/*.mjs",
+      "lint/**/*.mjs",
+      "ops/**/*.mjs",
+      ".github/scripts/**/*.mjs",
+    ],
+    ignores: ["**/*.test.mjs"],
+    plugins: { security: securityPlugin },
+    linterOptions: { reportUnusedDisableDirectives: "off" },
+    rules: {
+      "max-lines": ["warn", { max: 600, skipBlankLines: true, skipComments: true }],
+      "max-lines-per-function": ["warn", { max: 150, skipBlankLines: true, skipComments: true }],
+    },
   },
   {
     files: ["apps/**/src/**/*.{ts,tsx,mts,cts}", "packages/**/src/**/*.{ts,tsx,mts,cts}"],

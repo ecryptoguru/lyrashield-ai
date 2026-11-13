@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "lyrashield": {
+      "type": "http",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "oauth": {
+        "enabled": true,
+        "scopes": ["lyrashield.read"]
+      }
+    }
+  }
+}

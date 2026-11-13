@@ -29,6 +29,7 @@ export {
 
 // Account-owned subscription resolution
 export { resolveAccountBilling, listAccountBilling, type ResolvedAccountBilling } from "./account"
+export { canPurchaseMinutePack } from "./minute-pack-purchase"
 export { resolveWorkspaceScanSponsor } from "./agency-sponsor"
 
 // Allowance cycles (F1: monthly pool per cycle, incl. annual subscriptions)
@@ -173,6 +174,15 @@ export {
 export { processRazorpayEvent, type RazorpayAdapterResult } from "./providers/razorpay/adapter"
 export { WebhookAuthError, WebhookPayloadError } from "./webhook-errors"
 
+// Durable catalog-rejection receipts (P2-3)
+export {
+  recordWebhookRejection,
+  WEBHOOK_REJECTION_REASONS,
+  type WebhookRejectionInput,
+  type WebhookRejectionOutcome,
+  type WebhookRejectionReason,
+} from "./webhook-rejections"
+
 // Normalized provider domain events (finding 18A)
 export {
   normalizeProviderEvent,
@@ -196,6 +206,7 @@ export {
   claimWebhookTrack,
   renewWebhookTrackClaim,
   getWebhookTrackRetrySchedule,
+  isExpiredWebhookTrackReplaySafe,
   type WebhookTrackClaim,
   computeApplicableTracks,
   ensureWebhookTrackRows,
@@ -247,3 +258,14 @@ export {
   resolveLaunchReportSigningPrivateKey,
   resolveLaunchReportSigningPublicKey,
 } from "./launch-report-keys"
+export { resolveReleasePacketVerificationKeys } from "./release-packet-verification-keys"
+
+export {
+  ScanCapacityWaitingError,
+  startUnmeteredScanCapacity,
+  resetUnstartedScanCapacity,
+  reserveScanCapacity,
+  confirmScanCapacityStopped,
+  type ScanBillingDisposition,
+  fundedRuntimeMs,
+} from "./usage/capacity"

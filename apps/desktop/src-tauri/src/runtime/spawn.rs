@@ -40,6 +40,34 @@ const INHERITED_ENV_ALLOWLIST: &[&str] = &[
     "no_proxy",
 ];
 
+/// Provider/model routing variables that must never reach the engine child
+/// from the parent environment — the desktop resolves the selected provider's
+/// route explicitly per scan (`byok::resolve_byok_env`), and a stale inherited
+/// `LYRASHIELD_LLM`/`OPENAI_API_KEY`/`AZURE_*` must not shadow it.
+pub const PROVIDER_MODEL_ENV_NAMES: &[&str] = &[
+    "LYRASHIELD_LLM",
+    "LYRASHIELD_LUNA_LLM",
+    "LYRASHIELD_SOL_LLM",
+    "LYRASHIELD_DELEGATE_LLM",
+    "LYRASHIELD_REASONING_EFFORT",
+    "LYRASHIELD_DELEGATE_REASONING_EFFORT",
+    "LYRASHIELD_ALLOW_CHATGPT_SUBSCRIPTION",
+    "LYRASHIELD_PROGRAMMATIC_TOOL_CALLING",
+    "LLM_API_KEY",
+    "LLM_API_BASE",
+    "LLM_API_VERSION",
+    "LLM_TIMEOUT",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_OPENAI_ENDPOINT",
+    "AZURE_OPENAI_API_BASE",
+    "AZURE_OPENAI_API_VERSION",
+    "AZURE_AI_API_KEY",
+    "AZURE_AI_API_BASE",
+    "AZURE_API_VERSION",
+];
+
 fn filter_runtime_env<I>(vars: I) -> Vec<(OsString, OsString)>
 where
     I: IntoIterator<Item = (OsString, OsString)>,
@@ -53,9 +81,26 @@ where
         .collect()
 }
 
-/// Return the minimal parent environment needed to locate the engine and its local runtime.
+/// Remove provider/model routing variables from an inherited environment.
+/// `env_clear` plus the allowlist already exclude them; this second filter
+/// keeps that guarantee if the allowlist ever grows to include one.
+pub fn strip_provider_model_env<I>(vars: I) -> Vec<(OsString, OsString)>
+where
+    I: IntoIterator<Item = (OsString, OsString)>,
+{
+    vars.into_iter()
+        .filter(|(key, _)| {
+            !PROVIDER_MODEL_ENV_NAMES
+                .iter()
+                .any(|blocked| key == OsStr::new(blocked))
+        })
+        .collect()
+}
+
+/// Return the minimal parent environment needed to locate the engine and its
+/// local runtime — never any stale provider/model routing variables.
 pub fn inherited_runtime_env() -> Vec<(OsString, OsString)> {
-    filter_runtime_env(std::env::vars_os())
+    strip_provider_model_env(filter_runtime_env(std::env::vars_os()))
 }
 
 /// Result of running a command to completion.
@@ -109,7 +154,7 @@ pub fn run_engine_command(args: &[String], env: &HashMap<String, String>) -> Com
 
 #[cfg(test)]
 mod tests {
-    use super::filter_runtime_env;
+    use super::{filter_runtime_env, strip_provider_model_env};
     use std::ffi::OsString;
 
     #[test]
@@ -136,5 +181,40 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn stale_provider_and_model_vars_are_stripped() {
+        // Every model/provider routing name is removed even if it were
+        // somehow present in the inherited set — the per-scan resolver owns
+        // these variables now.
+        let mut vars: Vec<(OsString, OsString)> = super::PROVIDER_MODEL_ENV_NAMES
+            .iter()
+            .map(|name| (OsString::from(name), OsString::from("stale")))
+            .collect();
+        vars.push((OsString::from("PATH"), OsString::from("/usr/bin")));
+
+        let stripped = strip_provider_model_env(vars);
+        assert_eq!(
+            stripped,
+            vec![(OsString::from("PATH"), OsString::from("/usr/bin"))]
+        );
+        assert!(stripped
+            .iter()
+            .all(|(k, _)| !super::PROVIDER_MODEL_ENV_NAMES
+                .iter()
+                .any(|n| k == &OsString::from(n))));
+    }
+
+    #[test]
+    fn provider_model_names_are_not_inherited_allowlist() {
+        // Guard the invariant directly: no routing variable may sit on the
+        // allowlist, or it would be inherited before the resolver overlay.
+        for name in super::PROVIDER_MODEL_ENV_NAMES {
+            assert!(
+                !super::INHERITED_ENV_ALLOWLIST.contains(name),
+                "{name} must never be an inherited runtime env"
+            );
+        }
     }
 }

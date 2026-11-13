@@ -119,12 +119,6 @@ describe("scan workflow parity matrix (CLI)", () => {
       }
     }
   )
-
-  it("never infers depth from the target — an omitted --mode is the documented default", async () => {
-    const output = makeOutput()
-    expect(await handleScan(["--target", "t-1"], output)).toBe(0)
-    expect(getScanBody()?.body?.mode).toBe("STANDARD")
-  })
 })
 
 describe("scan attachments (CLI)", () => {

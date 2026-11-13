@@ -36,6 +36,10 @@ vi.mock("@lyrashield/db", () => {
       return new FakeDecimal(this.n + Number.parseFloat(String(other)))
     }
   }
+  const transactionClient = {
+    commission: { updateMany: vi.fn() },
+    affiliate: { updateMany: vi.fn() },
+  }
   return {
     Prisma: { Decimal: FakeDecimal },
     prisma: {
@@ -44,12 +48,14 @@ vi.mock("@lyrashield/db", () => {
         findFirst: vi.fn(),
       },
       commission: {
-        update: vi.fn(),
+        updateMany: transactionClient.commission.updateMany,
       },
       affiliate: {
-        findUnique: vi.fn(),
-        update: vi.fn(),
+        updateMany: transactionClient.affiliate.updateMany,
       },
+      $transaction: vi.fn((callback: (tx: typeof transactionClient) => unknown) =>
+        callback(transactionClient)
+      ),
     },
   }
 })
@@ -81,10 +87,12 @@ describe("clawback — RISK-C3 replay guard", () => {
       await onRefund({ provider: "polar", externalId: "reversed-large", reason: "REFUND" })
     ).toMatchObject({ replay: true, manualReview: false })
     expect(prisma.auditLog.create).not.toHaveBeenCalled()
-    expect(prisma.commission.update).not.toHaveBeenCalled()
+    expect(prisma.commission.updateMany).not.toHaveBeenCalled()
   })
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(prisma.commission.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.affiliate.updateMany).mockResolvedValue({ count: 1 } as never)
   })
 
   it("skips the activeReferrals decrement on a replayed refund (commission already REVERSED)", async () => {
@@ -111,10 +119,9 @@ describe("clawback — RISK-C3 replay guard", () => {
     expect(result.reversed).toBe(true)
     expect(result.replay).toBe(true)
     // Critical: the commission update (reversal write) must NOT be called on replay
-    expect(prisma.commission.update).not.toHaveBeenCalled()
+    expect(prisma.commission.updateMany).not.toHaveBeenCalled()
     // Critical: the affiliate activeReferrals decrement must NOT happen on replay
-    expect(prisma.affiliate.findUnique).not.toHaveBeenCalled()
-    expect(prisma.affiliate.update).not.toHaveBeenCalled()
+    expect(prisma.affiliate.updateMany).not.toHaveBeenCalled()
   })
 
   it("keeps chargeback replay idempotent without refund-only money evidence", async () => {
@@ -136,8 +143,8 @@ describe("clawback — RISK-C3 replay guard", () => {
     })
 
     expect(result).toEqual(expect.objectContaining({ reversed: true, replay: true }))
-    expect(prisma.commission.update).not.toHaveBeenCalled()
-    expect(prisma.affiliate.update).not.toHaveBeenCalled()
+    expect(prisma.commission.updateMany).not.toHaveBeenCalled()
+    expect(prisma.affiliate.updateMany).not.toHaveBeenCalled()
   })
 
   it("decrements activeReferrals on a genuine first-time refund (commission PENDING/AVAILABLE/PAID)", async () => {
@@ -159,9 +166,8 @@ describe("clawback — RISK-C3 replay guard", () => {
       currency: "USD",
       commissions: [activeCommission],
     })
-    vi.mocked(prisma.affiliate.findUnique).mockResolvedValue({ activeReferrals: 5 })
-    vi.mocked(prisma.commission.update).mockResolvedValue(undefined)
-    vi.mocked(prisma.affiliate.update).mockResolvedValue(undefined)
+    vi.mocked(prisma.commission.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(prisma.affiliate.updateMany).mockResolvedValue({ count: 1 } as never)
 
     const result = await onRefund({
       provider: "polar",
@@ -174,9 +180,73 @@ describe("clawback — RISK-C3 replay guard", () => {
     expect(result.reversed).toBe(true)
     expect(result.replay).toBeUndefined()
     // The reversal write happened
-    expect(prisma.commission.update).toHaveBeenCalledOnce()
+    expect(prisma.commission.updateMany).toHaveBeenCalledOnce()
     // The activeReferrals decrement happened (first-time refund)
-    expect(prisma.affiliate.update).toHaveBeenCalledOnce()
+    expect(prisma.affiliate.updateMany).toHaveBeenCalledOnce()
+    expect(prisma.affiliate.updateMany).toHaveBeenCalledWith({
+      where: { id: "aff-2", activeReferrals: { gt: 0 } },
+      data: { activeReferrals: { decrement: 1 } },
+    })
+  })
+
+  it("treats a concurrent commission reversal as a replay without decrementing twice", async () => {
+    vi.mocked(prisma.conversion.findFirst).mockResolvedValue({
+      id: "conv-race",
+      idempotencyKey: "polar:order-race",
+      subscriptionId: "sub-race",
+      affiliateId: "aff-race",
+      grossAmount: { toString: () => "50.0000" },
+      currency: "USD",
+      commissions: [
+        {
+          id: "comm-race",
+          amount: { gt: () => false, toString: () => "10.0000" },
+          status: "PAID",
+        },
+      ],
+    } as never)
+    vi.mocked(prisma.commission.updateMany).mockResolvedValueOnce({ count: 0 } as never)
+
+    const result = await onRefund({
+      provider: "polar",
+      externalId: "order-race",
+      refundAmount: "50.0000",
+      currency: "USD",
+      reason: "REFUND",
+    })
+
+    expect(result).toMatchObject({ reversed: true, replay: true })
+    expect(prisma.affiliate.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("keeps the clawback failed when the atomic referral adjustment fails", async () => {
+    vi.mocked(prisma.conversion.findFirst).mockResolvedValue({
+      id: "conv-failure",
+      idempotencyKey: "polar:order-failure",
+      subscriptionId: "sub-failure",
+      affiliateId: "aff-failure",
+      grossAmount: { toString: () => "50.0000" },
+      currency: "USD",
+      commissions: [
+        {
+          id: "comm-failure",
+          amount: { gt: () => false, toString: () => "10.0000" },
+          status: "PAID",
+        },
+      ],
+    } as never)
+    vi.mocked(prisma.affiliate.updateMany).mockRejectedValueOnce(new Error("database unavailable"))
+
+    await expect(
+      onRefund({
+        provider: "polar",
+        externalId: "order-failure",
+        refundAmount: "50.0000",
+        currency: "USD",
+        reason: "REFUND",
+      })
+    ).rejects.toThrow("database unavailable")
+    expect(prisma.$transaction).toHaveBeenCalledOnce()
   })
 
   it("routes a refund money mismatch to manual review instead of throwing", async () => {
@@ -223,6 +293,6 @@ describe("clawback — RISK-C3 replay guard", () => {
         })
       )
     }
-    expect(prisma.commission.update).not.toHaveBeenCalled()
+    expect(prisma.commission.updateMany).not.toHaveBeenCalled()
   })
 })

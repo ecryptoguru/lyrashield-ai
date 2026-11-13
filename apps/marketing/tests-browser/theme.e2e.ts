@@ -46,9 +46,12 @@ test("cycles and synchronizes the rendered marketing theme", async ({ page }) =>
   await expect(toggle).toHaveAttribute("aria-label", "System theme active. Change color theme")
   await expect(toggle).toHaveAttribute("title", "System theme")
   await expect(themeColor).toHaveAttribute("content", "#f5f9fc")
-  await expect(page.locator(".premium-hero")).toHaveCSS("background-color", "rgb(238, 246, 250)")
+  // The cinematic hero and chapters reveal their shared film; the reading
+  // veil and ordinary product surfaces still respond to the selected theme.
+  await expect(page.locator(".premium-hero")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+  await expect(page.locator(".premium-hero")).toHaveCSS("color", "rgb(16, 34, 53)")
   await expect(page.locator(".hero-frame")).toHaveCSS("background-color", "rgb(245, 249, 252)")
-  await expect(page.locator("evidence-world")).toHaveCSS("background-color", "rgb(8, 17, 28)")
+  await expect(page.locator("evidence-journey")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
 
   await toggle.click()
   await expect(root).toHaveAttribute("data-theme-preference", "light")
@@ -62,9 +65,9 @@ test("cycles and synchronizes the rendered marketing theme", async ({ page }) =>
   await expect(root).toHaveAttribute("data-theme", "dark")
   await expect(activeIcon("dark")).toBeVisible()
   await expect(themeColor).toHaveAttribute("content", "#08111c")
-  await expect(page.locator(".premium-hero")).toHaveCSS("background-color", "rgb(8, 17, 28)")
+  await expect(page.locator(".premium-hero")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
   await expect(page.locator(".hero-frame")).toHaveCSS("background-color", "rgb(8, 17, 28)")
-  await expect(page.locator("evidence-world")).toHaveCSS("background-color", "rgb(8, 17, 28)")
+  await expect(page.locator("evidence-journey")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
 
   await toggle.click()
   await page.emulateMedia({ colorScheme: "dark" })
@@ -86,10 +89,10 @@ test("disconnects an incomplete motion world without a page error", async ({ pag
   const errors: Error[] = []
   page.on("pageerror", (error) => errors.push(error))
   await page.goto("/")
-  await page.locator("evidence-world").scrollIntoViewIfNeeded()
+  await page.locator("evidence-journey").scrollIntoViewIfNeeded()
   await page.evaluate(async () => {
-    await customElements.whenDefined("evidence-world")
-    const world = document.createElement("evidence-world")
+    await customElements.whenDefined("evidence-journey")
+    const world = document.createElement("evidence-journey")
     document.body.append(world)
     world.remove()
   })
@@ -97,115 +100,50 @@ test("disconnects an incomplete motion world without a page error", async ({ pag
 })
 
 for (const viewport of [
-  { name: "mobile", width: 390, height: 844 },
-  { name: "desktop", width: 1440, height: 900 },
+  { width: 320, height: 568 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+  { width: 1440, height: 900 },
 ]) {
-  test(`cross-fades story cards without horizontal overflow on ${viewport.name}`, async ({
+  test(`evidence chapters remain readable at ${viewport.width}x${viewport.height}`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport)
     await page.goto("/")
-    const expectedChapterHeight = viewport.name === "mobile" ? 1055 : 1035
-    expect(
-      await page.locator('[data-chapter-index="0"]').evaluate((el) => el.clientHeight)
-    ).toBeGreaterThanOrEqual(expectedChapterHeight)
-    await page.locator("evidence-world").scrollIntoViewIfNeeded()
-    await page.evaluate(() => customElements.whenDefined("evidence-world"))
-
-    const gateway = page.locator('[data-chapter-index="0"]')
-    await expect(gateway.locator('[data-story-card-index="0"]')).toHaveClass(/is-card-active/)
-    await gateway.evaluate((chapter) => {
-      const top = chapter.getBoundingClientRect().top + scrollY
-      scrollTo(0, top + chapter.clientHeight * 0.7 - innerHeight * (innerWidth < 768 ? 0.68 : 0.5))
-    })
-    await expect(gateway.locator('[data-story-card-index="1"]')).toHaveClass(/is-card-active/)
+    const chapter = page.locator('[data-journey-chapter="0"]')
+    await page.getByRole("link", { name: "Overview", exact: true }).click()
+    await expect(chapter.getByRole("heading")).toBeVisible()
+    await expect(chapter.getByRole("heading")).toBeInViewport()
+    // Phone chapters reserve a scene-sized opening but stay within one viewport.
+    expect(await chapter.evaluate((el) => el.clientHeight)).toBeLessThanOrEqual(
+      Math.max(750, viewport.height)
+    )
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       viewport.width
     )
+    if (viewport.width <= 900)
+      await expect(page.locator(".journey__scene")).toHaveCSS("position", "relative")
   })
 }
 
-test("shows every story card in reduced-motion mode", async ({ page }) => {
+test("reduced motion keeps the complete example and chapter explanations", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" })
   await page.goto("/")
-  await page.locator("evidence-world").scrollIntoViewIfNeeded()
-  await expect(page.locator("[data-story-card-index]")).toHaveCount(12)
-  for (const card of await page.locator("[data-story-card-index]").all())
-    await expect(card).toBeVisible()
+  await expect(page.locator("evidence-journey")).not.toHaveClass(/is-enhanced/)
+  await expect(page.locator("[data-journey-chapter]")).toHaveCount(7)
+  await expect(page.locator("[data-receipt-stage]")).toHaveCount(5)
+  await expect(page.locator(".journey__report")).toBeVisible()
+  for (const details of await page.locator(".journey__chapter details").all()) {
+    await details.locator("summary").click()
+    await expect(details.locator("p").first()).toBeVisible()
+  }
 })
 
-test("keeps the mobile story card anchored below the header without flashing the video", async ({
+// Item 2.2: the sheet scrolls inside the viewport and exposes every
+// destination, instead of dropping entries to fit a 390x400 screen.
+test("scrolls the mobile menu inside the viewport and reaches every destination", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto("/")
-
-  const world = page.locator("evidence-world")
-  await world.scrollIntoViewIfNeeded()
-  await page.evaluate(() => customElements.whenDefined("evidence-world"))
-  const firstChapter = page.locator('[data-chapter-index="0"]')
-  await firstChapter.evaluate((chapter) => {
-    const top = chapter.getBoundingClientRect().top + scrollY
-    scrollTo(0, top + 200)
-  })
-
-  await expect(world).toHaveClass(/is-pinned/)
-  const activeCard = firstChapter.locator(".is-card-active")
-  await expect(activeCard).toBeVisible()
-  await expect
-    .poll(() => activeCard.evaluate((card) => getComputedStyle(card).transform))
-    .toBe("none")
-  expect(
-    await activeCard.evaluate((card) => innerHeight - card.getBoundingClientRect().bottom)
-  ).toBe(16)
-
-  const headerBottom = await page
-    .locator("header.sticky")
-    .evaluate((header) => header.getBoundingClientRect().bottom)
-  const progressTop = await page
-    .locator(".evidence-world__chrome")
-    .evaluate((chrome) => chrome.getBoundingClientRect().top)
-  expect(progressTop).toBeGreaterThan(headerBottom)
-
-  const video = page.locator(".evidence-world__video")
-  await expect(video).toHaveClass(/is-front/, { timeout: 15_000 })
-  await page.locator('[data-chapter-index="1"]').evaluate((chapter) => {
-    const top = chapter.getBoundingClientRect().top + scrollY
-    scrollTo(0, top + 200)
-  })
-  await expect(video).toHaveClass(/is-front/)
-})
-
-test("retains the motion layout on a short portrait phone", async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 568 })
-  await page.goto("/")
-  const world = page.locator("evidence-world")
-  await world.scrollIntoViewIfNeeded()
-  await page.evaluate(() => customElements.whenDefined("evidence-world"))
-  await world.evaluate((element) => {
-    const top = element.getBoundingClientRect().top + scrollY
-    scrollTo(0, top + 200)
-  })
-
-  await expect(world).toHaveClass(/is-motion-layout/)
-  await expect(world).toHaveClass(/is-pinned/)
-  await expect(page.locator(".evidence-world__stage")).toHaveCSS("position", "sticky")
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320)
-})
-
-test("keeps a short landscape phone in the stable document flow", async ({ page }) => {
-  await page.setViewportSize({ width: 844, height: 390 })
-  await page.goto("/")
-  const world = page.locator("evidence-world")
-  await world.scrollIntoViewIfNeeded()
-  await page.evaluate(() => customElements.whenDefined("evidence-world"))
-
-  await expect(page.locator(".evidence-world__stage")).toHaveCSS("position", "relative")
-  await expect(page.locator(".evidence-world__chapters")).toHaveCSS("margin-top", "0px")
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844)
-})
-
-test("keeps the compact mobile menu inside the visible viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 400 })
   await page.goto("/")
 
@@ -215,27 +153,46 @@ test("keeps the compact mobile menu inside the visible viewport", async ({ page 
   const menu = page.locator("#mobile-menu")
   await expect(menu).toBeVisible()
   await expect(menu).toHaveCSS("transform", "none")
-  await expect(menu.getByText("Resources", { exact: true })).toBeVisible()
-  await expect(menu.getByRole("link", { name: "Free tools", exact: true })).toBeVisible()
-  await expect(menu.getByRole("link", { name: "Get started" })).toBeVisible()
+
+  // The sheet is capped at the viewport and scrolls internally.
   const bounds = await menu.boundingBox()
   expect(bounds).not.toBeNull()
-  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(384)
-  expect(await menu.evaluate((element) => element.scrollHeight)).toBeLessThanOrEqual(
-    await menu.evaluate((element) => element.clientHeight)
-  )
-  for (const name of ["For agents", "WebMCP", "Free scan", "Pricing"]) {
-    const link = menu.getByRole("link", { name, exact: true })
-    await expect(link).toBeInViewport()
-    const linkBounds = await link.boundingBox()
-    expect(linkBounds!.height).toBeGreaterThanOrEqual(44)
-    expect(linkBounds!.y + linkBounds!.height).toBeLessThanOrEqual(384)
-  }
+  expect(bounds!.height).toBeLessThanOrEqual(400)
+  const styles = await menu.evaluate((element) => {
+    const computed = getComputedStyle(element)
+    return {
+      overflowY: computed.overflowY,
+      maxHeight: computed.maxHeight,
+      viewportHeight: innerHeight,
+    }
+  })
+  expect(styles.overflowY).toBe("auto")
+  // The available height excludes the menu's top offset and bottom safe area.
+  expect(parseFloat(styles.maxHeight)).toBeLessThan(styles.viewportHeight)
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(styles.viewportHeight)
 
+  // Every desktop destination is present, one accordion per menu.
+  for (const label of ["Product", "Free tools", "Learn"]) {
+    await expect(menu.getByText(label, { exact: true })).toBeVisible()
+  }
+  await expect(menu.getByRole("link", { name: "Pricing", exact: true })).toBeVisible()
+  await expect(menu.getByRole("link", { name: "Coding agents", exact: true })).toBeVisible()
+  await expect(menu.getByRole("link", { name: "Start free trial" })).toBeVisible()
+
+  // Escape closes the sheet.
   await page.keyboard.press("Escape")
   await expect(menu).toBeHidden()
 
+  // Re-open: opening an accordion must not close the sheet, and its entries
+  // are reachable by scrolling inside the sheet.
   await toggle.click()
+  await menu.getByText("Learn", { exact: true }).click()
+  const docs = menu.getByRole("link", { name: "Docs", exact: true })
+  await expect(docs).toBeAttached()
+  await docs.scrollIntoViewIfNeeded()
+  await expect(docs).toBeInViewport()
+
+  // The close button also closes the sheet.
   await page.getByRole("button", { name: "Close navigation menu" }).click()
   await expect(menu).toBeHidden()
 })
@@ -243,14 +200,24 @@ test("keeps the compact mobile menu inside the visible viewport", async ({ page 
 test("keeps mobile menu rows content-sized when the browser expands dialogs", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 })
   await page.goto("/")
+  // Force a tall dialog: the sheet must stay capped by the viewport rather
+  // than stretch to the injected height, and its rows stay touch-sized.
   await page.addStyleTag({ content: "dialog { height: 38rem; }" })
 
   await page.getByRole("button", { name: "Open navigation menu" }).click()
 
   const menu = page.locator("#mobile-menu")
-  const firstLink = menu.getByRole("link", { name: "For agents" })
+  const firstLink = menu.getByRole("link", { name: "Coding agents" })
   await expect(menu).toBeVisible()
-  expect((await menu.boundingBox())!.height).toBeLessThan(400)
+  // The entrance animation scales the dialog from 0.98, temporarily making
+  // a 44px row measure 43px. Measure touch targets after the animation ends.
+  await menu.evaluate(async (dialog) => {
+    await Promise.all(dialog.getAnimations().map((animation) => animation.finished))
+  })
+  expect((await menu.boundingBox())!.height).toBeLessThanOrEqual(852)
+  // min-height: 2.75rem renders as 43.83px at this width, so round to the
+  // nearest pixel before checking the 44px touch target.
+  expect(Math.round((await firstLink.boundingBox())!.height)).toBeGreaterThanOrEqual(44)
   expect((await firstLink.boundingBox())!.height).toBeLessThanOrEqual(48)
 })
 
@@ -272,17 +239,19 @@ test("supports standard keyboard navigation in the AI scanner tabs", async ({ pa
   await expect(filesTab).toHaveAttribute("aria-selected", "true")
 })
 
-test("keeps Free tools separate from the restored desktop Resources menu", async ({ page }) => {
+test("keeps the Free tools menu separate from the Learn menu", async ({ page }) => {
   await page.setViewportSize({ width: 1159, height: 863 })
   await page.goto("/")
 
-  const toolsMenu = page.locator("summary").filter({ hasText: "Free tools" })
-  const resourcesMenu = page.locator("summary").filter({ hasText: "Resources" })
-  const resourcesDropdown = resourcesMenu.locator("..")
-  const label = resourcesMenu.getByText("Resources", { exact: true })
-  const chevron = resourcesMenu.locator("[data-nav-chevron]")
+  // Scope to the desktop list: the mobile sheet lives in the same <nav>.
+  const desktopNav = page.locator('header.sticky nav[aria-label="Main"] > ul')
+  const toolsMenu = desktopNav.locator("summary").filter({ hasText: "Free tools" })
+  const learnMenu = desktopNav.locator("summary").filter({ hasText: "Learn" })
+  const learnDropdown = learnMenu.locator("..")
+  const label = learnMenu.getByText("Learn", { exact: true })
+  const chevron = learnMenu.locator("[data-nav-chevron]")
   await expect(toolsMenu).toBeVisible()
-  await expect(resourcesMenu).toBeVisible()
+  await expect(learnMenu).toBeVisible()
 
   const labelBounds = await label.boundingBox()
   const chevronBounds = await chevron.boundingBox()
@@ -295,15 +264,39 @@ test("keeps Free tools separate from the restored desktop Resources menu", async
 
   await toolsMenu.click()
   await expect(page.getByRole("link", { name: "All free tools", exact: true })).toBeVisible()
+  // The header menu lists four tools plus "All free tools"; the remaining
+  // tools are reachable from /tools (spec section 7).
   await expect(
-    page.getByRole("link", { name: "AI App Security Scanner", exact: true })
+    page.getByRole("link", { name: "Security Headers and CORS Checker", exact: true })
   ).toBeVisible()
 
-  await resourcesMenu.click()
-  await expect(
-    resourcesDropdown.getByRole("link", { name: "Methodology", exact: true })
-  ).toBeVisible()
-  await expect(resourcesDropdown.getByRole("link", { name: "Guides", exact: true })).toBeVisible()
+  await learnMenu.click()
+  await expect(toolsMenu.locator("..")).not.toHaveAttribute("open")
+  await expect(learnDropdown.getByRole("link", { name: "Docs", exact: true })).toBeVisible()
+  await expect(learnDropdown.getByRole("link", { name: "Guides", exact: true })).toBeVisible()
+
+  const panel = learnDropdown.locator("div").first()
+  const panelBounds = await panel.boundingBox()
+  const longLink = await learnDropdown
+    .getByRole("link", { name: "MCP guard behavior and limits", exact: true })
+    .boundingBox()
+  expect(panelBounds).not.toBeNull()
+  expect(longLink).not.toBeNull()
+  expect(longLink!.x).toBeGreaterThanOrEqual(panelBounds!.x)
+  expect(longLink!.x + longLink!.width).toBeLessThanOrEqual(panelBounds!.x + panelBounds!.width)
+})
+
+test("opens only one mobile navigation accordion at a time", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/")
+  await page.getByRole("button", { name: "Open navigation menu" }).click()
+  const menu = page.locator("#mobile-menu")
+  await menu.getByText("Product", { exact: true }).click()
+  await expect(menu.getByRole("link", { name: "How it works", exact: true })).toBeVisible()
+  await menu.getByText("Learn", { exact: true }).click()
+  await expect(menu.locator("details[open]")).toHaveCount(1)
+  await expect(menu.getByRole("link", { name: "Docs", exact: true })).toBeVisible()
+  await expect(menu.getByRole("link", { name: "How it works", exact: true })).toBeHidden()
 })
 
 test("keeps desktop navigation labels on one line at the compact desktop width", async ({
@@ -314,7 +307,7 @@ test("keeps desktop navigation labels on one line at the compact desktop width",
 
   const header = page.locator("header.sticky")
   const items = header.locator('nav[aria-label="Main"] > ul > li')
-  await expect(items).toHaveCount(7)
+  await expect(items).toHaveCount(6)
   expect(
     await header.evaluate((element) => element.getBoundingClientRect().height)
   ).toBeLessThanOrEqual(65)
@@ -325,4 +318,19 @@ test("keeps desktop navigation labels on one line at the compact desktop width",
     ).toBeLessThanOrEqual(44)
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1159)
+})
+
+test("FAQ answers follow native keyboard reading order", async ({ page }) => {
+  await page.goto("/")
+  const answers = page.locator("#faq details")
+  await expect(answers).toHaveCount(4)
+  for (const answer of await answers.all()) {
+    const summary = answer.locator("summary")
+    await summary.focus()
+    await page.keyboard.press("Enter")
+    await expect(answer).toHaveAttribute("open", "")
+    await expect(answer.locator("p")).toBeVisible()
+    await page.keyboard.press("Enter")
+    await expect(answer).not.toHaveAttribute("open", "")
+  }
 })

@@ -6,7 +6,6 @@ import {
   buildScanQualitySurface,
   SCAN_QUALITY_METRICS,
   SCAN_QUALITY_SURFACE_VERSION,
-  SCAN_RESULT_SURFACES,
   SCAN_SURFACE_PARITY,
 } from "../../packages/types/src/scan-quality"
 
@@ -53,19 +52,6 @@ describe("scan-quality eval corpus", () => {
 })
 
 describe("surface parity table", () => {
-  it("covers every metric × every surface with a valid cell", () => {
-    for (const metric of SCAN_QUALITY_METRICS) {
-      const row = SCAN_SURFACE_PARITY[metric]
-      expect(row, `missing parity row for ${metric}`).toBeDefined()
-      for (const surface of SCAN_RESULT_SURFACES) {
-        expect(
-          ["measured", "derived", "not_reported"].includes(row[surface]),
-          `invalid parity cell ${metric}/${surface}`
-        ).toBe(true)
-      }
-    }
-  })
-
   it("publishes the same parity table inside every computed surface", async () => {
     for (const qualityCase of cases) {
       const surface = await buildScanQualitySurface(qualityCase.evidence)

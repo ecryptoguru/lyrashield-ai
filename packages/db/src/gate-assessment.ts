@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto"
 import { GATE_ASSESSMENT_VERSION, type GateAssessmentSnapshot } from "@lyrashield/gate"
+import { RESULT_MANIFEST_VERSION } from "@lyrashield/types"
 
-const SUPPORTED_MANIFEST_VERSION = 7
+// Compatibility is exact: only the version the producer stamps is readable —
+// older snapshots and ahead-of-reader manifests both fail closed.
+const SUPPORTED_MANIFEST_VERSION = RESULT_MANIFEST_VERSION
 const COMMIT_PATTERN = /^[a-f0-9]{40}$/i
 const ARTIFACT_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/i
 
@@ -69,30 +72,6 @@ export function snapshotFromManifest(input: {
     policyFingerprint: input.policyFingerprint,
     identity,
   }
-}
-
-export function isTrustedRetestReceipt(
-  receipt: {
-    status: string
-    method: string
-    scanId: string
-    verifierVersion: string | null
-    evidence: unknown
-  },
-  sourceScanId: string
-): boolean {
-  if (
-    receipt.status !== "VALIDATED" ||
-    receipt.method !== "RETEST" ||
-    !receipt.verifierVersion?.startsWith("result-integrity-")
-  ) {
-    return false
-  }
-  const evidence = receipt.evidence as {
-    baseline?: { scanId?: unknown } | null
-    retest?: { scanId?: unknown } | null
-  } | null
-  return evidence?.baseline?.scanId === sourceScanId && evidence.retest?.scanId === receipt.scanId
 }
 
 export function parseAssessmentSnapshot(value: unknown): GateAssessmentSnapshot | null {

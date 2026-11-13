@@ -48,6 +48,16 @@ export interface ToolHandlerContext {
   getCredentials?: () => Promise<{ apiKey: string; apiUrl?: string }>
 }
 
+export const IDEMPOTENCY_KEY_PROPERTY = {
+  idempotencyKey: {
+    type: "string",
+    minLength: 1,
+    maxLength: 128,
+    description:
+      "Optional stable key for an intended mutation. Reuse only when retrying the identical action; use a new key for a different action.",
+  },
+} as const
+
 export function getClient(context: ToolHandlerContext): LyraShieldClient {
   return new LyraShieldClient({
     apiKey: context.apiKey,

@@ -9,6 +9,13 @@ tags:
   - appsec
   - release-assurance
   - mcp
+skills:
+  - lyrashield
+  - get-started
+  - review-changes
+  - scan-project
+  - fix-and-retest
+  - launch-readiness
 prerequisites:
   - Node.js (for NPX option)
 content:
@@ -18,7 +25,7 @@ content:
     content: |
       {
         "type": "local",
-        "command": ["npx", "-y", "@lyrashield/mcp@0.2.11"],
+        "command": ["npx", "-y", "@lyrashield/mcp@0.2.12"],
         "environment": {
           "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
         }

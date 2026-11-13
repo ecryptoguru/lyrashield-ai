@@ -75,6 +75,7 @@ const FORCE_RLS_ACCESSORS = new Set([
   "liveAiSafetyPlan",
   "liveAiSafetyRun",
   "gateVerdict",
+  "billingReconciliationState",
   "agentConnection",
   "agentOperation",
   "loopClosure",
@@ -147,6 +148,8 @@ const ALLOWLIST: Record<string, string> = {
   // verbatim (the coordinator's getSystemPrisma marker moved to authority.ts).
   "apps/worker/src/jobs/run-scan.job.ts":
     "policy read carries explicit workspaceId; scan cancellation check is a bare-id lookup inside the scan pipeline (extension-wrapped)",
+  "apps/worker/src/jobs/run-scan/admission.ts":
+    "delegated-grant re-verification at execution time reads the recorded AgentConnection with an explicit workspaceId filter (extension-wrapped; W0.4)",
   "apps/worker/src/jobs/run-scan/execution.ts":
     "targetDomainVerification read carries explicit workspaceId (extension-wrapped)",
   "apps/worker/src/jobs/run-scan/pending-finalization.ts":
@@ -228,9 +231,28 @@ const ALLOWLIST: Record<string, string> = {
     "targetDomainVerification read under requirePermission-bound context (extension-wrapped)",
   "apps/web/src/app/api/targets/route.ts":
     "project/integration/target reads under requireWorkspaceAccess/requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/ai-assurance/page.tsx":
+    "target picker is bound to the server-selected active workspaceId (explicit workspaceId filter; Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/findings/page.tsx":
+    "target picker and requested finding use the authenticated active workspaceId in explicit filters (Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/integrations/page.tsx":
+    "integration list uses the server-selected active workspaceId (explicit workspaceId filter; Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/projects/page.tsx":
+    "project list is scoped to the server-selected active workspaceId (explicit workspaceId filter; Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/scans/[id]/page.tsx":
+    "findings, shareable snapshot, and scan plan reads each carry the active workspaceId (Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/scans/page.tsx":
+    "integration and target picker reads use the server-selected active workspaceId (explicit workspaceId filters; Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/settings/workspace/page.tsx":
+    "connection, notification, and schedule counts are all filtered by the authorized active workspaceId (Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/targets/page.tsx":
+    "target and GitHub integration queries are explicitly scoped to the server-selected active workspaceId (Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/team/page.tsx":
+    "pending invitations are explicitly filtered by the server-selected active workspaceId (Prisma extension-wrapped)",
 }
 
-const READ_OPS = ["findMany", "findFirst", "findUnique", "count", "aggregate", "groupBy"]
+const PLAIN_READ_PATTERN =
+  /\bprisma\.([A-Za-z_$][\w$]*)\.(findMany|findFirst|findUnique|count|aggregate|groupBy)\s*\(/g
 
 // __dirname-relative (the terminology test precedent): the scan must not
 // depend on the runner's working directory. From packages/db/src: two levels
@@ -242,6 +264,7 @@ const ROOTS = [
   join(__dirname, "..", "..", "myra", "src"),
   join(__dirname, "..", "..", "..", "apps", "worker", "src"),
   join(__dirname, "..", "..", "..", "apps", "web", "src", "app", "api"),
+  join(__dirname, "..", "..", "..", "apps", "web", "src", "app", "(dashboard)", "dashboard"),
   join(__dirname, "..", "..", "..", "apps", "web", "src", "lib"),
 ] as const
 
@@ -254,11 +277,12 @@ function scanSource(source: string): string[] {
   const offenders: string[] = []
   const lines = source.split("\n")
   for (const [index, line] of lines.entries()) {
-    for (const accessor of FORCE_RLS_ACCESSORS) {
-      for (const op of READ_OPS) {
-        if (line.includes(`prisma.${accessor}.${op}(`)) {
-          offenders.push(`line ${index + 1} prisma.${accessor}.${op}`)
-        }
+    PLAIN_READ_PATTERN.lastIndex = 0
+    for (const match of line.matchAll(PLAIN_READ_PATTERN)) {
+      const accessor = match[1]
+      const operation = match[2]
+      if (accessor && operation && FORCE_RLS_ACCESSORS.has(accessor)) {
+        offenders.push(`line ${index + 1} prisma.${accessor}.${operation}`)
       }
     }
   }
@@ -334,6 +358,42 @@ describe("plain-client FORCE-RLS reads (v16 2.2 tripwire)", () => {
     ].join("\n")
     const offenders = scanSource(unboundRead)
     expect(offenders.join("\n")).toContain("prisma.scanAttachment.findMany")
+  })
+
+  it("catches a bare billing reconciliation state read without system scope", () => {
+    const unboundRead = [
+      'import { prisma } from "./client"',
+      "",
+      "export async function readBillingCheckpoint() {",
+      '  return prisma.billingReconciliationState.findUnique({ where: { id: "singleton" } })',
+      "}",
+      "",
+    ].join("\n")
+    const offenders = scanSource(unboundRead)
+    expect(offenders.join("\n")).toContain("prisma.billingReconciliationState.findUnique")
+  })
+
+  it("scans dashboard pages and catches an unscoped dashboard read", () => {
+    const dashboardRoot = join(
+      __dirname,
+      "..",
+      "..",
+      "..",
+      "apps",
+      "web",
+      "src",
+      "app",
+      "(dashboard)",
+      "dashboard"
+    )
+    expect(ROOTS).toContain(dashboardRoot)
+    const dashboardRead = [
+      'import { prisma } from "@lyrashield/db"',
+      "export async function dashboardLookup() {",
+      '  return prisma.notification.findMany({ where: { status: "pending" } })',
+      "}",
+    ].join("\n")
+    expect(scanSource(dashboardRead).join("\n")).toContain("prisma.notification.findMany")
   })
 
   it("the allowlist stays honest: every entry still exists on disk", () => {

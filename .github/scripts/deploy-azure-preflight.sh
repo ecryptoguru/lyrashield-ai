@@ -78,6 +78,8 @@ verify_egress_proxy_key_vault_access() {
 
 step_prepare-private-registry-and-zero-downtime-rollout() {
   verify_egress_proxy_key_vault_access
+  source .github/scripts/target-relay-config.sh
+  verify_target_relay_key_vault_access
   GHCR_TOKEN=$(az keyvault secret show \
     --vault-name "$AZURE_KEY_VAULT_NAME" \
     --name ghcr-token \
@@ -456,6 +458,80 @@ step_sync-upstash-secrets-to-container-apps() {
   done
 }
 
+# Workflow step: Sync dedicated cache secrets to the worker and app-only purge vaults.
+# The worker loads these values through refresh-secrets.sh; the cache stays off
+# unless an operator explicitly selects observe/enforce.
+step_sync-ai-result-cache-secrets-to-worker-key-vault() {
+  source .github/scripts/azure_secret_set.sh
+  set -euo pipefail
+  local mode="${LYRASHIELD_AI_RESULT_CACHE_MODE:-off}"
+  case "$mode" in
+    off)
+      ;;
+    observe|enforce) ;;
+    *) echo "::error::LYRASHIELD_AI_RESULT_CACHE_MODE must be off, observe, or enforce."; return 1 ;;
+  esac
+  if [ "${AZURE_KEY_VAULT_NAME:-}" != "lyrashieldprodsecrets" ]; then
+    echo "::error::The worker VM reads Key Vault lyrashieldprodsecrets; update its runtime configuration before changing AZURE_KEY_VAULT_NAME."
+    return 1
+  fi
+  if [ "$mode" != "off" ] && ! node <<'NODE'
+const cacheRaw = process.env.LYRASHIELD_AI_CACHE_REDIS_URL || "";
+const cacheKey = process.env.LYRASHIELD_AI_CACHE_KEY_SECRET || "";
+const fingerprint = process.env.LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT || "";
+function host(value, protocols) {
+  if (!value) throw new Error("queue and rate-limit Redis endpoints are required for isolation checks");
+  const url = new URL(value);
+  if (!protocols.includes(url.protocol)) throw new Error("invalid endpoint protocol");
+  return url.hostname.toLowerCase();
+}
+try {
+  const cache = new URL(cacheRaw);
+  if (cache.protocol !== "rediss:" || !cache.hostname || !cache.password)
+    throw new Error("cache endpoint must be credentialed TLS Redis");
+  if (Buffer.byteLength(cacheKey, "utf8") < 32) throw new Error("cache key must contain at least 32 bytes");
+  if (!/^[a-fA-F0-9]{64}$/.test(fingerprint)) throw new Error("provider fingerprint must be SHA-256");
+  const cacheHost = cache.hostname.toLowerCase();
+  if (host(process.env.BULLMQ_REDIS_URL, ["redis:", "rediss:"]) === cacheHost)
+    throw new Error("cache Redis host must be separate from BullMQ");
+  if (host(process.env.UPSTASH_REDIS_REST_URL, ["https:"]) === cacheHost)
+    throw new Error("cache Redis host must be separate from rate-limit Redis");
+} catch (error) {
+  process.stderr.write(`Invalid exact AI-result cache configuration: ${error.message}.\n`);
+  process.exit(1);
+}
+NODE
+  then
+    return 1
+  fi
+  local mappings=(worker-ai-result-cache-mode:LYRASHIELD_AI_RESULT_CACHE_MODE)
+  if [ "$mode" != "off" ]; then
+    mappings+=(
+      worker-ai-cache-fingerprint:LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT
+      worker-ai-cache-url:LYRASHIELD_AI_CACHE_REDIS_URL
+      worker-ai-cache-key:LYRASHIELD_AI_CACHE_KEY_SECRET
+    )
+  fi
+  # The helper clears its input variables; retain them in this shell for the app-only copy.
+  (azure_keyvault_sync_env_group "$AZURE_KEY_VAULT_NAME" "${mappings[@]}")
+  if [ "$mode" != "off" ] && [ -n "${AZURE_APP_CONTAINER_APP_NAME:-}" ]; then
+    if [ -z "${AZURE_APP_SECRET_KEY_VAULT_NAME:-}" ] || \
+       [ "$(printf '%s' "$AZURE_APP_SECRET_KEY_VAULT_NAME" | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "$AZURE_KEY_VAULT_NAME" | tr '[:upper:]' '[:lower:]')" ]; then
+      echo "::error::Cache purge requires an app-only Key Vault distinct from the worker vault."
+      return 1
+    fi
+    azure_keyvault_sync_env_group "$AZURE_APP_SECRET_KEY_VAULT_NAME" \
+      ai-cache-url:LYRASHIELD_AI_CACHE_REDIS_URL \
+      ai-cache-key:LYRASHIELD_AI_CACHE_KEY_SECRET
+    azure_keyvault_require_containerapp_access "$AZURE_APP_SECRET_KEY_VAULT_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_APP_CONTAINER_APP_NAME"
+    local app_vault_base="https://${AZURE_APP_SECRET_KEY_VAULT_NAME}.vault.azure.net/secrets"
+    sync_secret_group "$AZURE_APP_CONTAINER_APP_NAME" \
+      "ai-cache-url=keyvaultref:${app_vault_base}/ai-cache-url,identityref:system" \
+      "ai-cache-key=keyvaultref:${app_vault_base}/ai-cache-key,identityref:system"
+  fi
+  echo "Exact AI-result cache configuration synced to the worker and app purge stores."
+}
+
 # Workflow step: Sync BullMQ Redis secret to Container Apps
 step_sync-bullmq-redis-secret-to-container-apps() {
   source .github/scripts/azure_secret_set.sh
@@ -588,8 +664,21 @@ step_sync-github-app-secrets-to-app-container-app() {
   echo "GitHub App Key Vault references synced to the app Container App."
 }
 
+# Workflow step: Sync only worker installation-token mint authority.
+step_sync-worker-github-credentials() {
+  source .github/scripts/azure_secret_set.sh
+  set -euo pipefail
+  bash .github/scripts/verify-worker-github-access.sh
+  # Held recovery retains existing secret versions and only validates access.
+  [ "${HELD_RECOVERY:-false}" != true ] || return 0
+  azure_keyvault_sync_env_group "$AZURE_APP_SECRET_KEY_VAULT_NAME" \
+    worker-github-app-id:GITHUB_APP_ID \
+    worker-github-app-private-key:GITHUB_APP_PRIVATE_KEY
+}
+
 step="${1:-}"
 case "$step" in
+  sync-worker-github-credentials) step_sync-worker-github-credentials ;;
   ensure-app-and-scanner-system-identities) step_ensure-app-and-scanner-system-identities ;;
   verify-egress-proxy-key-vault-access) verify_egress_proxy_key_vault_access ;;
   prepare-private-registry-and-zero-downtime-rollout) step_prepare-private-registry-and-zero-downtime-rollout ;;
@@ -604,6 +693,7 @@ case "$step" in
   sync-ip-hash-salt-key-vault-reference) step_sync-ip-hash-salt-key-vault-reference ;;
   sync-myra-secrets-to-app-container-app) step_sync-myra-secrets-to-app-container-app ;;
   sync-upstash-secrets-to-container-apps) step_sync-upstash-secrets-to-container-apps ;;
+  sync-ai-result-cache-secrets-to-worker-key-vault) step_sync-ai-result-cache-secrets-to-worker-key-vault ;;
   sync-bullmq-redis-secret-to-container-apps) step_sync-bullmq-redis-secret-to-container-apps ;;
   sync-billing-provider-secrets-to-app-container-app) step_sync-billing-provider-secrets-to-app-container-app ;;
   verify-email-verification-credentials) step_verify-email-verification-credentials ;;

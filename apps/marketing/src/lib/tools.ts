@@ -1,5 +1,38 @@
 export const tools = [
   {
+    slug: "php2shell-checker",
+    title: "Free PHP2Shell checker",
+    seoTitle: "Free PHP2Shell Checker and Fix Guidance | LyraShield AI",
+    description:
+      "Check reported PHP versions against PHP2Shell patch thresholds, review session configuration and get practical remediation steps in your browser.",
+    summary:
+      "Assess the PHP version and configuration you report against the original PHP2Shell advisories and the separate October 23 session notice. Get deployment-specific next steps without sending traffic to your website.",
+    privacy: "Your runtime details stay in this tab and are not uploaded or saved.",
+    category: "Check before launch",
+    checks: [
+      "Branch-specific upstream patch thresholds for CVE-2026-109618 and CVE-2026-109619",
+      "Reported configuration prerequisites for CVE-2026-115560",
+      "Hosting, package and container remediation guidance with explicit evidence gaps",
+    ],
+    limitations: [
+      "Answers are user-reported; the tool cannot verify a deployed runtime or vendor backport",
+      "It does not send exploit probes, inspect application code or establish prior compromise",
+      "Meeting one advisory's patch threshold does not establish overall security or resolve the separate session notice",
+    ],
+    updatedDate: "2026-10-24",
+    references: [
+      { label: "PHP release and session guidance", url: "https://www.php.net/archive/2026.php" },
+      {
+        label: "PHP OOM corruption advisory",
+        url: "https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w",
+      },
+      {
+        label: "PHP stale global state advisory",
+        url: "https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp",
+      },
+    ],
+  },
+  {
     slug: "ai-app-security-checklist",
     title: "AI App Launch Security Checklist",
     seoTitle: "AI App Security Checklist | LyraShield AI",
@@ -29,8 +62,8 @@ export const tools = [
   },
   {
     slug: "ai-app-security-scanner",
-    title: "AI App Security Scanner",
-    seoTitle: "AI App Security Scanner | LyraShield AI",
+    title: "Local Code Scanner",
+    seoTitle: "Local Code Scanner for AI Apps | LyraShield AI",
     description:
       "Scan selected source files locally for AI-specific security signals mapped to the OWASP Top 10 for LLM Applications (2025).",
     summary:
@@ -214,3 +247,75 @@ export type Tool = (typeof tools)[number]
 export function toolUrl(slug: Tool["slug"]): string {
   return `/tools/${slug}`
 }
+
+/**
+ * Task-shaped link labels for the tools index (Spec item 6.1). The index used
+ * to render seven identical "Open tool" buttons, which told a visitor nothing
+ * about which check to run first.
+ */
+export const TOOL_TASK_LABELS: Record<Tool["slug"], string> = {
+  "php2shell-checker": "Check your PHP runtime",
+  "ai-app-security-checklist": "Plan the review",
+  "ai-app-security-scanner": "Scan your code",
+  "security-headers-checker": "Check headers",
+  "secret-exposure-scanner": "Find exposed secrets",
+  "supabase-rls-checker": "Review RLS policies",
+  "jwt-session-inspector": "Inspect a session token",
+  "webmcp-security-checker": "Review agent tools",
+}
+
+/**
+ * One representative result line per tool, shown before a visitor runs it
+ * (Spec item 6.5). Both sampled tool pages previously showed only
+ * "Results appear here", so a visitor could not tell what they would get.
+ */
+export const TOOL_SAMPLE_RESULTS: Record<Tool["slug"], string> = {
+  "php2shell-checker":
+    "8.4.26 matches original PHP2Shell affected ranges; update to 8.4.27 or later in that maintained branch, and review the separate session notice.",
+  "ai-app-security-checklist":
+    "7 of 11 launch controls documented · 4 need an owner before release",
+  "ai-app-security-scanner":
+    "3 signals detected across 12 files · 1 high, 2 review · 5 checks not assessed",
+  "security-headers-checker": "2 headers missing · Content-Security-Policy and Referrer-Policy",
+  "secret-exposure-scanner": "1 high-confidence credential pattern found in a client bundle",
+  "supabase-rls-checker": "2 policies allow an anonymous read on a tenant table",
+  "jwt-session-inspector":
+    "Token has no expiry claim and is not marked HttpOnly at the cookie layer",
+  "webmcp-security-checker":
+    "2 of 14 controls detected · a write tool is registered without a confirmation boundary",
+}
+
+/**
+ * Visitor-shaped grouping for the tools index (Spec item 6.1): group by what
+ * the visitor has, not by what the tool is called.
+ */
+export const TOOL_GROUPS: Array<{
+  id: string
+  label: string
+  blurb: string
+  slugs: Tool["slug"][]
+}> = [
+  {
+    id: "app",
+    label: "Your running app",
+    blurb: "Checks that read a live surface, pasted headers or a session token.",
+    slugs: [
+      "php2shell-checker",
+      "security-headers-checker",
+      "secret-exposure-scanner",
+      "jwt-session-inspector",
+    ],
+  },
+  {
+    id: "code",
+    label: "Your code",
+    blurb: "Checks that read selected files or policies on your device.",
+    slugs: ["ai-app-security-checklist", "ai-app-security-scanner", "supabase-rls-checker"],
+  },
+  {
+    id: "agents",
+    label: "Your agent surfaces",
+    blurb: "Checks for the tools a page or agent exposes to a model.",
+    slugs: ["webmcp-security-checker"],
+  },
+]

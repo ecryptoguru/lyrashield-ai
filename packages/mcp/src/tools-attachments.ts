@@ -8,6 +8,7 @@ import {
   uploadScanAttachment,
 } from "@lyrashield/sdk"
 import {
+  IDEMPOTENCY_KEY_PROPERTY,
   getClient,
   makeErrorResult,
   makeToolResult,
@@ -41,6 +42,7 @@ export function createListScanAttachmentsTool(context: ToolHandlerContext): McpT
       "List the workspace's active scan attachments (id, filename, media type, size, checksum). Attachments are immutable input evidence referenced by id in scan runs — never host paths.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
       },
@@ -68,6 +70,7 @@ export function createUploadScanAttachmentTool(context: ToolHandlerContext): Mcp
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         filename: {
           type: "string",
@@ -134,6 +137,7 @@ export function createDeleteScanAttachmentTool(context: ToolHandlerContext): Mcp
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         attachmentId: { type: "string", description: "Attachment ID to delete" },
       },
@@ -164,6 +168,7 @@ export function createRequestFixPrTool(context: ToolHandlerContext): McpTool {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         proposalId: {
           type: "string",

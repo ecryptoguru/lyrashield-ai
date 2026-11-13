@@ -15,8 +15,8 @@ import { prisma } from "./client"
  * This test reproduces the exact production role posture by creating a
  * NOBYPASSRLS role and running as it. It needs a live Postgres and a
  * connection allowed to CREATE ROLE / SET ROLE (the CI/admin migration
- * connection); it skips gracefully anywhere that isn't available, so it never
- * fails spuriously.
+ * connection). The test runs only in the explicitly enabled disposable-DB
+ * suite; missing privileges there are a CI failure, not a skipped assertion.
  */
 
 const suffix = randomUUID().replace(/-/g, "")
@@ -26,23 +26,13 @@ const userId = `apikey-rls-user-${suffix}`
 const rawKey = `lsk_${randomBytes(32).toString("base64url")}`
 const hashed = createHash("sha256").update(rawKey, "utf8").digest("hex")
 
-let live = false
-
-async function canRunLiveRoleTest(): Promise<boolean> {
-  try {
-    // A cheap probe that also confirms we can manage roles here.
-    await prisma.$executeRawUnsafe(`SET LOCAL statement_timeout = 5000`)
-    await prisma.$executeRawUnsafe(`CREATE ROLE "${role}" NOBYPASSRLS`)
-    return true
-  } catch {
-    return false
-  }
-}
+let roleCreated = false
 
 describe("verifyApiKey under restricted-role RLS", () => {
   beforeAll(async () => {
-    live = await canRunLiveRoleTest()
-    if (!live) return
+    await prisma.$executeRawUnsafe(`SET LOCAL statement_timeout = 5000`)
+    await prisma.$executeRawUnsafe(`CREATE ROLE "${role}" NOBYPASSRLS`)
+    roleCreated = true
 
     // Seed a workspace + key as the (bypass-capable) migration role. Set a
     // matching workspace context so the strict WITH CHECK policy accepts the
@@ -76,7 +66,7 @@ describe("verifyApiKey under restricted-role RLS", () => {
   })
 
   afterAll(async () => {
-    if (live) {
+    if (roleCreated) {
       try {
         await prisma.$executeRawUnsafe(`RESET ROLE`)
         await prisma.apiKey.deleteMany({ where: { workspaceId } })
@@ -91,12 +81,6 @@ describe("verifyApiKey under restricted-role RLS", () => {
   })
 
   it("reproduces the RLS block on a direct pre-auth lookup, and the definer function fixes it", async () => {
-    if (!live) {
-      // Environment can't manage roles (e.g. sandbox without pg) — skip.
-      expect(true).toBe(true)
-      return
-    }
-
     // Act as the restricted, NOBYPASSRLS application role with NO workspace
     // context — exactly the pre-auth verify posture.
     await prisma.$executeRawUnsafe(`SET ROLE "${role}"`)

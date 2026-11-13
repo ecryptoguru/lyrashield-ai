@@ -1,21 +1,35 @@
-import { useEffect, useState } from "react"
-import { listScans } from "../lib/tauri"
-import type { ScanSummary, ScanWorkflow } from "../lib/types"
+import { useEffect, useRef, useState } from "react"
+import { listScanPage } from "../lib/tauri"
+import { appendScanHistory } from "../lib/scan-history"
+import type { ScanHistoryCursor, ScanSummary, ScanWorkflow } from "../lib/types"
 
 function workflowLabel(workflow: ScanWorkflow): string {
   return workflow === "REVIEW_CHANGES" ? "review changes" : "review target"
 }
 
 export function ScanHistory({ onOpen }: { onOpen: (scanId: string) => void }) {
+  const mounted = useRef(true)
   const [scans, setScans] = useState<ScanSummary[]>([])
+  const [cursor, setCursor] = useState<ScanHistoryCursor | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
   useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  useEffect(() => {
     let disposed = false
-    void listScans()
-      .then((saved) => {
-        if (!disposed) setScans(saved)
+    void listScanPage()
+      .then((page) => {
+        if (!disposed) {
+          setScans(page.scans)
+          setCursor(page.nextCursor)
+        }
       })
       .catch((e: unknown) => {
         if (!disposed) setError(String(e))
@@ -27,6 +41,23 @@ export function ScanHistory({ onOpen }: { onOpen: (scanId: string) => void }) {
       disposed = true
     }
   }, [retry])
+
+  async function loadMore() {
+    if (!cursor || loadingMore) return
+    setLoadingMore(true)
+    setLoadMoreError(null)
+    try {
+      const page = await listScanPage(cursor)
+      if (!mounted.current) return
+      setScans((current) => appendScanHistory(current, page.scans))
+      setCursor(page.nextCursor)
+    } catch (e) {
+      if (mounted.current) setLoadMoreError(String(e))
+    } finally {
+      if (mounted.current) setLoadingMore(false)
+    }
+  }
+
   return (
     <section aria-labelledby="scan-history" className="mt-8 space-y-3">
       <h2 id="scan-history" className="text-lg font-semibold">
@@ -42,6 +73,8 @@ export function ScanHistory({ onOpen }: { onOpen: (scanId: string) => void }) {
             onClick={() => {
               setLoading(true)
               setError(null)
+              setScans([])
+              setCursor(null)
               setRetry((v) => v + 1)
             }}
           >
@@ -49,7 +82,7 @@ export function ScanHistory({ onOpen }: { onOpen: (scanId: string) => void }) {
           </button>
         </div>
       ) : scans.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No local scans yet.</p>
+        <p className="text-sm text-muted-foreground">No scans yet.</p>
       ) : (
         scans.map((scan) => (
           <button
@@ -66,6 +99,18 @@ export function ScanHistory({ onOpen }: { onOpen: (scanId: string) => void }) {
             </span>
           </button>
         ))
+      )}
+      {cursor && (
+        <div className="space-y-2">
+          {loadMoreError && <p role="alert">Could not load more scans: {loadMoreError}</p>}
+          <button className="underline" onClick={() => void loadMore()} disabled={loadingMore}>
+            {loadingMore
+              ? "Loading more scans…"
+              : loadMoreError
+                ? "Retry loading more"
+                : "Load more scans"}
+          </button>
+        </div>
       )}
     </section>
   )

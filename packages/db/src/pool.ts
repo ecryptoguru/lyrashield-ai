@@ -2,6 +2,7 @@ import { logger } from "@lyrashield/logger"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { performance } from "node:perf_hooks"
 import pg from "pg"
+import { createPgConnectionConfig } from "./connection-config"
 
 type DatabasePoolScope = "db" | "db:system"
 // SQLSTATE uses five uppercase alphanumeric characters; native socket/DNS
@@ -161,7 +162,7 @@ export function createBoundedPgAdapter(
 ): PrismaPg {
   return new ObservablePrismaPg(
     {
-      connectionString,
+      ...createPgConnectionConfig(connectionString),
       max: resolveDbPoolMax(),
       // Free idle connections instead of pinning them for the pool's lifetime so
       // an idle process does not hold pooler slots it is not using.

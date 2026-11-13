@@ -99,8 +99,20 @@ pub fn logout_chatgpt() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn save_azure_config(api_key: String, endpoint: String) -> Result<(), String> {
-    byok::save_azure_credentials(&api_key, &endpoint)
+pub fn save_azure_config(
+    api_key: String,
+    endpoint: String,
+    deployment: String,
+) -> Result<(), String> {
+    byok::save_azure_credentials(&api_key, &endpoint, &deployment)
+}
+
+/// Explicit provider selection — the recorded choice the scan resolver honors.
+/// Selecting an unconfigured provider fails closed.
+#[tauri::command]
+pub fn select_byok_provider(provider: String) -> Result<byok::ByokStatus, String> {
+    byok::set_selected_provider(&provider)?;
+    byok::get_byok_status()
 }
 
 #[tauri::command]
@@ -316,6 +328,15 @@ pub async fn cancel_scan(app: tauri::AppHandle, scan_id: String) -> Result<(), S
 #[tauri::command]
 pub async fn list_scans(app: tauri::AppHandle) -> Result<Vec<ScanSummary>, String> {
     crate::scan::store::list_scans(&app).await
+}
+
+#[tauri::command]
+pub async fn list_scan_page(
+    app: tauri::AppHandle,
+    cursor: Option<ScanHistoryCursor>,
+    limit: Option<usize>,
+) -> Result<ScanHistoryPage, String> {
+    crate::scan::store::list_scan_page(&app, cursor, limit).await
 }
 
 #[tauri::command]

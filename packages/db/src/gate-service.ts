@@ -13,11 +13,22 @@ import {
   type GateVerdictResult,
 } from "@lyrashield/gate"
 import { fingerprintPolicy, parseAssessmentSnapshot } from "./gate-assessment"
+import { loadVerifiedAssessedScans } from "./gate-assessed-scan-evidence"
+import {
+  findMismatchedGateEvidence,
+  invalidateUntrustedGateEvidence,
+  type StoredGateEvidence,
+} from "./gate-reader-evidence"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
+import { loadBoundedGateVerdicts } from "./gate-verdict-read"
 
 export { parseAssessmentSnapshot }
 export { evaluateGateForTarget, type GateEvaluationResult } from "./gate-evaluation-service"
-export { getCurrentGateVerdicts, type GateVerdictBatchResult } from "./gate-verdict-batch"
+export {
+  getCurrentGateVerdicts,
+  MAX_GATE_READ_BATCH_TARGETS,
+  type GateVerdictBatchResult,
+} from "./gate-verdict-batch"
 export { handleFixPrMergedAndReevaluate, type FixPrMergeOutcome } from "./fix-pr-merge-service"
 
 /**
@@ -26,13 +37,11 @@ export { handleFixPrMergedAndReevaluate, type FixPrMergeOutcome } from "./fix-pr
  */
 export async function getLatestGateVerdict(workspaceId: string, targetId: string) {
   return withWorkspaceRLS(workspaceId, async (tx) => {
-    return tx.gateVerdict.findFirst({
-      where: { workspaceId, targetId },
-      // id tiebreaker: evaluatedAt is a timestamp — two verdicts in the same
-      // millisecond are possible (e.g. merge + completion in one tick), and
-      // ordering by timestamp alone would make the "latest" nondeterministic.
-      orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
-    })
+    const row = (await loadBoundedGateVerdicts(tx, workspaceId, { targetIds: [targetId] }))[0]
+    if (!row) return null
+    const { evidenceTooLarge, ...historical } = row
+    if (evidenceTooLarge) return null
+    return historical
   })
 }
 
@@ -56,11 +65,11 @@ export interface GateApplicabilityOptions {
 export async function evaluateVerdictApplicability(
   tx: ScopedTransaction,
   workspaceId: string,
-  verdict: {
+  verdict: StoredGateEvidence & {
     targetId: string
-    state: string
     evaluatedAt: Date
     assessmentSnapshot: unknown
+    scanId: string | null
   },
   options: GateApplicabilityOptions = {}
 ): Promise<GateApplicabilityResult> {
@@ -95,7 +104,10 @@ export async function evaluateVerdictApplicability(
             targetId: verdict.targetId,
             deletedAt: null,
             id: { not: snapshot.scanId },
-            createdAt: { gt: new Date(snapshot.completedAtMs) },
+            OR: [
+              { createdAt: { gt: new Date(snapshot.completedAtMs) } },
+              { endedAt: { gt: new Date(snapshot.completedAtMs) } },
+            ],
           },
           select: { id: true },
         }),
@@ -118,7 +130,7 @@ export async function evaluateVerdictApplicability(
         }),
       ])
     : [null, null, null]
-  return evaluateGateApplicability(verdict.state as GateVerdictResult["state"], {
+  const result = evaluateGateApplicability(verdict.state as GateVerdictResult["state"], {
     snapshot,
     expectedCommit: options.expectedCommit,
     expectedArtifactDigest: options.expectedArtifactDigest,
@@ -127,6 +139,18 @@ export async function evaluateVerdictApplicability(
     newerAssessmentAttempt: Boolean(newerAssessmentAttempt),
     evidenceChanged: Boolean(findingChanged || verificationChanged),
   })
+  if (snapshot) {
+    const assessed = await loadVerifiedAssessedScans(tx, workspaceId, [verdict])
+    if (assessed.unverified.has(verdict.targetId)) return invalidateUntrustedGateEvidence(result)
+    if (
+      (await findMismatchedGateEvidence(tx, workspaceId, [verdict], assessed.verified)).has(
+        verdict.targetId
+      )
+    ) {
+      return invalidateUntrustedGateEvidence(result)
+    }
+  }
+  return result
 }
 
 /**
@@ -138,14 +162,13 @@ export async function getCurrentGateVerdict(
   targetId: string,
   options: GateApplicabilityOptions = {}
 ) {
-  return withWorkspaceRLS(workspaceId, async (tx) => {
-    const historical = await tx.gateVerdict.findFirst({
-      where: { workspaceId, targetId },
-      orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
-    })
-    if (!historical) return null
+  const read = async (tx: ScopedTransaction) => {
+    const row = (await loadBoundedGateVerdicts(tx, workspaceId, { targetIds: [targetId] }))[0]
+    if (!row) return null
+    const { evidenceTooLarge, ...historical } = row
 
-    const applicability = await evaluateVerdictApplicability(tx, workspaceId, historical, options)
+    const checked = await evaluateVerdictApplicability(tx, workspaceId, historical, options)
+    const applicability = evidenceTooLarge ? invalidateUntrustedGateEvidence(checked) : checked
 
     return {
       schemaVersion: "lyrashield-gate-response/2.0.0",
@@ -160,5 +183,6 @@ export async function getCurrentGateVerdict(
       },
       historical,
     }
-  })
+  }
+  return withWorkspaceRLS(workspaceId, read, { isolationLevel: "RepeatableRead" })
 }

@@ -49,7 +49,7 @@ export async function GET(request: Request) {
     }
 
     if (billingAccount.provider === "polar") {
-      const url = await getPolarPortalUrl({ customerId: billingAccount.externalId })
+      const url = await getPolarPortalUrl({ subscriptionId: billingAccount.externalId })
       if (!url) {
         return apiError("PROVIDER_NOT_CONFIGURED", "Polar portal is not configured.", 503)
       }

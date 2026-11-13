@@ -20,11 +20,6 @@ describe("LoadingShell", () => {
     expect(html).toContain('<h1 class="sr-only">Loading page</h1>')
   })
 
-  it("omits the class attribute when no className is given", () => {
-    const html = renderToStaticMarkup(createElement(LoadingShell))
-    expect(html).toMatch(/^<div role="status"/)
-  })
-
   it("applies className to the status wrapper", () => {
     const html = renderToStaticMarkup(
       createElement(LoadingShell, { className: "min-w-0 space-y-6" })

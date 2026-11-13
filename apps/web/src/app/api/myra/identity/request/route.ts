@@ -11,7 +11,7 @@ import { identityRequestSchema } from "@lyrashield/myra"
 import { logger } from "@lyrashield/logger"
 import { verifyTurnstile } from "@/lib/turnstile"
 import { checkMyraRateLimit, clientIpFromRequest } from "@/lib/rate-limit"
-import { withApiRequest } from "@/lib/api-auth"
+import { withCookieMutation } from "@/lib/api-auth"
 import {
   myraFail,
   myraNotFound,
@@ -52,7 +52,7 @@ async function post(request: Request): Promise<Response> {
   }
 
   if (!(await verifyTurnstile(parsed.data.turnstileToken))) {
-    return myraFail(request, "VERIFICATION_FAILED", "Please retry the abuse check.", 403)
+    return myraFail(request, "VERIFICATION_FAILED", "Complete verification again, then retry.", 403)
   }
 
   try {
@@ -77,4 +77,4 @@ async function post(request: Request): Promise<Response> {
   return myraOk(request, { ok: true })
 }
 
-export const POST = withApiRequest(post)
+export const POST = withCookieMutation(post)

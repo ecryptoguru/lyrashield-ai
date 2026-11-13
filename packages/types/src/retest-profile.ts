@@ -1,4 +1,6 @@
-const DETERMINISTIC_SCANNERS = new Set([
+import type { ScanMode } from "./index"
+
+export const DETERMINISTIC_RETEST_SCANNERS = [
   "sca",
   "secrets",
   "url",
@@ -7,9 +9,10 @@ const DETERMINISTIC_SCANNERS = new Set([
   "ml_supply_chain",
   "sast",
   "iac",
-])
+] as const
+const DETERMINISTIC_SCANNERS = new Set<string>(DETERMINISTIC_RETEST_SCANNERS)
 
-export function resolveRetestProfile(sourceMode: string, scannerSources: readonly string[]) {
+export function resolveRetestProfile(sourceMode: ScanMode, scannerSources: readonly string[]) {
   const deterministicSource =
     scannerSources.length > 0 &&
     scannerSources.every((source) => DETERMINISTIC_SCANNERS.has(source))

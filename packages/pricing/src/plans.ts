@@ -38,6 +38,12 @@ export interface CloudPlan {
   deepAllowed: boolean
   /** Whether this plan has a self-serve checkout flow. */
   selfServe: boolean
+  /**
+   * Trial length in days. Present on the TRIAL plan only; the marketing site
+   * reads it so the trial line cannot drift from the catalog. No price or
+   * agent-minute number is affected by this field.
+   */
+  trialDays?: number
   /** Price by region. */
   price: RegionalPrice
   /** Human-readable feature list for marketing/checkout. */
@@ -53,6 +59,7 @@ export const CLOUD_PLANS: readonly CloudPlan[] = [
     memberSeats: 1,
     deepAllowed: false,
     selfServe: false,
+    trialDays: 7,
     price: {
       usd: { monthly: 0, annual: 0 },
       inr: { monthly: 0, annual: 0 },

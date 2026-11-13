@@ -1,12 +1,12 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
-import { getSchedule, updateSchedule, deleteSchedule, getNextRunAt, prisma } from "@lyrashield/db"
-import { resolveTargetScanMode } from "@lyrashield/types"
-import { requirePermission } from "@lyrashield/auth/server"
+import { getSchedule, updateSchedule, deleteSchedule, prisma } from "@lyrashield/db"
+import { PatchScheduleSchema, resolveTargetScanMode } from "@lyrashield/types"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
+import { SCHEDULE_ADMISSION_ENABLED } from "../../../../lib/scan-admission"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
-import { z } from "zod"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -19,9 +19,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.schedule.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.schedule.view)
+    const readScope = resolveOAuthReadScope(session)
 
-    const schedule = await getSchedule(id, workspaceId)
+    const schedule = await getSchedule(id, workspaceId, readScope.targetIds)
     if (!schedule) {
       return apiError("SCHEDULE_NOT_FOUND", "Schedule not found", 404)
     }
@@ -34,30 +35,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return apiError("INTERNAL_ERROR", "Failed to get schedule", 500)
   }
 }
-
-const PatchScheduleSchema = z.object({
-  workspaceId: z.string().min(1),
-  cron: z
-    .string()
-    .min(1)
-    .refine(
-      (c) => getNextRunAt(c.trim()) !== null,
-      "Use a five-field schedule like '0 0 * * 0' or '30 8 * * *'"
-    )
-    .optional(),
-  goal: z
-    .enum([
-      "CHECK_PR",
-      "TEST_APP",
-      "LAUNCH_REVIEW",
-      "WEEKLY_MONITOR",
-      "FULL_PENTEST",
-      "COMPLIANCE_REVIEW",
-    ])
-    .optional(),
-  mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).optional(),
-  enabled: z.boolean().optional(),
-})
 
 async function patch(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -74,6 +51,14 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
     if (updateData.cron) updateData.cron = updateData.cron.trim()
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.schedule.update)
+
+    if (!SCHEDULE_ADMISSION_ENABLED && updateData.enabled === true) {
+      return apiError(
+        "SCHEDULE_UNAVAILABLE",
+        "Enabling scheduled scans is not available in this release.",
+        403
+      )
+    }
 
     const schedule = await getSchedule(id, workspaceId)
     if (!schedule) {

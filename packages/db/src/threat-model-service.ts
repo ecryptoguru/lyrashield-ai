@@ -1,3 +1,4 @@
+import { canonicalJson as canonicalize } from "@lyrashield/types"
 import { createHash } from "node:crypto"
 import { logger } from "@lyrashield/logger"
 import { prisma } from "./client"
@@ -21,16 +22,6 @@ export type ThreatModelInput = {
   assets: string[]
   trustBoundaries: string[]
   threats: ThreatModelThreat[]
-}
-
-function canonicalize(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`
-  const object = value as Record<string, unknown>
-  return `{${Object.keys(object)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalize(object[key])}`)
-    .join(",")}}`
 }
 
 function requireScalar(value: string | null, field: string): void {

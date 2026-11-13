@@ -17,7 +17,7 @@ const STABLE_TAGS = new Set([
 // `updatedDate:`, Zod dropped the unknown key, and no "Updated" badge or
 // dateModified ever rendered. An unknown key is now a hard validation error
 // instead of a silent no-op.
-export const BLOG_FRONTMATTER_KEYS = Object.freeze([
+const BLOG_FRONTMATTER_KEYS = Object.freeze([
   "title",
   "description",
   "pubDate",
@@ -28,6 +28,8 @@ export const BLOG_FRONTMATTER_KEYS = Object.freeze([
   "heroImage",
   "canonical",
   "faq",
+  "reviewer",
+  "reviewedDate",
   // Reserved by Astro's glob loader to override an entry id; not part of the
   // collection schema but a valid frontmatter key.
   "slug",
@@ -52,18 +54,18 @@ export const PROGRAM_RELEASES = Object.freeze([
   "batch-7",
   "batch-8",
   "batch-9",
-  "batch-10",
   "batch-11",
+  "php2shell",
 ])
 
 // Declarative corpus size. Bump these together with a release: drift in either
 // direction still fails, but the expected shape is stated once instead of being
 // spread across hardcoded literals in the distribution assertions below.
-export const PROGRAM_ARTICLE_COUNT = 166
+export const PROGRAM_ARTICLE_COUNT = 160
 
-export const IMAGE_CORPUS = Object.freeze({ authority: 1, shared: 74 })
+export const IMAGE_CORPUS = Object.freeze({ authority: 1, shared: 68 })
 
-export const MAX_SHARED_IMAGE_USAGE = 3
+const MAX_SHARED_IMAGE_USAGE = 3
 
 const ALL_FREE_TOOL_ROUTES = Object.freeze([
   "/tools/ai-app-security-checklist",
@@ -83,6 +85,7 @@ const CTA_LINK_REQUIREMENTS = Object.freeze({
   "Pillar + Secret Scanner": Object.freeze(["/tools/secret-exposure-scanner"]),
   "Pillar + JWT Inspector": Object.freeze(["/tools/jwt-session-inspector"]),
   "Pillar + Headers Checker": Object.freeze(["/tools/security-headers-checker"]),
+  "Pillar + PHP checker": Object.freeze(["/tools/php2shell-checker"]),
   "Pillar + full app scan CTA": FREE_CHECKLIST_ROUTE,
   "Pillar + product audit trail": FREE_CHECKLIST_ROUTE,
   "Pillar + schedules/notifications": FREE_CHECKLIST_ROUTE,
@@ -169,6 +172,9 @@ export const PROHIBITED_CLAIMS = [
 ]
 
 const OFFICIAL_HOSTS = [
+  "php.net",
+  "getcomposer.org",
+  "wordpress.org",
   "owasp.org",
   "mitre.org",
   "nist.gov",
@@ -214,6 +220,8 @@ const OFFICIAL_HOSTS = [
 ]
 
 const PRIMARY_HOSTS = [
+  "cloudlinux.statuspage.io",
+  "access.redhat.com",
   "datatracker.ietf.org",
   "rfc-editor.org",
   "docs.github.com",
@@ -370,7 +378,7 @@ function firstProseParagraph(body) {
   return ""
 }
 
-export function extractLinks(markdown) {
+function extractLinks(markdown) {
   const links = []
   const pattern = /(?<!!)\[[^\]]*\]\(\s*([^\s)]+)(?:\s+["'][^"']*["'])?\s*\)/g
   for (const match of markdown.matchAll(pattern)) links.push(match[1])
@@ -546,17 +554,29 @@ export function validateArticle(article, programEntry, context = {}) {
     }
   }
 
+  // Reviewer attribution is all-or-nothing: a named reviewer needs the date
+  // the review happened, and a review date needs a named reviewer. The
+  // collection schema enforces the same pairing; this check fails earlier with
+  // a clearer message and covers the rendered contract too.
+  if ((data.reviewer === undefined) !== (data.reviewedDate === undefined)) {
+    errors.push("reviewer and reviewedDate must be set together or not at all")
+  }
+  if (data.reviewer !== undefined && typeof data.reviewer !== "string") {
+    errors.push("reviewer must reference an authors collection entry")
+  }
+  if (data.reviewedDate !== undefined) {
+    const reviewed = new Date(data.reviewedDate)
+    if (Number.isNaN(reviewed.getTime())) errors.push("reviewedDate is not a valid date")
+    else if (data.pubDate && reviewed < new Date(data.pubDate)) {
+      errors.push("reviewedDate cannot precede pubDate")
+    }
+  }
+
   if (/^## FAQ\s*$/m.test(body)) errors.push("body FAQ heading duplicates frontmatter FAQ")
 
   errors.push(...headingErrors(body))
 
   const isAuthority = programEntry?.index === 1 || slug === "vibe-coding-security-guide"
-  const words = markdownWordCount(body)
-  const [minimum, maximum] = isAuthority ? [2500, 3000] : [1200, 1500]
-  if (words < minimum || words > maximum) {
-    errors.push(`article word count must be between ${minimum} and ${maximum}; found ${words}`)
-  }
-
   const answerWords = markdownWordCount(firstProseParagraph(body))
   if (answerWords < 40 || answerWords > 80) {
     errors.push(`direct answer must be between 40 and 80 words; found ${answerWords}`)

@@ -171,22 +171,35 @@ function redact(value: unknown, seen: WeakSet<object>, depth: number): unknown {
 }
 
 function safeStringify(entry: LogEntry): string {
-  let serialized: string
   try {
     const redacted = redact(entry, new WeakSet(), 0) as Record<string, unknown>
-    serialized = JSON.stringify(redacted)
-  } catch (err) {
-    serialized = JSON.stringify({
-      level: entry.level,
-      message: entry.message,
-      timestamp: entry.timestamp,
-      _logError: `Failed to serialize log meta: ${String(err)}`,
+    const serialized = JSON.stringify(redacted)
+    if (serialized.length <= MAX_SERIALIZED_CHARS) return serialized
+
+    return JSON.stringify({
+      level: typeof redacted.level === "string" ? redacted.level.slice(0, 16) : "unknown",
+      message:
+        typeof redacted.message === "string"
+          ? redacted.message.slice(0, 512)
+          : "Oversized log entry",
+      timestamp:
+        typeof redacted.timestamp === "string"
+          ? redacted.timestamp.slice(0, 64)
+          : new Date().toISOString(),
+      ...(typeof redacted.requestId === "string"
+        ? { requestId: redacted.requestId.slice(0, 128) }
+        : {}),
+      _truncated: true,
+    })
+  } catch {
+    return JSON.stringify({
+      level: "error",
+      message: "Failed to serialize log entry",
+      timestamp: new Date().toISOString(),
+      _logError: "metadata_serialization_failed",
+      _truncated: true,
     })
   }
-  if (serialized.length > MAX_SERIALIZED_CHARS) {
-    serialized = serialized.slice(0, MAX_SERIALIZED_CHARS) + '...[truncated]"}'
-  }
-  return serialized
 }
 
 function log(level: LogLevel, message: string, meta?: Record<string, unknown>) {

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import type {
   AzureMetadata,
+  ByokProvider,
   ByokStatus,
   ChatGptAuthStatus,
   CloudTarget,
@@ -10,6 +11,8 @@ import type {
   RuntimeStatus,
   ScanEvent,
   ScanDetail,
+  ScanHistoryCursor,
+  ScanHistoryPage,
   ScanMode,
   ScanSummary,
   ScanTarget,
@@ -62,6 +65,10 @@ type NativeScanSummary = Omit<
   contract_version: string | null
   diff_base: string | null
   diff_head: string | null
+}
+type NativeScanHistoryPage = {
+  scans: NativeScanSummary[]
+  nextCursor: ScanHistoryCursor | null
 }
 type NativeScanEvent =
   | { type: "started" | "cancelled"; scan_id: string }
@@ -189,8 +196,17 @@ export async function checkChatGptStatus(): Promise<ChatGptAuthStatus> {
 export async function logoutChatGpt(): Promise<void> {
   return invoke("logout_chatgpt")
 }
-export async function saveAzureConfig(apiKey: string, endpoint: string): Promise<void> {
-  return invoke("save_azure_config", { apiKey, endpoint })
+export async function saveAzureConfig(
+  apiKey: string,
+  endpoint: string,
+  deployment: string
+): Promise<void> {
+  return invoke("save_azure_config", { apiKey, endpoint, deployment })
+}
+/// Record the explicit provider route the scan resolver honors. Fails closed
+/// when the named provider is not actually configured.
+export async function selectByokProvider(provider: ByokProvider): Promise<ByokStatus> {
+  return invoke("select_byok_provider", { provider })
 }
 export async function getByokMetadata(): Promise<AzureMetadata> {
   return invoke("get_byok_metadata")
@@ -264,8 +280,15 @@ export async function listCloudTargets(
 export async function cancelScan(scanId: string): Promise<void> {
   return invoke("cancel_scan", { scanId })
 }
-export async function listScans(): Promise<ScanSummary[]> {
-  return (await invoke<NativeScanSummary[]>("list_scans")).map(fromNativeSummary)
+export async function listScanPage(
+  cursor?: ScanHistoryCursor,
+  limit = 50
+): Promise<ScanHistoryPage> {
+  const page = await invoke<NativeScanHistoryPage>("list_scan_page", {
+    cursor: cursor ?? null,
+    limit,
+  })
+  return { scans: page.scans.map(fromNativeSummary), nextCursor: page.nextCursor }
 }
 export async function getScanDetail(scanId: string): Promise<ScanDetail> {
   const { findings, threat_model_available, ...summary } = await invoke<

@@ -242,7 +242,10 @@ azure_keyvault_sync_env_group() {
   if [ -n "$previous_exit_trap" ]; then
     printf -v cleanup_command '%s; eval %q' "$cleanup_command" "$previous_exit_action"
   fi
-  trap "$cleanup_command" EXIT
+  # Expand now so the EXIT action retains the path after local scope ends.
+  # cleanup_command shell-quotes both the path and any prior trap action above.
+  # shellcheck disable=SC2064
+  trap -- "$cleanup_command" EXIT
   for index in "${!secret_names[@]}"; do
     secret_name="${secret_names[$index]}"
     env_name="${env_names[$index]}"

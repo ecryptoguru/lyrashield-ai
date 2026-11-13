@@ -27,7 +27,7 @@ export interface ResolvedAccountBilling {
    * The plan that currently ENTITLES. `currentPlan` is the contract record;
    * a canceled/past_due row keeps it until the downgrade job runs, but the
    * account stops being entitled the instant `currentPeriodEnd` lapses — so
-   * the effective plan is FREE. Active/in-term rows return `currentPlan`.
+   * the effective plan is FREE. Only active, trialing, or verified in-term rows return `currentPlan`; paused and incomplete contracts grant no paid access.
    */
   effectivePlan: string
   interval: string | null
@@ -46,25 +46,28 @@ export interface ResolvedAccountBilling {
  * Rows past their paid term (status canceled/past_due with a lapsed
  * currentPeriodEnd) never outrank a live trial.
  */
-function statusRank(account: {
-  status: string
-  provider: string
-  currentPeriodEnd: Date | null
-}): number {
+function hasPaidEntitlement(account: { status: string; currentPeriodEnd: Date | null }): boolean {
+  if (account.status === "active" || account.status === "trialing") return true
+  return (
+    (account.status === "canceled" || account.status === "past_due") &&
+    account.currentPeriodEnd !== null &&
+    account.currentPeriodEnd.getTime() > Date.now()
+  )
+}
+
+function statusRank(account: { status: string; currentPeriodEnd: Date | null }): number {
+  if (!hasPaidEntitlement(account)) return account.status === "trial_expired" ? 4 : 6
   switch (account.status) {
     case "active":
       return 0
     case "past_due":
       return 1
     case "canceled":
-      // A canceled subscription still governs until its paid term ends.
-      return account.currentPeriodEnd && account.currentPeriodEnd.getTime() > Date.now() ? 2 : 6
+      return 2
     case "trialing":
       return 3
-    case "trial_expired":
-      return 4
     default:
-      return 5
+      return 6
   }
 }
 
@@ -94,10 +97,6 @@ export async function resolveAccountBilling(
     })
 
   const row = ranked[0]!.row
-  const termLapsed =
-    (row.status === "canceled" || row.status === "past_due") &&
-    row.currentPeriodEnd !== null &&
-    row.currentPeriodEnd.getTime() <= Date.now()
   return {
     id: row.id,
     accountId: row.accountId,
@@ -107,7 +106,7 @@ export async function resolveAccountBilling(
     externalId: row.externalId,
     status: row.status,
     currentPlan: row.currentPlan,
-    effectivePlan: termLapsed ? "FREE" : row.currentPlan,
+    effectivePlan: hasPaidEntitlement(row) ? row.currentPlan : "FREE",
     interval: row.interval,
     currentPeriodStart: row.currentPeriodStart,
     currentPeriodEnd: row.currentPeriodEnd,

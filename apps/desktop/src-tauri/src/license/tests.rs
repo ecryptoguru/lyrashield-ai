@@ -253,6 +253,9 @@ fn successful_server_verification_remains_operational_when_cache_write_fails() {
     assert_eq!(operational.offline_grace_remaining_seconds, None);
 }
 
+/// Backwards-compatible name for `test_pubkey_and_sign`, retained for the
+/// alias check in the golden-vector parity suite.
+#[allow(dead_code)]
 fn test_pubkey_and_sign_alias(file: &mut types::LicenseFile) -> String {
     test_pubkey_and_sign(file)
 }

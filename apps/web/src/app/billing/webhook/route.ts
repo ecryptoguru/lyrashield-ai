@@ -7,6 +7,8 @@ import {
   resolveRazorpayEventIdentity,
   normalizeProviderEvent,
   assertProviderCatalogEvent,
+  recordWebhookRejection,
+  WEBHOOK_REJECTION_REASONS,
   runApplicableTracks,
   getWebhookTrackRetrySchedule,
   WebhookAuthError,
@@ -35,6 +37,11 @@ export const dynamic = "force-dynamic"
  *
  * Flow (synchronous, like the GitHub webhook):
  * 1. Validate signature (401/400 on auth/payload failures — see below)
+ * 1b. Validate catalog evidence. An authentic, identifiable delivery that
+ *    fails catalog validation is persisted as a bounded WebhookEventRejection
+ *    receipt (provider + external identity + event type + reason code only,
+ *    never payload/tenant data) before the 400 answer; a receipt persistence
+ *    failure answers a retriable 5xx instead of a falsely durable 400.
  * 2. Insert WebhookEvent FIRST — the DB unique constraint is the concurrency
  *    arbiter: of simultaneous duplicate deliveries exactly one inserts and
  *    processes; losers answer 200 without side effects.
@@ -46,8 +53,9 @@ export const dynamic = "force-dynamic"
  *    c. affiliate: commission/clawback via normalized domain events
  *    A failed track marks its row "failed", enqueues a durable BullMQ retry,
  *    and answers 5xx so the provider also redelivers. The parent `processed`
- *    flag is DERIVED: true only when every applicable track succeeded.
- * 4. Respond 200 only when every applicable track row is "succeeded".
+ *    flag is DERIVED: true only when every applicable track succeeded or has
+ *    an explicit audited disposition.
+ * 4. Respond 200 only when every applicable track row is resolved.
  *
  * Single webhook ingress — Track C never registers a second webhook route.
  * Both tracks consume the same idempotent WebhookEvent rows.
@@ -101,6 +109,77 @@ function authErrorResponse(error: unknown): NextResponse | null {
  */
 function deriveIdentity(parts: (string | number)[]): string {
   return createHash("sha256").update(parts.join("|")).digest("hex")
+}
+
+async function catalogRejectionResponse({
+  provider,
+  externalId,
+  identitySource,
+  eventType,
+  error,
+}: {
+  provider: "polar" | "razorpay"
+  externalId: string
+  identitySource: "delivery" | "derived"
+  eventType: string
+  error: unknown
+}): Promise<NextResponse> {
+  if (!(error instanceof WebhookPayloadError)) {
+    logger.error("Webhook catalog validation failed unexpectedly", {
+      provider,
+      eventType,
+      externalId,
+      reason: "processing_failed",
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+      },
+      { status: 500 }
+    )
+  }
+
+  try {
+    await recordWebhookRejection({
+      provider,
+      externalId,
+      identitySource,
+      eventType,
+      reasonCode: WEBHOOK_REJECTION_REASONS.catalogEvidenceMismatch,
+    })
+  } catch (receiptError) {
+    logger.error("Webhook rejection receipt persistence failed", {
+      provider,
+      eventType,
+      externalId,
+      reason: "rejection_persistence_failed",
+      error: receiptError instanceof Error ? receiptError.message : String(receiptError),
+    })
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+      },
+      { status: 500 }
+    )
+  }
+
+  logger.warn("operator_alert", {
+    code: "webhook_catalog_rejection",
+    severity: "warning",
+    provider,
+    eventType,
+    reason: "catalog_evidence_mismatch",
+  })
+  return NextResponse.json(
+    {
+      success: false,
+      error: { code: "WEBHOOK_MALFORMED_PAYLOAD", message: "Webhook payload rejected" },
+    },
+    { status: 400 }
+  )
 }
 
 export async function POST(request: Request) {
@@ -203,7 +282,6 @@ export async function POST(request: Request) {
       eventType = event.event
       payload = event
     }
-    assertProviderCatalogEvent(provider, eventType, payload)
   } catch (error) {
     const classified = authErrorResponse(error)
     if (classified) {
@@ -230,6 +308,23 @@ export async function POST(request: Request) {
       },
       { status: 500 }
     )
+  }
+
+  // ── Phase 1b: catalog validation on the authenticated, identified event ───
+  // Signature and identity are already proven here, so a catalog rejection is
+  // an authentic identifiable rejection: persist one bounded durable receipt
+  // before answering 400. Invalid signatures and unidentifiable payloads never
+  // reach this phase and never produce receipts.
+  try {
+    assertProviderCatalogEvent(provider, eventType, payload)
+  } catch (error) {
+    return await catalogRejectionResponse({
+      provider,
+      externalId,
+      identitySource,
+      eventType,
+      error,
+    })
   }
 
   const normalized = normalizeProviderEvent({
@@ -284,7 +379,7 @@ export async function POST(request: Request) {
 
         if (existingEvent.processed) {
           // Exact replay of an already-processed event — acknowledge immediately.
-          // Zero extra side effects: every applicable track is already succeeded.
+          // Zero extra side effects: every applicable track is already terminal.
           logger.info("Webhook replay acknowledged", { provider, eventType, externalId })
           return NextResponse.json({ success: true }, { status: 200 })
         } else if (Date.now() - existingEvent.createdAt.getTime() < REPROCESS_MIN_AGE_MS) {
@@ -325,7 +420,7 @@ export async function POST(request: Request) {
     // ── Phase 3: durable required tracks (billing/license/affiliate) ─────────
     // Track rows have no direct workspace key, while their parent does. Keep
     // the parent update inside the signed event's workspace RLS context so a
-    // replay can derive `processed` after all required tracks succeed.
+    // replay can derive `processed` after required tracks succeed or are reviewed.
     const summary = await runWithWorkspaceContext(normalized.workspaceId, () =>
       runApplicableTracks({
         webhookEventId,
@@ -335,7 +430,7 @@ export async function POST(request: Request) {
       })
     )
 
-    if (!summary.allSucceeded) {
+    if (!summary.allResolved) {
       // Durably queue one bounded retry per failed track (dead-lettered tracks
       // are terminal and are NOT re-enqueued). An enqueue failure is logged
       // with a reason code — the answer is 5xx either way, so the provider
@@ -343,14 +438,14 @@ export async function POST(request: Request) {
       for (const failure of summary.failures) {
         try {
           const schedule = await getWebhookTrackRetrySchedule(webhookEventId, failure.track)
-          if (schedule?.nextAttemptAt) {
+          if (schedule) {
             await enqueueWebhookTrackRetry(
               {
                 webhookEventId,
                 track: failure.track,
                 generation: schedule.generation,
               },
-              { delayMs: Math.max(0, schedule.nextAttemptAt.getTime() - Date.now()) }
+              { delayMs: schedule.delayMs }
             )
           }
         } catch (enqueueError) {

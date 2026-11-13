@@ -31,6 +31,7 @@ import {
   getScanWithEvents,
   listScans,
   removeScan,
+  requeueScanForRetry,
   updateScanStatus,
   withScanFinalizationClaim,
 } from "./scan-service"
@@ -239,6 +240,7 @@ describe("createScan", () => {
 
   it("rejects a second active scan while holding the target lock", async () => {
     const tx = {
+      userScanSlot: { findUnique: vi.fn().mockResolvedValue(null) },
       $executeRaw: vi.fn().mockResolvedValue(undefined),
       target: { findFirst: vi.fn().mockResolvedValue({ id: "target-1" }) },
       scan: {
@@ -262,6 +264,7 @@ describe("createScan", () => {
 
   it("enforces the workspace scan cap inside the creation transaction", async () => {
     const tx = {
+      userScanSlot: { findUnique: vi.fn().mockResolvedValue(null) },
       $executeRaw: vi.fn().mockResolvedValue(undefined),
       target: { findFirst: vi.fn().mockResolvedValue({ id: "target-1" }) },
       scan: {
@@ -281,7 +284,7 @@ describe("createScan", () => {
     ).rejects.toThrow("Workspace already has 3 active scans")
     expect(
       tx.$executeRaw.mock.calls.filter(([query]) => String(query).includes("pg_advisory_xact_lock"))
-    ).toHaveLength(2)
+    ).toHaveLength(3)
     expect(tx.scan.create).not.toHaveBeenCalled()
   })
 })
@@ -300,7 +303,7 @@ describe("removeScan", () => {
 
     expect(mockPrisma.scan.findFirst).toHaveBeenCalledWith({
       where: { id: "scan-1", workspaceId: "ws-1", deletedAt: null },
-      select: { id: true, status: true },
+      select: { id: true, status: true, accountingVersion: true, accountingSettledAt: true },
     })
     expect(mockPrisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
@@ -506,4 +509,161 @@ describe("listScans", () => {
       })
     )
   })
+})
+
+describe("requeueScanForRetry (W2.2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+    mockPrisma.scanEvent.create.mockResolvedValue({ id: "event-1" })
+  })
+
+  it("regresses an active scan to QUEUED and records the step in the same transaction", async () => {
+    mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", events: [], status: "RUNNING" })
+    mockPrisma.scan.updateMany.mockResolvedValue({ count: 1 })
+
+    const result = await requeueScanForRetry({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+      attempt: 2,
+      maxAttempts: 3,
+      errorCategory: "INTERNAL_ERROR",
+      errorMessage: "engine transport failed",
+    })
+
+    expect(result).toEqual({ requeued: true, fromStatus: "RUNNING" })
+    expect(mockPrisma.scan.updateMany).toHaveBeenCalledWith({
+      where: { id: "scan-1", status: "RUNNING" },
+      data: { status: "QUEUED" },
+    })
+    expect(mockPrisma.scanEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        scanId: "scan-1",
+        stage: "queued",
+        level: "info",
+        metadata: expect.objectContaining({
+          transition: "requeue",
+          fromStatus: "RUNNING",
+          attempt: 2,
+          maxAttempts: 3,
+          errorCategory: "INTERNAL_ERROR",
+        }),
+      }),
+    })
+  })
+
+  it.each(["PREFLIGHT", "QUEUED", "VERIFYING"] as const)(
+    "requeues and records the step from %s",
+    async (status) => {
+      mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", events: [], status })
+      mockPrisma.scan.updateMany.mockResolvedValue({ count: 1 })
+
+      const result = await requeueScanForRetry({
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        attempt: 1,
+        maxAttempts: 3,
+      })
+
+      expect(result).toEqual({ requeued: true, fromStatus: status })
+      expect(mockPrisma.scanEvent.create).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it.each([
+    "COMPLETED",
+    "PARTIAL",
+    "FAILED",
+    "CANCELLED",
+    "STOPPED_BUDGET",
+    "TIMED_OUT",
+    "REQUIRES_APPROVAL",
+  ] as const)(
+    "never requeues a terminal or paused scan from %s and writes no event",
+    async (status) => {
+      mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", events: [], status })
+
+      const result = await requeueScanForRetry({
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        attempt: 1,
+        maxAttempts: 3,
+      })
+
+      expect(result).toEqual({ requeued: false, currentStatus: status })
+      expect(mockPrisma.scan.updateMany).not.toHaveBeenCalled()
+      expect(mockPrisma.scanEvent.create).not.toHaveBeenCalled()
+    }
+  )
+
+  it("writes no event when the status raced to a different value mid-update", async () => {
+    mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", events: [], status: "RUNNING" })
+    mockPrisma.scan.updateMany.mockResolvedValue({ count: 0 })
+    mockPrisma.scan.findUnique.mockResolvedValue({ status: "CANCELLED" })
+
+    const result = await requeueScanForRetry({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+      attempt: 1,
+      maxAttempts: 3,
+    })
+
+    expect(result).toEqual({ requeued: false, currentStatus: "CANCELLED" })
+    expect(mockPrisma.scanEvent.create).not.toHaveBeenCalled()
+  })
+
+  it("returns not-found when the scan row is absent", async () => {
+    mockPrisma.scan.findFirst.mockResolvedValue(null)
+
+    const result = await requeueScanForRetry({
+      scanId: "scan-gone",
+      workspaceId: "ws-1",
+      attempt: 1,
+      maxAttempts: 3,
+    })
+
+    expect(result).toEqual({ requeued: false, currentStatus: null })
+    expect(mockPrisma.scanEvent.create).not.toHaveBeenCalled()
+  })
+
+  it("requires workspace context when no workspaceId is passed", async () => {
+    mockGetWorkspaceContext.mockReturnValue(null)
+
+    await expect(
+      requeueScanForRetry({ scanId: "scan-1", attempt: 1, maxAttempts: 3 })
+    ).rejects.toThrow(/workspace/)
+  })
+})
+
+describe("delegated target scope in scan lists", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+    mockPrisma.scan.findMany.mockResolvedValue([])
+  })
+
+  it.each([{ targetIds: [] }, { targetIds: ["target-1"] }])(
+    "bounds paginated scan IDs with $targetIds",
+    async ({ targetIds }) => {
+      const result = await listScans({
+        workspaceId: "ws-1",
+        targetIds,
+        scanIds: ["scan-2"],
+        cursor: "scan-1",
+      })
+      expect(result).toEqual({ items: [], nextCursor: null })
+      expect(mockPrisma.scan.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            workspaceId: "ws-1",
+            deletedAt: null,
+            targetId: { in: targetIds },
+            id: { in: ["scan-2"] },
+          },
+          cursor: { id: "scan-1" },
+          skip: 1,
+        })
+      )
+    }
+  )
 })

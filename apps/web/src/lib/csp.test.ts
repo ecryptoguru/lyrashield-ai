@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NextRequest } from "next/server"
 
-const affiliate = vi.hoisted(() => ({ detectAttribution: vi.fn() }))
-
 // Mock rate-limit so we don't need Redis in tests
 vi.mock("@/lib/rate-limit", () => ({
   checkAuthRateLimit: vi.fn().mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
@@ -15,18 +13,9 @@ vi.mock("@/lib/rate-limit", () => ({
     .fn()
     .mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
 }))
-vi.mock("@lyrashield/affiliate", () => ({
-  detectAttribution: affiliate.detectAttribution,
-  parseAffiliateCookie: vi.fn().mockReturnValue(null),
-}))
 
 // Import after mock
 const { proxy } = await import("../proxy")
-
-it("exports a client-IP extractor with an explicit trusted-header contract", async () => {
-  const proxyExports = (await import("../proxy")) as Record<string, unknown>
-  expect(proxyExports.getClientIP).toBeTypeOf("function")
-})
 
 describe("trusted client IP", () => {
   it("ignores forwarded headers when no trusted header is configured", async () => {
@@ -61,6 +50,20 @@ function makeRequest(pathname: string): NextRequest {
 
 function makePublicRequest(pathname: string): NextRequest {
   return new NextRequest(new URL(`https://app.example.com${pathname}`))
+}
+
+async function cspForBrowserSentryDsn(dsn: string | undefined): Promise<string> {
+  const previousDsn = process.env.NEXT_PUBLIC_SENTRY_DSN
+  if (dsn === undefined) delete process.env.NEXT_PUBLIC_SENTRY_DSN
+  else process.env.NEXT_PUBLIC_SENTRY_DSN = dsn
+
+  try {
+    const response = await proxy(makeRequest("/dashboard"))
+    return response.headers.get("Content-Security-Policy") ?? ""
+  } finally {
+    if (previousDsn === undefined) delete process.env.NEXT_PUBLIC_SENTRY_DSN
+    else process.env.NEXT_PUBLIC_SENTRY_DSN = previousDsn
+  }
 }
 
 describe("CSP nonce proxy", () => {
@@ -169,6 +172,25 @@ describe("CSP nonce proxy", () => {
     const csp = (await proxy(makeRequest("/dashboard"))).headers.get("Content-Security-Policy")!
     expect(csp).toContain("https://us-assets.i.posthog.com")
     expect(csp).toContain("connect-src 'self' https://api.razorpay.com https://us.i.posthog.com")
+  })
+
+  it("allows only the exact HTTPS origin from a valid browser Sentry DSN", async () => {
+    const csp = await cspForBrowserSentryDsn("https://public-key@example.ingest.sentry.io/42")
+    expect(csp).toContain("https://example.ingest.sentry.io")
+    expect(csp).not.toContain("*.sentry.io")
+  })
+
+  it.each([
+    "https://example.ingest.sentry.io/42",
+    "http://public-key@example.ingest.sentry.io/42",
+    "https://public-key:password@example.ingest.sentry.io/42",
+    "https://public-key@example.ingest.sentry.io/42?next=https://other.example",
+    "https://public-key@example.ingest.sentry.io/42#fragment",
+    "not a DSN",
+  ])("does not add a CSP origin for an invalid browser Sentry DSN", async (dsn) => {
+    const csp = await cspForBrowserSentryDsn(dsn)
+    expect(csp).not.toContain("example.ingest.sentry.io")
+    expect(csp).not.toContain("other.example")
   })
 
   it("allows only Razorpay checkout frames needed by subscription management", async () => {
@@ -310,7 +332,6 @@ describe("CSP nonce proxy", () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get("Set-Cookie")).toBeNull()
-    expect(affiliate.detectAttribution).not.toHaveBeenCalled()
   })
 
   it("preserves short-link navigation without tracking when GPC is enabled", async () => {
@@ -323,6 +344,36 @@ describe("CSP nonce proxy", () => {
     expect(response.status).toBe(307)
     expect(response.headers.get("location")).toBe("https://app.example.com/")
     expect(response.headers.get("Set-Cookie")).toBeNull()
-    expect(affiliate.detectAttribution).not.toHaveBeenCalled()
+  })
+
+  it("pins worker-src, media-src and manifest-src instead of relying on default-src alone", async () => {
+    const res = await proxy(makeRequest("/dashboard"))
+    const csp = res.headers.get("Content-Security-Policy")!
+    expect(csp).toContain("worker-src 'self'")
+    expect(csp).toContain("media-src 'self'")
+    expect(csp).toContain("manifest-src 'self'")
+  })
+
+  it("sets CSP on the affiliate subdomain rewrite", async () => {
+    const response = await proxy(
+      new NextRequest("https://affiliates.lyrashieldai.com/program", {
+        headers: { host: "affiliates.lyrashieldai.com" },
+      })
+    )
+
+    // The rewrite must not leave the proxied page without a policy — every
+    // early return in the proxy carries the same headers as a page render.
+    expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'self'")
+  })
+
+  it("sets HSTS on the untracked short-link redirect", async () => {
+    const response = await proxy(
+      new NextRequest("https://app.example.com/r/CODE1234", {
+        headers: { "sec-gpc": "1" },
+      })
+    )
+    expect(response.status).toBe(307)
+    expect(response.headers.get("Content-Security-Policy")).toBeTruthy()
+    expect(response.headers.get("Strict-Transport-Security")).toContain("max-age=63072000")
   })
 })

@@ -1,4 +1,10 @@
 import { createHash } from "node:crypto"
+import { isDeepStrictEqual } from "node:util"
+import { mkdtemp, writeFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { scanIac } from "./scanners/iac-scanner"
+import type { ScannerCoverageIssue } from "./scanner-coverage"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => {
@@ -16,7 +22,7 @@ vi.mock("@lyrashield/db", () => {
   return {
     prisma: mockPrisma,
     getWorkspaceContext: vi.fn().mockReturnValue("ws-1"),
-    verifyStoredManifestChecksum: vi.fn().mockReturnValue("UNAVAILABLE"),
+    verifyStoredManifestChecksum: vi.fn(),
     withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
       fn(mockPrisma)
     ),
@@ -50,10 +56,12 @@ function manifestRow(scanId: string, targetId: string, targetType: string, overr
       ...(overrides as { engineExecution?: object }).engineExecution,
     }
   }
+  const checksumInput = JSON.stringify(merged)
   return {
     id: `manifest-${scanId}`,
     scanId,
-    checksum: `checksum-${scanId}`,
+    checksum: createHash("sha256").update(checksumInput).digest("hex"),
+    checksumInput,
     manifest: merged,
   }
 }
@@ -70,7 +78,12 @@ function mockRepoRetestState(
     retestRevision?: string | null
     baselineManifest?: ReturnType<typeof manifestRow> | null
     retestManifest?: ReturnType<typeof manifestRow> | null
-    candidates?: Array<{ findingId: string; scanId: string; scannerSource: string }>
+    candidates?: Array<{
+      findingId: string
+      scanId: string
+      scannerSource: string
+      payload?: unknown
+    }>
     baselineReceipts?: Array<{ id: string; controlId: string; status: string }>
     retestReceipts?: Array<{ id: string; controlId: string; status: string }>
     retestFindingIds?: string[]
@@ -148,7 +161,19 @@ function mockRepoRetestState(
 describe("result integrity", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(verifyStoredManifestChecksum).mockReturnValue("UNAVAILABLE")
+    vi.mocked(verifyStoredManifestChecksum).mockImplementation((stored) => {
+      if (!stored || stored.checksumInput == null) return "UNAVAILABLE"
+      if (!/^[0-9a-f]{64}$/.test(stored.checksum)) return "MISMATCH"
+      if (createHash("sha256").update(stored.checksumInput).digest("hex") !== stored.checksum)
+        return "MISMATCH"
+      try {
+        return isDeepStrictEqual(JSON.parse(stored.checksumInput), stored.manifest)
+          ? "MATCH"
+          : "MISMATCH"
+      } catch {
+        return "MISMATCH"
+      }
+    })
     vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback(prisma))
   })
 
@@ -177,6 +202,45 @@ describe("result integrity", () => {
       status: "BLOCKED",
       metadata: expect.objectContaining({ outcome: "INCONCLUSIVE" }),
     })
+  })
+
+  it("does not allow scoped bounded or ordinary parse failures to clear IaC family coverage", () => {
+    for (const issue of [
+      { scanner: "iac", status: "bounded", scope: "php_windows_brotli", reason: "discovery limit" },
+      { scanner: "iac", status: "partial", reason: "malformed PHP runtime inventory" },
+    ] as const) {
+      const receipts = buildCoverageReceipts({
+        scanId: "scan-1",
+        target: { id: "target-1", type: "REPO" },
+        sourceCheckoutAvailable: true,
+        engineFindingCount: 0,
+        coverageIssues: [issue],
+      })
+      expect(receipts.find((receipt) => receipt.controlId === "iac")?.status).toBe("BLOCKED")
+    }
+  })
+
+  it("keeps real malformed PHP inventory a blocking IaC discovery error", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "php-malformed-retest-"))
+    try {
+      await writeFile(join(repo, "php-runtime.json"), "{")
+      await writeFile(join(repo, "Dockerfile"), "FROM php:8.4.27-fpm\nUSER www-data\n")
+      const issues: ScannerCoverageIssue[] = []
+      await scanIac({ repoPath: repo, workspaceDir: repo, coverageIssues: issues })
+      const receipts = buildCoverageReceipts({
+        scanId: "scan-1",
+        target: { id: "target-1", type: "REPO" },
+        sourceCheckoutAvailable: true,
+        engineFindingCount: 0,
+        coverageIssues: issues,
+      })
+      expect(receipts.find((receipt) => receipt.controlId === "iac")).toMatchObject({
+        status: "BLOCKED",
+        reason: expect.stringMatching(/malformed/i),
+      })
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
   })
 
   it("records an engine timeout as blocked coverage", () => {
@@ -473,13 +537,13 @@ describe("result integrity", () => {
       engineFindingCount: 0,
       coverageIssues: [],
       engineExecution: {
-        model: "azure_ai/gpt-5.6-luna",
+        model: "azure_ai/gpt-6-luna",
         reasoningEffort: "medium",
         image: "sandbox@sha256:abc",
         imageDigest: "sha256:abc",
         engineVersion: "1.1.0",
         promptBundleHash: "a".repeat(64),
-        delegateModel: "azure_ai/gpt-5.6-luna",
+        delegateModel: "azure_ai/gpt-6-luna",
         delegateReasoningEffort: "medium",
         routingPolicy: "coordinator-luna-med-delegate-luna-med-v1",
         compactionTriggerTokens: 200_000,
@@ -508,7 +572,7 @@ describe("result integrity", () => {
             coverage: expect.any(Array),
             scannerContractVersion: "2026-09-13a",
             engineExecution: expect.objectContaining({
-              model: "azure_ai/gpt-5.6-luna",
+              model: "azure_ai/gpt-6-luna",
               imageDigest: "sha256:abc",
               sourceRevision: "b".repeat(40),
             }),
@@ -642,6 +706,76 @@ describe("result integrity", () => {
     expect(failed.checksum).not.toBe(completed.checksum)
   })
 
+  it("excludes pending exchange claims from immutable detection receipts", async () => {
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    const params = {
+      scanId: "scan-1",
+      workspaceId: "workspace-1",
+      targetId: "target-1",
+      findingId: "finding-1",
+      severity: "HIGH",
+      dedupeKey: "dedupe-1",
+      finding: { id: "claim", title: "Claim", severity: "high" as const, timestamp: "t" },
+    }
+    await persistDetectionReceipt(params)
+    const before = vi.mocked(prisma.findingCandidate.upsert).mock.calls.at(-1)![0].create
+    await persistDetectionReceipt({
+      ...params,
+      finding: { ...params.finding, pending_http_exchange_ids: ["99"] },
+    })
+    const after = vi.mocked(prisma.findingCandidate.upsert).mock.calls.at(-1)![0].create
+    expect(after).toEqual(before)
+    expect(JSON.stringify(after)).not.toContain("pendingHttpExchange")
+    expect(JSON.stringify(after)).not.toContain("pending_http_exchange")
+  })
+
+  it("binds the Composer lock identity version into immutable candidate evidence", async () => {
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    await persistDetectionReceipt({
+      scanId: "scan-1",
+      workspaceId: "workspace-1",
+      targetId: "target-1",
+      findingId: "finding-1",
+      severity: "HIGH",
+      dedupeKey: "scoped-key",
+      finding: {
+        id: "GHSA-composer",
+        title: "Composer advisory",
+        severity: "high",
+        timestamp: "2026-10-24T00:00:00Z",
+        finding_class: "dependency_cve",
+        dependency_metadata: {
+          package_ecosystem: "packagist",
+          package_name: "vendor/pkg",
+          lockfile_path: "service/composer.lock",
+        },
+        code_locations: [{ file: "service/composer.lock" }],
+      },
+    })
+    const create = vi.mocked(prisma.findingCandidate.upsert).mock.calls[0]![0].create
+    expect(create).toMatchObject({
+      dedupeKey: "scoped-key",
+      payload: {
+        dependencyIdentityVersion: "composer-lock/1",
+        codeLocations: [{ file: "service/composer.lock" }],
+      },
+    })
+    const { computeDedupeKey } = await import("@lyrashield/security")
+    expect(create.payload).toMatchObject({
+      dependencyLegacyDedupeKey: computeDedupeKey(
+        {
+          id: "GHSA-composer",
+          dependency: { packageEcosystem: "packagist", packageName: "vendor/pkg" },
+        },
+        "target-1"
+      ),
+    })
+    const { createHash } = await import("node:crypto")
+    expect(create.evidenceHash).toBe(
+      createHash("sha256").update(JSON.stringify(create.payload)).digest("hex")
+    )
+  })
+
   it("never stores raw PoC content in a detection ledger payload", async () => {
     vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
 
@@ -704,6 +838,241 @@ describe("result integrity", () => {
   })
 
   describe("completeRetestsForScan — immutable evidence binding", () => {
+    it.each([
+      {
+        name: "legacy Composer remains affected",
+        scoped: false,
+        persisted: true,
+        related: true,
+        present: true,
+        failed: true,
+      },
+      {
+        name: "PR1021 legacy Composer with location remains affected",
+        scoped: false,
+        persisted: true,
+        related: true,
+        present: true,
+        failed: true,
+        baselineLocation: "service/composer.lock",
+      },
+      {
+        name: "legacy Composer all fixed",
+        scoped: false,
+        persisted: false,
+        related: true,
+        present: false,
+        failed: false,
+      },
+      {
+        name: "unpersisted candidate cannot assert detection",
+        scoped: false,
+        persisted: false,
+        related: true,
+        present: true,
+        failed: false,
+      },
+      {
+        name: "unrelated npm legacy identity",
+        scoped: false,
+        persisted: true,
+        related: false,
+        present: true,
+        failed: false,
+      },
+      {
+        name: "fixed scoped service with another affected service",
+        scoped: true,
+        persisted: true,
+        related: true,
+        present: true,
+        failed: false,
+      },
+    ])(
+      "preserves retest identity: $name",
+      async ({ scoped, persisted, related, present, failed, baselineLocation }) => {
+        mockRepoRetestState({
+          candidates: [
+            {
+              findingId: "finding-1",
+              scanId: "scan-1",
+              scannerSource: "sca",
+              payload: {
+                findingClass: "dependency_cve",
+                dedupeKey: related ? "legacy-composer-key" : "legacy-npm-key",
+                codeLocations: baselineLocation ? [{ file: baselineLocation }] : [],
+                contentHashes: { dependencyMetadata: "original-checksum" },
+                ...(scoped ? { dependencyIdentityVersion: "composer-lock/1" } : {}),
+              },
+            },
+            ...(present
+              ? [
+                  {
+                    findingId: "scoped-finding",
+                    scanId: "scan-2",
+                    scannerSource: "sca",
+                    payload: {
+                      findingClass: "dependency_cve",
+                      dedupeKey: "scoped-key",
+                      dependencyIdentityVersion: "composer-lock/1",
+                      dependencyLegacyDedupeKey: "legacy-composer-key",
+                      codeLocations: [{ file: "service/composer.lock" }],
+                    },
+                  },
+                ]
+              : []),
+          ],
+          baselineReceipts: [{ id: "baseline-sca", controlId: "sca", status: "COMPLETED" }],
+          retestReceipts: [{ id: "retest-sca", controlId: "sca", status: "COMPLETED" }],
+          retestFindingIds: persisted ? ["scoped-finding"] : [],
+        })
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+        if (failed) {
+          expect(prisma.finding.update).not.toHaveBeenCalled()
+          expect(prisma.retest.update).toHaveBeenCalledWith(
+            expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
+          )
+        } else {
+          expect(prisma.finding.update).toHaveBeenCalledWith(
+            expect.objectContaining({ data: expect.objectContaining({ status: "FIXED" }) })
+          )
+        }
+      }
+    )
+
+    it.each(["php_runtime_cve", "php_runtime_eol", "php_runtime_banner"])(
+      "keeps %s inconclusive when only source declarations changed",
+      async (findingClass) => {
+        mockRepoRetestState({
+          candidates: [
+            {
+              findingId: "finding-1",
+              scanId: "scan-1",
+              scannerSource: "iac",
+              payload: { findingClass },
+            },
+          ],
+          baselineReceipts: [{ id: "baseline-iac", controlId: "iac", status: "COMPLETED" }],
+          retestReceipts: [{ id: "retest-iac", controlId: "iac", status: "COMPLETED" }],
+        })
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+        expect(prisma.finding.update).not.toHaveBeenCalled()
+        expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({
+              status: "INCONCLUSIVE",
+              reason: expect.stringContaining("deployed PHP runtime"),
+            }),
+          })
+        )
+      }
+    )
+    it("validates an unrelated IaC fix while recording incomplete Windows applicability for mixed Linux PHP evidence", async () => {
+      const repo = await mkdtemp(join(tmpdir(), "php-brotli-retest-"))
+      try {
+        await writeFile(
+          join(repo, "composer.json"),
+          JSON.stringify({ config: { platform: { php: "8.4.27" } } })
+        )
+        await writeFile(join(repo, "Dockerfile"), "FROM php:8.4.27-fpm\nUSER root\n")
+        const baselineIssues: ScannerCoverageIssue[] = []
+        const baselineFindings = await scanIac({
+          repoPath: repo,
+          workspaceDir: repo,
+          coverageIssues: baselineIssues,
+        })
+        expect(
+          baselineFindings.some((finding) => finding.id.startsWith("iac-dockerfile-user-root"))
+        ).toBe(true)
+        await writeFile(join(repo, "Dockerfile"), "FROM php:8.4.27-fpm\nUSER www-data\n")
+        const retestIssues: ScannerCoverageIssue[] = []
+        const retestFindings = await scanIac({
+          repoPath: repo,
+          workspaceDir: repo,
+          coverageIssues: retestIssues,
+        })
+        expect(
+          retestFindings.some((finding) => finding.id.startsWith("iac-dockerfile-user-root"))
+        ).toBe(false)
+        expect(retestFindings.some((finding) => finding.cve === "CVE-2026-111497")).toBe(false)
+        vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
+        for (const [scanId, revision, coverageIssues] of [
+          ["scan-1", REV_A, baselineIssues],
+          ["scan-2", REV_B, retestIssues],
+        ] as const) {
+          await persistResultManifest({
+            scanId,
+            target: { id: "target-1", type: "REPO" },
+            sourceCheckoutAvailable: true,
+            engineFindingCount: 0,
+            sourceExecution: { kind: "deterministic_retest", sourceRevision: revision },
+            terminalOutcome: { status: "COMPLETED", errorCategory: null, errorMessage: null },
+            coverageIssues,
+          })
+        }
+        const manifests = vi
+          .mocked(prisma.scanResultManifest.create)
+          .mock.calls.map(([args]) => (args as { data: ReturnType<typeof manifestRow> }).data)
+        const rows = vi
+          .mocked(prisma.scanCoverageReceipt.createMany)
+          .mock.calls.map(
+            ([args]) =>
+              (args as { data: Array<{ scanId: string; controlId: string; status: string }> }).data
+          )
+        expect(rows[0].find((row) => row.controlId === "iac")?.status).toBe("COMPLETED")
+        expect(rows[1].find((row) => row.controlId === "php-runtime:windows-brotli")).toMatchObject(
+          {
+            status: "BLOCKED",
+            subject: "composer.json",
+          }
+        )
+        expect(JSON.stringify(manifests[1].manifest)).toContain("Windows Brotli")
+        const receipts = (i: number) =>
+          rows[i].map((row, index) => ({ ...row, id: `${i}-${index}` }))
+        mockRepoRetestState({
+          baselineManifest: manifests[0],
+          retestManifest: manifests[1],
+          candidates: [
+            {
+              findingId: "finding-1",
+              scanId: "scan-1",
+              scannerSource: "iac",
+              payload: { findingClass: "iac_dockerfile" },
+            },
+          ],
+          baselineReceipts: receipts(0),
+          retestReceipts: receipts(1),
+        })
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+        expect(prisma.finding.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ status: "FIXED", verificationStatus: "VALIDATED" }),
+          })
+        )
+      } finally {
+        await rm(repo, { recursive: true, force: true })
+      }
+    })
+
+    it("keeps a Windows Brotli finding inconclusive after source-only retest", async () => {
+      mockRepoRetestState({
+        candidates: [
+          {
+            findingId: "finding-1",
+            scanId: "scan-1",
+            scannerSource: "iac",
+            payload: { findingClass: "php_runtime_windows_brotli" },
+          },
+        ],
+        baselineReceipts: [{ id: "baseline-iac", controlId: "iac", status: "COMPLETED" }],
+        retestReceipts: [{ id: "retest-iac", controlId: "iac", status: "COMPLETED" }],
+      })
+      await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+      expect(prisma.finding.update).not.toHaveBeenCalled()
+      expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ create: expect.objectContaining({ status: "INCONCLUSIVE" }) })
+      )
+    })
     it("validates a same-revision repository retest against stored manifests", async () => {
       mockRepoRetestState({ baselineRevision: REV_A, retestRevision: REV_A })
 
@@ -729,12 +1098,28 @@ describe("result integrity", () => {
               scannerSource: "secrets",
               baseline: expect.objectContaining({
                 scanId: "scan-1",
-                manifestChecksum: "checksum-scan-1",
+                manifestChecksum: createHash("sha256")
+                  .update(
+                    JSON.stringify(
+                      manifestRow("scan-1", "target-1", "REPO", {
+                        engineExecution: { sourceRevision: REV_A },
+                      }).manifest
+                    )
+                  )
+                  .digest("hex"),
                 sourceRevision: REV_A,
               }),
               retest: expect.objectContaining({
                 scanId: "scan-2",
-                manifestChecksum: "checksum-scan-2",
+                manifestChecksum: createHash("sha256")
+                  .update(
+                    JSON.stringify(
+                      manifestRow("scan-2", "target-1", "REPO", {
+                        engineExecution: { sourceRevision: REV_A },
+                      }).manifest
+                    )
+                  )
+                  .digest("hex"),
                 sourceRevision: REV_A,
               }),
               coverageReceiptIds: ["baseline-secrets", "retest-secrets"],
@@ -745,7 +1130,98 @@ describe("result integrity", () => {
       expect(prisma.retest.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ status: "passed" }) })
       )
+      expect(verifyStoredManifestChecksum).toHaveBeenCalledWith(
+        expect.objectContaining({ scanId: "scan-1", checksumInput: expect.any(String) })
+      )
+      expect(verifyStoredManifestChecksum).toHaveBeenCalledWith(
+        expect.objectContaining({ scanId: "scan-2", checksumInput: expect.any(String) })
+      )
     })
+
+    it.each(["baseline", "retest"] as const)(
+      "leaves a %s manifest with changed JSON and a stale checksum inconclusive",
+      async (whichManifest) => {
+        const original = manifestRow(
+          whichManifest === "baseline" ? "scan-1" : "scan-2",
+          "target-1",
+          "REPO"
+        )
+        const corrupted = {
+          ...original,
+          manifest: { ...original.manifest, unboundField: "changed after checksum" },
+        }
+        mockRepoRetestState(
+          whichManifest === "baseline"
+            ? { baselineManifest: corrupted }
+            : { retestManifest: corrupted }
+        )
+
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+
+        expect(prisma.finding.update).not.toHaveBeenCalled()
+        expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({
+              status: "INCONCLUSIVE",
+              reason: expect.stringContaining(`${whichManifest} result manifest checksum`),
+            }),
+          })
+        )
+        expect(prisma.retest.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ status: "inconclusive" }) })
+        )
+      }
+    )
+
+    it.each(["baseline", "retest"] as const)(
+      "leaves a %s manifest with a malformed checksum inconclusive",
+      async (whichManifest) => {
+        const invalid = {
+          ...manifestRow(whichManifest === "baseline" ? "scan-1" : "scan-2", "target-1", "REPO"),
+          checksum: "not-a-sha256-digest",
+        }
+        mockRepoRetestState(
+          whichManifest === "baseline" ? { baselineManifest: invalid } : { retestManifest: invalid }
+        )
+
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+
+        expect(prisma.finding.update).not.toHaveBeenCalled()
+        expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({
+              status: "INCONCLUSIVE",
+              reason: expect.stringContaining(`${whichManifest} result manifest checksum`),
+            }),
+          })
+        )
+      }
+    )
+
+    it.each(["baseline", "retest"] as const)(
+      "leaves a %s legacy manifest without checksum input inconclusive",
+      async (whichManifest) => {
+        const legacy = {
+          ...manifestRow(whichManifest === "baseline" ? "scan-1" : "scan-2", "target-1", "REPO"),
+          checksumInput: null,
+        }
+        mockRepoRetestState(
+          whichManifest === "baseline" ? { baselineManifest: legacy } : { retestManifest: legacy }
+        )
+
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+
+        expect(prisma.finding.update).not.toHaveBeenCalled()
+        expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({
+              status: "INCONCLUSIVE",
+              reason: expect.stringContaining(`${whichManifest} result manifest checksum`),
+            }),
+          })
+        )
+      }
+    )
 
     it("loads manifests and coverage for all scans with one query per table", async () => {
       mockRepoRetestState()

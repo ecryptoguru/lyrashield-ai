@@ -55,6 +55,7 @@ __pycache__/
 *.pyc
 lyrashield_runs/
 .lyrashield-worker-tmp/
+.lyrashield/plugin-backups/
 packages/mcp/.packed-stdio-*/
 
 # Prisma generated (tracked via migrations)
@@ -76,6 +77,7 @@ gen/schemas/
 *.key
 *.crt
 !packages/db/prisma/certs/supabase-root-2021-ca.crt
+!.github/certs/
 # Desktop license verification uses a bundled PUBLIC key (not a secret)
 !apps/desktop/src-tauri/resources/license-signing-public-key.pem
 *.p12
@@ -117,3 +119,5 @@ verify-*.mts
 
 # Dogfood/browser QA output (screenshots, auth state)
 dogfood-output/
+
+.serena/

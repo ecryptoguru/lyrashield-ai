@@ -3,6 +3,7 @@ import {
   CANONICAL_OPERATIONS,
   createAgentConnection,
   listAgentConnections,
+  revokeAgentConnection,
   prisma,
   resolveOAuthClientDisplayName,
 } from "@lyrashield/db"
@@ -59,6 +60,7 @@ const CreateConnectionSchema = z.object({
 const MAX_CONNECTION_GRANT_MS = 90 * 24 * 60 * 60 * 1000
 
 async function post(request: Request) {
+  let createdConnection: { id: string; workspaceId: string; userId: string } | null = null
   try {
     const body: unknown = await request.json().catch(() => null)
     const parsed = CreateConnectionSchema.safeParse(body)
@@ -187,6 +189,8 @@ async function post(request: Request) {
       expiresAt: grantExpiry,
     })
 
+    createdConnection = { id: connection.id, workspaceId, userId: session.userId }
+
     await prisma.auditLog.create({
       data: {
         workspaceId,
@@ -211,6 +215,34 @@ async function post(request: Request) {
 
     return apiSuccess(connection, 201)
   } catch (error) {
+    // A grant must not remain active when consent cannot complete. Keep audit
+    // writes outside the service transaction and preserve the original failure.
+    if (createdConnection) {
+      try {
+        const revoked = await revokeAgentConnection(
+          createdConnection.id,
+          createdConnection.workspaceId
+        )
+        if (revoked) {
+          await prisma.auditLog.create({
+            data: {
+              workspaceId: createdConnection.workspaceId,
+              actorUserId: createdConnection.userId,
+              action: "agent_connection.revoked",
+              resourceType: "agent_connection",
+              resourceId: createdConnection.id,
+              metadata: { reason: "consent_completion_failed" },
+            },
+          })
+        }
+      } catch (cleanupError) {
+        logger.error("Failed to clean up incomplete agent connection", {
+          connectionId: createdConnection.id,
+          workspaceId: createdConnection.workspaceId,
+          error: String(cleanupError),
+        })
+      }
+    }
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
     logger.error("Failed to create agent connection", { error: String(error) })

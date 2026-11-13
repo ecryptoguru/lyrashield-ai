@@ -30,16 +30,6 @@ describe("scan consumer liveness guard", () => {
     expect(result!.wedged).toBe(false)
   })
 
-  it("does not trip when a job was claimed recently even if work is waiting", async () => {
-    mocks.redis.llen.mockResolvedValue(1)
-    resetScanConsumerLiveness(1_000_000)
-    markScanJobClaimed(1_000_000)
-    // Check 5s after the claim — well within the block window.
-    const result = await checkScanConsumerLiveness(1_005_000)
-    expect(result!.waiting).toBe(1)
-    expect(result!.wedged).toBe(false)
-  })
-
   it("trips when jobs are waiting but the consumer is idle past block window + grace", async () => {
     mocks.redis.llen.mockResolvedValue(2)
     resetScanConsumerLiveness(0)
@@ -55,6 +45,7 @@ describe("scan consumer liveness guard", () => {
     // Advance past the wedge threshold, then claim — the clock must reset.
     markScanJobClaimed(800_000)
     const result = await checkScanConsumerLiveness(805_000)
+    expect(result!.waiting).toBe(1)
     expect(result!.wedged).toBe(false)
   })
 

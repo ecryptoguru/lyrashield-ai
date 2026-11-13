@@ -14,7 +14,7 @@ import { assertTaskCapableTool, toSdkTaskStore, type McpTaskBackend } from "./ta
 
 export const SERVER_NAME = "lyrashield-mcp"
 export const SERVER_TITLE = "LyraShield AI"
-export const SERVER_VERSION = "0.2.11"
+export const SERVER_VERSION = "0.2.12"
 export const SERVER_DESCRIPTION =
   "Bounded security scans, recorded evidence states, fix proposals, retests and launch-readiness review."
 export const SERVER_WEBSITE_URL = "https://lyrashieldai.com"
@@ -173,7 +173,7 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
   const denyGate: ApprovalGate = () => ({
     approved: false,
     reason:
-      "This LyraShield endpoint has no interactive approval channel. Run the mutating tool from the local stdio MCP server (which prompts for approval) or use a trusted automation configured with allowMutations.",
+      "Remote hosted MCP requests cannot use your locally configured credentials or prompt for approval. Run the local stdio server to use local credentials and approve each change, or configure allowMutations only for trusted automation.",
   })
 
   const interactiveGate: ApprovalGate = async (toolName, args) => {

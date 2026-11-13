@@ -4,7 +4,7 @@ Render, add, remove, and validate per-agent rules and skill files.
 
 ## Purpose
 
-- Produces the `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, and other instruction files that teach an AI coding agent about LyraShield policies.
+- Produces the `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/*.mdc` (with legacy `.cursorrules`), `.windsurf/rules/lyrashield.md`, and other instruction files that teach an AI coding agent about LyraShield policies.
 - Exports rule policy helpers in `src/policy.ts` and renderer helpers in `src/renderers/index.ts`.
 - Provides `addRules`, `removeRules`, and `checkRules` for the CLI `rules` command.
 - The `managed-block` discipline is tested in `src/__tests__/scan.test.ts`; the worker agent-config scanner checks these files for poisoned instructions.

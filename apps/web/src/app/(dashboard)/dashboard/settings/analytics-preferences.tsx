@@ -131,15 +131,17 @@ export function AnalyticsPreferences() {
               <p className="text-muted-foreground text-sm" aria-live="polite">
                 {saving
                   ? "Saving…"
-                  : privacySignalOff
-                    ? "Blocked by your browser’s Do Not Track or Global Privacy Control signal."
-                    : enabled
-                      ? "Enabled for this account and browser."
-                      : !accountEnabled && !browserEnabled
-                        ? "Disabled for this account and browser."
-                        : !accountEnabled
-                          ? "Disabled for this account across devices."
-                          : "Disabled in this browser."}
+                  : errorAction === "load" && error
+                    ? "Unable to confirm your analytics preference."
+                    : privacySignalOff
+                      ? "Blocked by your browser’s Do Not Track or Global Privacy Control signal."
+                      : enabled
+                        ? "Enabled for this account and browser."
+                        : !accountEnabled && !browserEnabled
+                          ? "Disabled for this account and browser."
+                          : !accountEnabled
+                            ? "Disabled for this account across devices."
+                            : "Disabled in this browser."}
               </p>
             </div>
             <Switch

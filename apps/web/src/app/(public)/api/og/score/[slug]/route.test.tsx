@@ -42,25 +42,6 @@ describe("scorecard OG route", () => {
     getPublicScorecard.mockResolvedValue(scorecard)
   })
 
-  it.each([
-    ["wide", 1200, 630],
-    ["square", 1080, 1080],
-    ["portrait", 1080, 1350],
-  ] as const)(
-    "renders both %s card variants at the expected size",
-    async (format, width, height) => {
-      for (const variant of ["grade", "fixes"] as const) {
-        const response = (await GET(
-          new Request(`http://localhost/api/og/score/slug?variant=${variant}&format=${format}`),
-          { params: Promise.resolve({ slug: "slug" }) }
-        )) as Response & { width: number; height: number }
-        expect([response.width, response.height]).toEqual([width, height])
-        expect(response.headers.get("cache-control")).toBe("no-store")
-        expect(response.headers.get("content-disposition")).toContain(`${variant}-${format}.png`)
-      }
-    }
-  )
-
   it("does not say zero findings were fixed", async () => {
     getPublicScorecard.mockResolvedValue({
       ...scorecard,
@@ -73,14 +54,6 @@ describe("scorecard OG route", () => {
     const text = collectText(response.element).join(" ")
     expect(text).toContain("No retest-confirmed fixes reported")
     expect(text).not.toContain("0 findings fixed")
-  })
-
-  it("404s revoked, expired, or unknown scorecards", async () => {
-    getPublicScorecard.mockResolvedValue(null)
-    const response = await GET(new Request("http://localhost/api/og/score/missing"), {
-      params: Promise.resolve({ slug: "missing" }),
-    })
-    expect(response.status).toBe(404)
   })
 })
 

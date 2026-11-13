@@ -5,7 +5,10 @@ const mocks = vi.hoisted(() => ({
   ping: vi.fn(),
 }))
 
-vi.mock("@lyrashield/db", () => ({ prisma: { $queryRaw: mocks.query } }))
+vi.mock("@lyrashield/db", () => ({
+  prisma: { $queryRaw: mocks.query },
+  SCAN_ACCOUNTING_PROTOCOL: "reservations/2",
+}))
 vi.mock("@lyrashield/integrations", () => ({ getRedis: () => ({ ping: mocks.ping }) }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
@@ -21,6 +24,7 @@ describe("GET /api/ready", () => {
   it("reports database and Redis ready", async () => {
     const response = await GET()
     expect(response.status).toBe(200)
+    expect(response.headers.get("X-LyraShield-Accounting-Protocol")).toBe("reservations/2")
     expect(await response.json()).toEqual({
       status: "ready",
       checks: { database: true, redis: true },

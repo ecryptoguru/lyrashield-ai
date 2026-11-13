@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   prisma: {
     workspaceMember: { findFirst: vi.fn() },
+    agentConnection: { findFirst: vi.fn() },
   },
   hasPermission: vi.fn(),
   evaluateScanEntitlement: vi.fn(),
@@ -24,9 +25,10 @@ vi.mock("@lyrashield/billing", () => ({
   evaluateScanEntitlement: mocks.evaluateScanEntitlement,
 }))
 vi.mock("@lyrashield/db", () => ({
+  CANONICAL_OPERATIONS: { SCAN_CREATE: "scan.create", RETEST_CREATE: "retest.create" },
   prisma: mocks.prisma,
   runWithAccountContext: mocks.runWithAccountContext,
-  updateScanStatus: mocks.updateScanStatus,
+  updateUnclaimedScanStatus: mocks.updateScanStatus,
   resolveAuthenticatedAssessmentAuthorization: mocks.resolveAuthenticatedAssessmentAuthorization,
   LiveAiSafetyError: class LiveAiSafetyError extends Error {
     readonly code: string
@@ -55,6 +57,8 @@ const scanRecordFixture = {
   createdById: "user-1",
   sponsorAccountId: "sponsor-1",
   triggerType: "manual",
+  delegatedConnectionId: null,
+  delegatedAuthorizationVersion: null,
 }
 const scanRecord = scanRecordFixture as Parameters<typeof verifyScanAdmission>[0]["scanRecord"]
 
@@ -194,11 +198,25 @@ describe("verifyScanAdmission", () => {
     expect(mocks.refreshGate).not.toHaveBeenCalled()
   })
 
-  it("skips the entitlement check for deterministic retests", async () => {
-    await expect(verifyScanAdmission(params({ deterministicRetest: true }))).resolves.toEqual({
-      ok: true,
+  it("rechecks entitlement for deterministic retests after queueing", async () => {
+    mocks.evaluateScanEntitlement.mockResolvedValue({
+      allowed: false,
+      code: "TRIAL_EXPIRED",
+      message: "Trial expired after queueing",
     })
-    expect(mocks.evaluateScanEntitlement).not.toHaveBeenCalled()
+
+    await expect(
+      verifyScanAdmission(params({ deterministicRetest: true, engineBacked: false }))
+    ).resolves.toMatchObject({
+      ok: false,
+      result: { errorCategory: "TRIAL_EXPIRED" },
+    })
+    expect(mocks.runWithAccountContext).toHaveBeenCalledWith("user-1", expect.any(Function))
+    expect(mocks.evaluateScanEntitlement).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      mode: "DEEP",
+      sponsorAccountId: "user-1",
+    })
   })
 
   describe("execution-plan admission", () => {
@@ -296,6 +314,31 @@ describe("verifyScanAdmission", () => {
         ok: false,
         result: { errorCategory: "SCAN_PLAN_LIMITS_EXCEEDED" },
       })
+    })
+
+    it("denies a queued fixed-budget assessment if the assigned policy is tightened", async () => {
+      const plan = buildScanExecutionPlan({
+        targetType: "API",
+        mode: "DEEP",
+        workflow: "AUTHENTICATED_ASSESSMENT",
+        authorizationRef: "scope",
+      })
+      const policy = { maxBudgetUsd: { toNumber: () => 1 } }
+      await expect(
+        verifyScanAdmission(
+          params({
+            executionPlan: plan,
+            targetType: "API",
+            currentPolicy: policy as never,
+            authAssessmentPermitted: true,
+          })
+        )
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_PLAN_LIMITS_EXCEEDED" },
+      })
+      expect(mocks.resolveAuthenticatedAssessmentAuthorization).not.toHaveBeenCalled()
+      expect(mocks.evaluateScanEntitlement).not.toHaveBeenCalled()
     })
 
     it("denies AUTHENTICATED_ASSESSMENT when the current policy allows destructive tests", async () => {
@@ -411,6 +454,165 @@ describe("verifyScanAdmission", () => {
           })
         )
       ).resolves.toEqual({ ok: true })
+    })
+  })
+
+  describe("delegated grant boundary (W0.4)", () => {
+    type ScanRecord = Parameters<typeof verifyScanAdmission>[0]["scanRecord"]
+    const delegatedScan = (over: Partial<ScanRecord> = {}): ScanRecord => ({
+      ...scanRecord,
+      delegatedConnectionId: "conn-1",
+      delegatedAuthorizationVersion: 3,
+      ...over,
+    })
+
+    const activeConnection = (over: Record<string, unknown> = {}) => ({
+      userId: "user-1",
+      status: "ACTIVE",
+      authorizationVersion: 3,
+      expiresAt: null,
+      allowedOperations: ["scan.create"],
+      allowedTargetIds: ["target-1"],
+      allTargets: false,
+      ...over,
+    })
+
+    it("never consults the connection table for scans with no delegated grant", async () => {
+      await expect(verifyScanAdmission(params())).resolves.toEqual({ ok: true })
+      expect(mocks.prisma.agentConnection.findFirst).not.toHaveBeenCalled()
+    })
+
+    it("admits when the recorded grant is still active, same version, and covers the target", async () => {
+      mocks.prisma.agentConnection.findFirst.mockResolvedValue(activeConnection())
+      await expect(verifyScanAdmission(params({ scanRecord: delegatedScan() }))).resolves.toEqual({
+        ok: true,
+      })
+      expect(mocks.prisma.agentConnection.findFirst).toHaveBeenCalledWith({
+        where: { id: "conn-1", workspaceId: "ws-1" },
+        select: expect.objectContaining({
+          status: true,
+          authorizationVersion: true,
+          allowedTargetIds: true,
+          allTargets: true,
+        }),
+      })
+    })
+
+    it("fails closed when the connection row is gone", async () => {
+      mocks.prisma.agentConnection.findFirst.mockResolvedValue(null)
+      await expect(
+        verifyScanAdmission(params({ scanRecord: delegatedScan() }))
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_AUTHORIZATION_REVOKED" },
+      })
+      expect(mocks.updateScanStatus).toHaveBeenCalledWith(
+        "scan-1",
+        "FAILED",
+        expect.objectContaining({ errorCategory: "SCAN_AUTHORIZATION_REVOKED" })
+      )
+      expect(mocks.evaluateScanEntitlement).not.toHaveBeenCalled()
+    })
+
+    it.each(["PAUSED", "REVOKED"])(
+      "fails closed when the connection is %s since queueing",
+      async (status) => {
+        mocks.prisma.agentConnection.findFirst.mockResolvedValue(activeConnection({ status }))
+        await expect(
+          verifyScanAdmission(params({ scanRecord: delegatedScan() }))
+        ).resolves.toMatchObject({
+          ok: false,
+          result: { errorCategory: "SCAN_AUTHORIZATION_REVOKED" },
+        })
+      }
+    )
+
+    it("fails closed when the grant mutated since queueing (authorizationVersion bump)", async () => {
+      // Even a WIDENING edit must deny: the queued work was authorized under
+      // the recorded grant, not whatever the grant says now.
+      mocks.prisma.agentConnection.findFirst.mockResolvedValue(
+        activeConnection({ authorizationVersion: 4, allTargets: true })
+      )
+      await expect(
+        verifyScanAdmission(params({ scanRecord: delegatedScan() }))
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_AUTHORIZATION_REVOKED" },
+      })
+    })
+
+    it("fails closed when the grant narrowed past the scan target", async () => {
+      mocks.prisma.agentConnection.findFirst.mockResolvedValue(
+        activeConnection({ allowedTargetIds: ["target-other"] })
+      )
+      await expect(
+        verifyScanAdmission(params({ scanRecord: delegatedScan() }))
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_AUTHORIZATION_REVOKED" },
+      })
+    })
+
+    it("fails closed when the grant expired before execution", async () => {
+      mocks.prisma.agentConnection.findFirst.mockResolvedValue(
+        activeConnection({ expiresAt: new Date(Date.now() - 60_000) })
+      )
+      await expect(
+        verifyScanAdmission(params({ scanRecord: delegatedScan() }))
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_AUTHORIZATION_REVOKED" },
+      })
+    })
+
+    it("fails closed when the required operation left the grant", async () => {
+      mocks.prisma.agentConnection.findFirst.mockResolvedValue(
+        activeConnection({ allowedOperations: ["report.create"] })
+      )
+      await expect(
+        verifyScanAdmission(params({ scanRecord: delegatedScan() }))
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_AUTHORIZATION_REVOKED" },
+      })
+    })
+
+    it("fails closed when the connection moved to another user", async () => {
+      mocks.prisma.agentConnection.findFirst.mockResolvedValue(
+        activeConnection({ userId: "user-2" })
+      )
+      await expect(
+        verifyScanAdmission(params({ scanRecord: delegatedScan() }))
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_AUTHORIZATION_REVOKED" },
+      })
+    })
+
+    it("admits an all-targets grant regardless of the scan target", async () => {
+      mocks.prisma.agentConnection.findFirst.mockResolvedValue(
+        activeConnection({ allowedTargetIds: [], allTargets: true })
+      )
+      await expect(verifyScanAdmission(params({ scanRecord: delegatedScan() }))).resolves.toEqual({
+        ok: true,
+      })
+    })
+
+    it("requires the retest operation for retest-triggered delegated scans", async () => {
+      mocks.prisma.agentConnection.findFirst.mockResolvedValue(
+        activeConnection({ allowedOperations: ["retest.create"] })
+      )
+      await expect(
+        verifyScanAdmission(params({ scanRecord: delegatedScan({ triggerType: "retest" }) }))
+      ).resolves.toEqual({ ok: true })
+      // A scan.create-only grant cannot carry a retest-triggered scan.
+      mocks.prisma.agentConnection.findFirst.mockResolvedValue(activeConnection())
+      await expect(
+        verifyScanAdmission(params({ scanRecord: delegatedScan({ triggerType: "retest" }) }))
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_AUTHORIZATION_REVOKED" },
+      })
     })
   })
 })

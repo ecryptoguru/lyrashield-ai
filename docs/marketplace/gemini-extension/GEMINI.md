@@ -13,3 +13,9 @@ and Gemini gallery listing are verified.
 
 Use `lyrashield_check_diff` to review changes and `lyrashield_verify_fix` to retest findings.
 Fixes are proposals. Authorized workflows execute within connection permissions; pull requests never auto-merge.
+
+The user-invoked `/lyrashield:review-changes` command is a local, read-only advisory check of
+tracked staged and unstaged changes; it never starts a recorded scan. Only `/lyrashield:scan-project`
+starts a recorded PR scan, and only after the user has selected an authorized workspace and target.
+State the selected depth and possible plan-allowance or agent-minute use. Keep the returned scan ID
+for status checks, and preserve incomplete or inconclusive evidence states.

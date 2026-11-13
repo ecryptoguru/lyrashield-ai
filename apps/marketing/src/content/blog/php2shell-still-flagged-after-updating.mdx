@@ -1,0 +1,95 @@
+---
+title: "PHP2Shell still flagged? Verify vendor backports"
+description: "Resolve PHP2Shell alerts after patching by matching vendor backports, exact package revisions and running workers instead of trusting a version banner alone."
+pubDate: 2026-10-24T00:00:00+05:30
+author: lyrashield-team
+tags: ["web-security", "verification"]
+draft: false
+heroImage: php2shell-backports
+faq:
+  - q: "Can PHP2Shell be patched while PHP still reports an older version?"
+    a: "Yes. Some vendors backport the fixes without changing the upstream version. Match the exact package family, revision and operating system to the vendor's advisory, then verify the running workers."
+  - q: "Does CloudLinux's example mean every PHP 8.4.26 installation is fixed?"
+    a: "No. The vendor identifies specific patched builds, including ea-php84 8.4.26-2.el8.cloudlinux.1 on CloudLinux OS 8. An upstream 8.4.26 build or another vendor package needs its own patch evidence."
+  - q: "Should I suppress a scanner finding after a package update?"
+    a: "First confirm the installed package, applicable vendor patch and post-restart runtime. Any exception should bind to that evidence, have an owner and be reviewed when the deployment changes."
+---
+
+A PHP2Shell alert can remain after an update because a vendor backported the fix while keeping an older upstream version string. It can also mean the wrong package was updated or old workers still serve requests. Check the exact package revision against the vendor advisory, confirm the web runtime and retain restart evidence before deciding whether the alert reflects current exposure.
+
+A completed maintenance window followed by the same red finding needs explanation. The [vibe coding security guide](/blog/vibe-coding-security-guide) recommends connecting findings to release evidence. Here, that means preserving the package identity behind the version instead of repeatedly reinstalling PHP or dismissing the alert because an update command succeeded.
+
+## Why the version number can disagree with the patch
+
+A backport applies a security fix to a vendor's existing package. [Red Hat's explanation of security backporting](https://access.redhat.com/security/updates/backporting) describes why upstream version comparisons can misclassify those packages. The retained version identifies the base software, while the vendor's package revision and advisory identify the security change.
+
+That creates two plausible explanations for an old-looking version. The installation may contain a documented patch, or it may still contain the original affected build. A version-only result cannot resolve that distinction. Preserve both possibilities until the package evidence separates them.
+
+For upstream releases, the [PHP October 21 notice](https://www.php.net/archive/2026.php#2026-10-21-1) lists 8.2.35, 8.3.36, 8.4.27 and 8.5.12 for CVE-2026-109618 and CVE-2026-109619. Keep those branch floors. Add vendor evidence when applicable rather than replacing the floors with a looser rule for every package that looks similar.
+
+## CloudLinux gives a concrete example
+
+CloudLinux's [incident updates](https://cloudlinux.statuspage.io/incidents/zl0vt1yq3dj5) identify patched backports including `ea-php84 8.4.26-2.el8.cloudlinux.1` on CloudLinux OS 8 and `alt-php85 8.5.11-5`. Its October 23 updates say later packages align the displayed versions with PHP.net. The earlier fixed packages already contain the two original CVE fixes.
+
+These are exact vendor examples, not a general exemption for PHP 8.4.26 or 8.5.11. Match the package family, release revision and operating system. A self-built upstream interpreter with the same short version has a different provenance and needs its own patch evidence.
+
+The incident page is chronological and includes corrections. Read the latest applicable entry alongside the earlier package detail. Copying an early rollout estimate into a current assessment can confuse planned availability with a completed package release. Record which dated update supports your conclusion so another engineer can follow the same evidence.
+
+## First establish what the scanner actually observed
+
+Open the finding and identify its evidence source. Did it inspect a response header, a Dockerfile, an installed package inventory or the running service? An alert about a stale repository declaration may remain valid even when production has a manually patched package. A header finding may lack enough detail to recognize a backport.
+
+Consider a finding that cites `8.4.26` from a response header while the operator supplies a full package revision. Keep the header observation intact and compare the package against its own vendor bulletin. If they match a documented patched build, explain why the upstream comparison lacks the necessary detail. If they do not match, the header remains a useful warning. The same short version can lead to different conclusions because the underlying artifacts differ.
+
+Save the original observation and target revision. Do not rewrite it to match the desired conclusion. Add a separate assessment explaining what the observation establishes and which operator evidence was collected afterward. That preserves a useful trail when the next deployment differs. Keep the evidence link when exporting the finding for another reviewer.
+
+The [PHP version checking guide](/blog/check-php-version-php2shell) distinguishes CLI, web handlers and repository constraints. If your evidence says only `php -v`, first verify that this shell uses the same installation as the FPM pool or Apache module receiving requests.
+
+## Collect the complete package identity
+
+On an authorized CloudLinux server using the relevant package families, read-only queries can start the investigation:
+
+```sh
+rpm -q ea-php84-php-cli
+rpm -q --changelog ea-php84-php-cli
+rpm -q alt-php85-common
+rpm -q --changelog alt-php85-common
+```
+
+Choose the package that belongs to your service. An absent package result can simply mean that the server uses another family. Keep the full version and release output, including the distribution suffix, rather than trimming it to the first three numeric components.
+
+Keep the operating system release, repository origin and package query together. A forwarded command result without a service identifier can come from staging or an unused PHP branch. Ask the collector to name the host or container privately and explain how its package connects to the public service. This makes the evidence reviewable without exposing infrastructure details in a public finding.
+
+Use the vendor's current verification instructions for that family. CloudLinux's [update history](https://cloudlinux.statuspage.io/incidents/zl0vt1yq3dj5) notes that some rebased native packages do not list the CVE identifiers in their changelog. An empty text search is therefore not a universal test for an unpatched package. Consult the applicable package guidance instead of interpreting the search alone.
+
+For another vendor, obtain that vendor's advisory and exact revision. Do not transfer the CloudLinux examples to a different repository, operating system or custom image. Similar version strings do not establish shared build contents.
+
+## Check whether the update reached the web service
+
+Map the selected package to the executable used by the relevant FPM pool or Apache handler. Then inspect the restart or rollout record. A patched package on disk can coexist with processes started before the update, and a second installed branch can remain the one selected for this site.
+
+For containers, compare the running image identity with the patched deployment artifact. A package query on the host says little about an interpreter inside a container. Check every replica group that can receive traffic, including standby definitions that automation might reactivate.
+
+If this step reveals a real deployment gap, keep the finding open and complete the [Docker, FPM or Apache patch workflow](/blog/patch-php2shell-docker-fpm-apache). Changing the scanner exception before replacing the remaining workers would hide the very problem the review uncovered.
+
+## Resolve the disagreement with a bounded conclusion
+
+A useful assessment can say that a specific vendor package contains the two original fixes and that the selected service uses it after worker replacement. Attach the exact package result, applicable advisory and runtime receipt. That is stronger than a blanket note saying "false positive."
+
+If your findings system supports an exception, bind it to the package family and verified revision or artifact. Give it an owner and review trigger. A later base-image change, repository switch or runtime downgrade should require another check instead of inheriting an unlimited exemption.
+
+Keep a replacement rule in the exception record: if the deployed artifact changes, reassess the package evidence. An exception copied into a new environment can outlive the facts that justified it. Scope it to the affected finding and service so unrelated PHP alerts still receive review.
+
+When the evidence is incomplete, record which part is missing. "Vendor backport not confirmed" and "worker restart not confirmed" lead to different actions. A recent package date or a provider's generic assurance should not silently fill either gap.
+
+## Keep the later session issue outside this exception
+
+The separate [October 23 PHP notice](https://www.php.net/archive/2026.php#2026-10-23-1) addresses CVE-2026-115560 and its unusual serializer-switch condition. Evidence that a package covers the original two CVEs does not establish coverage for this later issue. Keep its configuration review separate.
+
+Our [session upload progress guide](/blog/cve-2026-115560-session-upload-progress) covers the startup mitigation and worker verification. Also keep [earlier-compromise investigation](/blog/php2shell-investigate-earlier-compromise) open when warranted. Establishing the patch state answers what the service runs now; it does not determine whether an earlier intrusion occurred.
+
+## Make the next review easier
+
+Store the package assessment with the deployment record and the original finding. Include the evidence collection time and the services covered. For managed hosting, ask the provider to identify the package and worker pool for your site rather than forwarding a global update announcement. The [WordPress hosting guide](/blog/php2shell-wordpress-hosting) provides a focused support request.
+
+Use the [PHP2Shell checker](/tools/php2shell-checker) to organize the version assessment, then attach verified vendor evidence where needed. LyraShield AI conditionally runs PHP checks in Standard and Deep repository scans when relevant evidence is available. Those checks cannot attest every deployed worker or automatically establish an undocumented backport. Try the [free Lite Check](/scan) for passive URL review, or [sign up to choose a Deep scan](https://app.lyrashieldai.com/sign-up) for authorized application assessment.

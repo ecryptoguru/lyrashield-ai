@@ -75,8 +75,20 @@ import {
   handleFixPrMergedAndReevaluate as handleMerge,
 } from "./gate-service"
 const admission = vi.fn(async () => {})
+const workerAvailable = vi.fn(async () => {
+  if (rlsTransactionNestingGuard.depth > 0) {
+    throw new Error("Redis worker admission check ran inside a database transaction")
+  }
+})
 const handleFixPrMergedAndReevaluate = (workspaceId: string, branch: string, prNumber?: number) =>
-  handleMerge(workspaceId, branch, prNumber, admission)
+  handleMerge({
+    workspaceId,
+    branchName: branch,
+    prNumber,
+    assertRetestAllowed: admission,
+    repoFullName: undefined,
+    assertRetestWorkerAvailable: workerAvailable,
+  })
 
 const mockPrisma = prisma as unknown as {
   $executeRaw: ReturnType<typeof vi.fn>
@@ -97,6 +109,11 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
     rlsTransactionNestingGuard.enabled = false
     rlsTransactionNestingGuard.depth = 0
     admission.mockResolvedValue(undefined)
+    workerAvailable.mockImplementation(async () => {
+      if (rlsTransactionNestingGuard.depth > 0) {
+        throw new Error("Redis worker admission check ran inside a database transaction")
+      }
+    })
     vi.mocked(prisma.retest.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.findingCandidate.findMany).mockResolvedValue([])
     vi.mocked(createScan).mockResolvedValue({ id: "new-retest-scan-id" } as never)
@@ -145,9 +162,12 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
       await expect(
         handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
       ).resolves.not.toBeNull()
-      const advisoryKeys = mockPrisma.$executeRaw.mock.calls.map((call) => call[1])
+      const advisoryKeys = mockPrisma.$executeRaw.mock.calls
+        .filter((call) => String(call[0]).includes("pg_advisory_xact_lock"))
+        .map((call) => call[1])
       expect(advisoryKeys).toEqual([
         "fix-loop:workspace-1:lyrashield/fix-abc123",
+        "scan-user:owner-user",
         "fix-loop:workspace-1:lyrashield/fix-abc123",
       ])
     } finally {
@@ -156,7 +176,15 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
     }
   })
 
-  it("loads only verdict-relevant verification receipts", async () => {
+  it("checks Redis worker availability before opening the retest lock transaction", async () => {
+    await expect(
+      handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+    ).resolves.not.toBeNull()
+
+    expect(workerAvailable).toHaveBeenCalledOnce()
+  })
+
+  it("keeps legacy retest claims uncertain without complete bound evidence", async () => {
     mockPrisma.scan.findFirst.mockReset().mockResolvedValue(null)
     const receipts = [
       { status: "DETECTED", method: "RETEST", scanId: "retest-scan" },
@@ -177,15 +205,20 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
         verificationStatus: "VALIDATED",
         lastSeenAt: new Date(),
         scanId: "source-scan",
+        dedupeKey: "finding-key",
         disposition: null,
         dispositionActorUserId: null,
         dispositionReason: null,
         dispositionAssessmentId: null,
         dispositionAt: null,
         canonicalFindingId: null,
-        verificationReceipts: receipts.filter((receipt) =>
-          select.verificationReceipts.where.status.in.includes(receipt.status)
-        ),
+        verificationReceipts: receipts
+          .filter(
+            (receipt) =>
+              receipt.method === "RETEST" ||
+              select.verificationReceipts.where.OR[0].status.in.includes(receipt.status)
+          )
+          .reverse(),
       },
     ])
 
@@ -196,14 +229,14 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
         where: { workspaceId: "workspace-1", targetId: "target-1", deletedAt: null },
         select: expect.objectContaining({
           verificationReceipts: expect.objectContaining({
-            where: { status: { in: ["VALIDATED", "VERIFIED"] } },
+            where: { OR: [{ status: { in: ["VALIDATED", "VERIFIED"] } }, { method: "RETEST" }] },
           }),
         }),
       })
     )
     expect(vi.mocked(computeGateVerdict).mock.lastCall?.[0].findings[0]).toMatchObject({
-      hasPositiveEvidence: true,
-      retestConfirmedResolved: true,
+      hasPositiveEvidence: false,
+      retestConfirmedResolved: false,
     })
 
     receipts.pop()
@@ -309,7 +342,14 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
   })
   it("fails closed without the injected admission boundary", async () => {
     await expect(
-      handleMerge("workspace-1", "branch", undefined, undefined as never)
+      handleMerge({
+        workspaceId: "workspace-1",
+        branchName: "branch",
+        prNumber: undefined,
+        assertRetestAllowed: undefined as never,
+        repoFullName: undefined,
+        assertRetestWorkerAvailable: workerAvailable,
+      })
     ).rejects.toThrow("Retest admission guard required")
   })
 })

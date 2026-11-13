@@ -1,7 +1,19 @@
+import { notifyScanFailed } from "../notifications"
+import { readExecutionPolicy, failScanWithTimeout } from "./run-scan/execution-policy"
+import {
+  prepareScanCapacity,
+  finalizeScanCapacity,
+  deferScanCapacityWait,
+  isCapacityStop,
+  capacityStopError,
+  requeueUnbilledScan,
+} from "./run-scan/capacity-lifecycle"
+import { cleanupScanExecution } from "./run-scan/cleanup"
 import type { Job } from "bullmq"
-import { boundedCleanup, finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
-import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
-import { logger } from "@lyrashield/logger"
+import { ScanCapacityWaitingError, type ScanBillingDisposition } from "@lyrashield/billing"
+import { finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
+import { runWithWorkspaceContext } from "@lyrashield/db"
+import { logger as log } from "@lyrashield/logger"
 import {
   env,
   evaluateAuthAssessmentAdmission,
@@ -12,52 +24,52 @@ import type { checkoutDeterministicRetest } from "../engine/deterministic-retest
 import { summarizeVibeSecurityCoverage } from "@lyrashield/security"
 import { executeScanTarget, resolveEngineTerminalError } from "./run-scan/execution"
 import { createEngineMinuteMeter, type ScanTerminalError } from "./run-scan/settlement"
-import { finalizeScanLifecycle } from "./run-scan/finalization"
-import { runEngineTriageOverlay } from "./run-scan/triage"
+import {
+  finalizeEarlyEngineTerminal,
+  finalizeScanLifecycle,
+  runScanCompletionFollowups,
+} from "./run-scan/finalization"
+import { runEngineTriageOverlay, triageEvidence } from "./run-scan/triage"
 import {
   updateScanStatus,
+  updateUnclaimedScanStatus,
   addScanEvent,
-  createAiSecurityScoreSnapshot,
-  qualifyReferralForWorkspace,
   type ScanStatus,
 } from "@lyrashield/db"
 import { resolveScanProfile, type UrlScanProfile } from "@lyrashield/types"
 import { prepareScanExecution } from "./run-scan/preparation"
-import {
-  cleanupEngineWorkspace,
-  interpretExitCode,
-  resolveEngineProfile,
-  type EngineRunResult,
-} from "../engine/runner"
-import { engineWorkspacePath } from "../engine/workspace-path"
+import { interpretExitCode, resolveEngineProfile, type EngineRunResult } from "../engine/runner"
 import type { TargetType } from "../engine/command-builder"
 import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
-import {
-  completeRetestsForScan,
-  failTerminalRetestsForScan,
-  markRetestsRunning,
-  persistResultManifest,
-} from "../engine/result-integrity"
-import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
+import { markRetestsRunning } from "../engine/result-integrity"
 import { type ScanJobData, type ScanJobResult } from "../types"
 import { verifyScanJobAuthority } from "./run-scan/authority"
 import { verifyScanAdmission } from "./run-scan/admission"
+import {
+  createScanCancellationPoller,
+  isBillableExecutionContention,
+  finalizeExecutionDenial,
+  executorProvenStopped,
+  readScanTerminalState,
+} from "./run-scan/lifecycle-guards"
 import { resumePendingScanFinalization } from "./run-scan/pending-finalization"
 import {
   imageDigest,
   isTimeoutError,
   MAX_SCAN_RUNTIME_MS,
   reportInterruptedSettlement,
+  retainedBillableScanResult,
   resolveScanRuntimeBudgetMs,
   resolveScannerPhaseTimeoutMs,
   timeoutErrorMessage,
 } from "./run-scan/lifecycle-utils"
 import {
   engineRoutingCoverageIssue,
-  engineRuntimeDeadlineCoverageIssue,
+  engineTruncationCoverageIssue,
   persistEngineUsageCheckpoint,
   shouldRecordAgentMinutes,
+  hasObservedScanWork,
 } from "./run-scan/usage"
 
 export {
@@ -69,7 +81,6 @@ export {
 }
 
 export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Promise<ScanJobResult> {
-  const log = logger
   const authority = await verifyScanJobAuthority(job)
   if (!authority.ok) return authority.result
   const { data, scanRecord, workspaceId, executionPlan } = authority
@@ -87,10 +98,17 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     const workerExecution = resolveWorkerExecutionProvenance()
     let globalScanTimeoutReached = false
     let scanRuntimeBudgetMs = MAX_SCAN_RUNTIME_MS
+    let contended = false
     let billablePhaseStarted = false
+    let execution: Awaited<ReturnType<typeof executeScanTarget>> | undefined
+    let executorReturned = false
+    let noBillableWork = true
+    let billingDisposition: ScanBillingDisposition | undefined
+    let recoveringPreviousExecution = Boolean(scanRecord.startedAt)
     let urlProfile: UrlScanProfile | undefined
     let engineProfile: ReturnType<typeof resolveEngineProfile> | undefined
     let engineModel: string | undefined
+    let settleCancellation: (() => Promise<void>) | undefined
     let durableFinalizationResult: ScanJobResult | null = null
     let deterministicCheckout: Awaited<ReturnType<typeof checkoutDeterministicRetest>> | undefined
     try {
@@ -99,7 +117,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         workspaceId,
         targetId,
       })
-      if (resumedFinalization) return resumedFinalization
+      if (resumedFinalization) {
+        recoveringPreviousExecution = true
+        contended = resumedFinalization.errorCategory === "BILLABLE_PHASE_INTERRUPTED"
+        return resumedFinalization
+      }
 
       const preparation = await prepareScanExecution({
         scanId,
@@ -112,22 +134,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const { target } = preparation
       urlProfile = preparation.urlProfile
 
-      // 3. Run the scan engine
-      await updateScanStatus(scanId, "RUNNING" as ScanStatus)
-      await markRetestsRunning(scanId)
+      // 3. Prepare the scan engine; capacity waits remain queued.
 
-      const policy = policyId
-        ? await prisma.policy.findFirst({
-            where: { id: policyId, workspaceId, deletedAt: null },
-            select: {
-              maxBudgetUsd: true,
-              maxDurationMinutes: true,
-              blockedPaths: true,
-              allowedDomains: true,
-              destructiveTestsAllowed: true,
-            },
-          })
-        : null
+      const policy = await readExecutionPolicy(policyId, workspaceId)
       const policyMaxBudgetUsd = policy?.maxBudgetUsd?.toNumber()
       scanRuntimeBudgetMs = resolveScanRuntimeBudgetMs(
         mode,
@@ -147,48 +156,15 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         return false
       }
 
-      // Cancellation is polled frequently (the scanner orchestrator checks on a
-      // ~1s interval), so memoize the CANCELLED lookup for a short window to
-      // avoid a DB query every second per active scan. A cancel is still
-      // detected within CANCEL_CACHE_MS; correctness only requires timely
-      // detection, not instantaneous.
-      const CANCEL_CACHE_MS = 2000
-      let cancelCacheAt = 0
-      let cancelCacheValue = false
-      const isScanCancelled = async (force = false): Promise<boolean> => {
-        const now = Date.now()
-        if (!force && now - cancelCacheAt < CANCEL_CACHE_MS) return cancelCacheValue
-        const current = await prisma.scan.findUnique({
-          where: { id: scanId },
-          select: { status: true },
-        })
-        cancelCacheValue = current?.status === "CANCELLED"
-        cancelCacheAt = now
-        return cancelCacheValue
-      }
+      const isScanCancelled = createScanCancellationPoller(scanId, workspaceId)
 
       const isCancelledOrTimedOut = async () => {
         if (target.type !== "REPO" && hasGlobalScanTimeout()) return true
         return isScanCancelled()
       }
 
-      const failWithScanTimeout = async (timeoutMessage: string) => {
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory: "TIMEOUT",
-          errorMessage: timeoutMessage,
-        })
-        try {
-          await notifyScanFailed(workspaceId, scanId, timeoutMessage)
-        } catch (notificationError) {
-          log.warn("Failed to send scan timeout notification", {
-            scanId,
-            error:
-              notificationError instanceof Error
-                ? notificationError.message
-                : String(notificationError),
-          })
-        }
-      }
+      const failWithScanTimeout = (message: string) =>
+        failScanWithTimeout(workspaceId, scanId, message)
 
       let engineResult: EngineRunResult
       let engineStartedAtMs: number | null = null
@@ -220,7 +196,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         scanRecord,
         executionPlan,
         targetType: target.type,
-        destructiveTestsAllowed: policy?.destructiveTestsAllowed === true,
+        currentPolicy: policy,
         // Plan-required admission is deployable independently of the additive
         // migration: OFF drains legacy null-plan rows on their original path;
         // ON requires every job to carry a stored, hash-verified plan.
@@ -236,7 +212,18 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
       if (!admission.ok) return admission.result
 
-      const execution = await executeScanTarget({
+      await prepareScanCapacity({
+        accountingVersion: scanRecord.accountingVersion,
+        workspaceId,
+        scanId,
+        engineBacked,
+        deterministicRetest,
+        scanRuntimeBudgetMs,
+      })
+      await updateUnclaimedScanStatus(scanId, "RUNNING" as ScanStatus)
+      await markRetestsRunning(scanId)
+      execution = await executeScanTarget({
+        accountingVersion: scanRecord.accountingVersion,
         scanId,
         workspaceId,
         goal,
@@ -260,7 +247,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         scanProfile,
         executionPlan,
       })
-      if (!execution.ok) return execution.result
+      executorReturned = executorProvenStopped(execution, engineBacked, deterministicRetest)
+      if (!execution.ok) {
+        // noBillableWork is still true. Only an acknowledged claim may finalize as its owner.
+        const update = billablePhaseStarted && executorReturned ? updateScanStatus : undefined
+        return await finalizeExecutionDenial(authority, execution.result, update)
+      }
       engineResult = execution.engineResult
       deterministicCheckout = execution.deterministicCheckout
       engineProfile = execution.engineProfile
@@ -285,15 +277,20 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         )
       }
 
+      const capacityStopped = isCapacityStop(execution)
       const runRecord = engineResult.output.runRecord
       const routingCoverageIssue =
         engineBacked && engineProfile ? engineRoutingCoverageIssue(engineProfile, runRecord) : null
-      const runtimeDeadlineCoverageIssue = engineRuntimeDeadlineCoverageIssue(
+      const truncationCoverageIssue = engineTruncationCoverageIssue(
         runRecord,
         (engineResult.output.vulnerabilities?.length ?? 0) > 0
       )
       const exitInterpretation = interpretExitCode(engineResult.exitCode)
       const cancelled = engineResult.cancelled === true
+      noBillableWork =
+        !engineBacked ||
+        deterministicRetest ||
+        !hasObservedScanWork(scanId, exitInterpretation.status, runRecord)
       const engineWorkObserved =
         engineBacked &&
         shouldRecordAgentMinutes(scanId, exitInterpretation.status, runRecord, { cancelled })
@@ -317,10 +314,15 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         sponsorAccountId: scanRecord.sponsorAccountId ?? scanRecord.createdById,
         exitStatus: exitInterpretation.status,
         runRecord,
+        onBillingDisposition: (disposition) => {
+          billingDisposition = disposition
+        },
         onTerminalError: (error) => {
           agentMinuteTerminalError = error
         },
       })
+
+      settleCancellation = () => meterEngineRun("cancelled")
 
       // Persist usage before deterministic scanners or finding persistence can
       // fail, so provider spend is never lost behind a downstream error.
@@ -370,11 +372,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               ...(engineResult.sourceRevision
                 ? { sourceRevision: engineResult.sourceRevision }
                 : {}),
+              // An engine-owned claim cannot replace an unavailable host observation.
               ...(typeof engineResult.sandboxRemoved === "boolean"
                 ? { sandboxRemoved: engineResult.sandboxRemoved }
-                : runRecord?.cleanup
-                  ? { sandboxRemoved: runRecord.cleanup.sandbox_removed }
-                  : {}),
+                : {}),
             }
           : undefined
 
@@ -389,59 +390,30 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       if (engineResult.budgetKilled) {
         const budgetMessage = "Protected run limit reached"
-        await persistResultManifest({
+        return finalizeEarlyEngineTerminal({
           scanId,
-          target: {
-            id: target.id,
-            type: target.type,
-            repoFullName: target.repoFullName,
-            branch: target.branch,
-            url: target.url,
-          },
+          workspaceId,
+          target,
           engineBacked,
-          sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
-          engineFindingCount: 0,
-          coverageIssues: [{ scanner: "engine", status: "bounded", reason: budgetMessage }],
-          engineExecution,
-          accounting: {
-            maxBudgetUsd,
-            billedCostUsd,
-            reconciled: costReconciled,
-            ...(reconciliationReason ? { reconciliationReason } : {}),
-          },
+          engineResult,
           workerExecution,
-          ...(stagedAttachments ? { attachments: stagedAttachments } : {}),
+          engineExecution,
+          ...(stagedAttachments ? { stagedAttachments } : {}),
           terminalOutcome: {
             status: "STOPPED_BUDGET",
             errorCategory: "BUDGET_EXCEEDED",
             errorMessage: budgetMessage,
           },
-        })
-        await completeRetestsForScan({ scanId, workspaceId })
-        await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
-          errorCategory: "BUDGET_EXCEEDED",
-          errorMessage: budgetMessage,
+          maxBudgetUsd,
+          billedCostUsd,
+          costReconciled,
+          reconciliationReason,
           ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
+          notificationDescription: "budget-stop",
         })
-        try {
-          await notifyScanFailed(workspaceId, scanId, budgetMessage)
-        } catch (notificationError) {
-          log.warn("Failed to send budget-stop notification", {
-            scanId,
-            error:
-              notificationError instanceof Error
-                ? notificationError.message
-                : String(notificationError),
-          })
-        }
-        return {
-          status: "failed",
-          errorCategory: "BUDGET_EXCEEDED",
-          errorMessage: budgetMessage,
-        }
       }
 
-      if (engineResult.timedOut) {
+      if (engineResult.timedOut && !capacityStopped) {
         const inactive = engineResult.timeoutReason === "INACTIVITY"
         const llmStalled = engineResult.timeoutReason === "LLM_STALL"
         const timeoutMessage = inactive
@@ -449,55 +421,26 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           : llmStalled
             ? "Scan engine stalled: no model activity was observed while the run stayed active"
             : "Scan engine timed out before completing"
-        await persistResultManifest({
+        return finalizeEarlyEngineTerminal({
           scanId,
-          target: {
-            id: target.id,
-            type: target.type,
-            repoFullName: target.repoFullName,
-            branch: target.branch,
-            url: target.url,
-          },
+          workspaceId,
+          target,
           engineBacked,
-          sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
-          engineFindingCount: 0,
-          coverageIssues: [{ scanner: "engine", status: "bounded", reason: timeoutMessage }],
-          engineExecution,
-          accounting: {
-            maxBudgetUsd,
-            billedCostUsd,
-            reconciled: costReconciled,
-            ...(reconciliationReason ? { reconciliationReason } : {}),
-          },
+          engineResult,
           workerExecution,
-          ...(stagedAttachments ? { attachments: stagedAttachments } : {}),
+          engineExecution,
+          ...(stagedAttachments ? { stagedAttachments } : {}),
           terminalOutcome: {
             status: "FAILED",
             errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
             errorMessage: timeoutMessage,
           },
+          maxBudgetUsd,
+          billedCostUsd,
+          costReconciled,
+          reconciliationReason,
+          notificationDescription: "scan timeout",
         })
-        await completeRetestsForScan({ scanId, workspaceId })
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
-          errorMessage: timeoutMessage,
-        })
-        try {
-          await notifyScanFailed(workspaceId, scanId, timeoutMessage)
-        } catch (notificationError) {
-          log.warn("Failed to send scan timeout notification", {
-            scanId,
-            error:
-              notificationError instanceof Error
-                ? notificationError.message
-                : String(notificationError),
-          })
-        }
-        return {
-          status: "failed",
-          errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
-          errorMessage: timeoutMessage,
-        }
       }
 
       // Capture the engine's real terminal cause, but do not return early.
@@ -512,6 +455,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         exitInterpretation,
         priorError: agentMinuteTerminalError,
       })
+
+      if (capacityStopped) engineTerminalError = capacityStopError()
 
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
       await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
@@ -543,15 +488,15 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       const triageOverlay = await runEngineTriageOverlay({
         scanId,
+        scope: { workspaceId, targetId: target.id, targetType: target.type },
         sponsorAccountId: scanRecord.sponsorAccountId ?? scanRecord.createdById,
-        targetType: target.type,
         mode,
         deterministicRetest,
         agentMinuteTerminalError,
         hasGlobalScanTimeout,
         isScanCancelled,
         engineResult,
-        aiSecuritySignals: orchestratorResult.aiAppSecuritySignals ?? [],
+        ...triageEvidence(orchestratorResult),
         billedCostUsd,
         costReconciled,
         budgetExceeded,
@@ -560,8 +505,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         scanRuntimeBudgetMs,
         elapsedScanMs,
       })
-      const aiSecuritySignals = triageOverlay.aiSecuritySignals
-      const triageSnapshot = triageOverlay.triageSnapshot
+      const { aiSecuritySignals, triageSnapshot } = triageOverlay
       budgetExceeded = triageOverlay.budgetExceeded
       billedCostUsd = triageOverlay.billedCostUsd
       costReconciled = triageOverlay.costReconciled
@@ -621,7 +565,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         orchestratorResult,
         coverageMatchedControlRanks: coverage.matchedControlRanks,
         routingCoverageIssue,
-        runtimeDeadlineCoverageIssue,
+        truncationCoverageIssue,
         deterministicCheckout,
         engineBacked,
         budgetExceeded,
@@ -640,6 +584,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
 
       if (finalization.status === "cancelled") {
+        // The engine already returned its scan-bound usage receipt. Retain
+        // cancellation's elapsed-time settlement when cancellation wins the
+        // later evidence claim, without persisting results after cancellation.
+        await meterEngineRun("cancelled")
         return {
           status: "failed",
           errorCategory: "CANCELLED",
@@ -668,118 +616,32 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         return terminalResult
       }
 
-      if (orchestratorResult.aiAppSecurityCoverage) {
-        try {
-          await createAiSecurityScoreSnapshot(scanId, workspaceId, {
-            signals: aiSecuritySignals,
-            coverage: orchestratorResult.aiAppSecurityCoverage,
-            ai03: orchestratorResult.ai03Coverage ?? {
-              resolutionStatus: "UNSUPPORTED",
-              advisoryStatus: "UNAVAILABLE",
-              fresh: false,
-            },
-            ...(triageSnapshot ? { triage: triageSnapshot } : {}),
-          })
-        } catch (aiScoreErr) {
-          log.warn("Failed to create AI security score snapshot", {
-            scanId,
-            error: aiScoreErr instanceof Error ? aiScoreErr.message : String(aiScoreErr),
-          })
-        }
-      }
-      try {
-        await qualifyReferralForWorkspace(workspaceId)
-      } catch (referralError) {
-        // Referral accounting is downstream of scan completion. An outage here
-        // must not retry or reverse a scan that has already completed atomically.
-        log.warn("Failed to qualify referral after scan completion", {
-          scanId,
-          error: referralError instanceof Error ? referralError.message : String(referralError),
-        })
-      }
-
-      log.info("Scan job completed", {
+      await runScanCompletionFollowups({
         scanId,
+        workspaceId,
         targetId,
+        targetName: target.name,
         exitCode: engineResult.exitCode,
-        findings: persistedFindings.length,
+        scanSummary,
         newFindings,
+        persistedFindings,
+        orchestratorResult,
+        aiSecuritySignals,
+        ...(triageSnapshot ? { triageSnapshot } : {}),
       })
-
-      try {
-        const criticalFindings = persistedFindings.filter((f) => f.severity === "CRITICAL")
-        let workspaceName: string | undefined
-        try {
-          workspaceName = (
-            await prisma.workspace.findFirst({
-              where: { id: workspaceId },
-              select: { name: true },
-            })
-          )?.name
-        } catch (workspaceError) {
-          log.warn("Failed to resolve workspace name for scan completion notifications", {
-            scanId,
-            error:
-              workspaceError instanceof Error ? workspaceError.message : String(workspaceError),
-          })
-        }
-
-        const tasks = [
-          () =>
-            notifyScanCompleted(
-              workspaceId,
-              scanId,
-              scanSummary,
-              persistedFindings.length,
-              workspaceName
-            ),
-          ...criticalFindings.map(
-            (finding) => () =>
-              notifyCriticalFinding(
-                workspaceId,
-                finding.id,
-                finding.title,
-                target.name,
-                workspaceName
-              )
-          ),
-        ]
-        const notifications: PromiseSettledResult<void>[] = []
-        for (let start = 0; start < tasks.length; start += 2) {
-          notifications.push(
-            ...(await Promise.allSettled(tasks.slice(start, start + 2).map((notify) => notify())))
-          )
-        }
-        const failedNotifications = notifications.filter(
-          (notification): notification is PromiseRejectedResult =>
-            notification.status === "rejected"
-        )
-        if (failedNotifications.length > 0) {
-          log.warn("Some scan completion notifications failed", {
-            scanId,
-            failures: failedNotifications.map((notification) =>
-              notification.reason instanceof Error
-                ? notification.reason.message
-                : String(notification.reason)
-            ),
-          })
-        }
-      } catch (notificationError) {
-        // A notification provider outage must not retry or reverse an already-completed scan.
-        log.warn("Failed to send scan completion notification", {
-          scanId,
-          error:
-            notificationError instanceof Error
-              ? notificationError.message
-              : String(notificationError),
-        })
-      }
 
       return {
         status: "completed",
         summary: scanSummary,
       }
     } catch (error) {
+      if (isBillableExecutionContention(error)) {
+        contended = true
+        log.warn("Scan execution retained pending reconciliation", { scanId, workspaceId })
+        return retainedBillableScanResult()
+      }
+      if (error instanceof ScanCapacityWaitingError && !billablePhaseStarted)
+        await deferScanCapacityWait(job, workspaceId, scanId)
       const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
       const timedOut = globalScanTimeoutReached || isTimeoutError(error)
       const finalErrorCategory = timedOut
@@ -798,12 +660,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorType: error instanceof Error ? error.name : "UNKNOWN",
       })
 
-      const currentScan = await prisma.scan
-        .findUnique({
-          where: { id: scanId },
-          select: { status: true, summary: true, errorCategory: true, errorMessage: true },
-        })
-        .catch(() => null)
+      const currentScan = await readScanTerminalState(scanId, workspaceId).catch(() => null)
       if (durableFinalizationResult) {
         log.error("billing.scan_settlement_commit_uncertain", {
           scanId,
@@ -818,6 +675,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // Do not overwrite an unknown durable outcome during a DB outage.
       if (!currentScan) throw error
       if (currentScan?.status === "CANCELLED") {
+        await settleCancellation?.()
         if (globalScanTimeoutReached) {
           return {
             status: "failed",
@@ -853,23 +711,26 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         !isTerminalPrerequisiteFailure &&
         (job.attemptsMade ?? 0) + 1 < maxAttempts
       ) {
-        await prisma.scan.updateMany({
-          where: {
-            id: scanId,
-            status: { in: ["PREFLIGHT", "RUNNING", "VERIFYING"] },
-          },
-          data: { status: "QUEUED" },
-        })
-        log.warn("Scan job failed and will be retried", {
+        const claimedElsewhere = await requeueUnbilledScan({
+          job,
           scanId,
-          attempt: (job.attemptsMade ?? 0) + 1,
+          workspaceId,
           maxAttempts,
+          accountingVersion: scanRecord.accountingVersion,
+          recoveringPreviousExecution,
+          errorCategory: finalErrorCategory,
+          errorMessage: finalErrorMessage,
         })
+        if (claimedElsewhere) {
+          contended = true
+          return retainedBillableScanResult()
+        }
         throw error
       }
 
       try {
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+        const update = billablePhaseStarted ? updateScanStatus : updateUnclaimedScanStatus
+        await update(scanId, "FAILED" as ScanStatus, {
           errorCategory: finalErrorCategory,
           errorMessage: finalErrorMessage,
         })
@@ -888,38 +749,18 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorMessage: finalErrorMessage,
       }
     } finally {
-      try {
-        await failTerminalRetestsForScan(scanId)
-      } catch (retestError) {
-        log.warn("Failed to finalize retest state", {
+      if (!contended) {
+        await finalizeScanCapacity({
+          accountingVersion: scanRecord.accountingVersion,
+          workspaceId,
           scanId,
-          error: retestError instanceof Error ? retestError.message : String(retestError),
+          recoveringPreviousExecution,
+          billablePhaseStarted,
+          executorReturned,
+          noBillableWork,
+          billingDisposition,
         })
-      }
-      try {
-        await boundedCleanup(
-          (async () => {
-            await deterministicCheckout?.cleanup()
-            await cleanupEngineWorkspace(engineWorkspacePath(scanId), scanId)
-          })()
-        )
-      } catch (cleanupError) {
-        const error = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
-        log.error("Engine workspace cleanup requires operator attention", { scanId, error })
-        try {
-          await addScanEvent(
-            scanId,
-            "cleanup_failed",
-            "error",
-            "Engine workspace cleanup requires operator attention",
-            { error }
-          )
-        } catch (eventError) {
-          log.error("Failed to persist cleanup failure event", {
-            scanId,
-            error: eventError instanceof Error ? eventError.message : String(eventError),
-          })
-        }
+        await cleanupScanExecution(scanId, billablePhaseStarted, deterministicCheckout, execution)
       }
     }
   }) // end runWithWorkspaceContext

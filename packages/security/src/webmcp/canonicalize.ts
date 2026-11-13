@@ -5,7 +5,7 @@ function sortKeys<T>(value: T): T {
     return value.map(sortKeys) as unknown as T
   }
   if (value && typeof value === "object") {
-    const sorted: Record<string, unknown> = {}
+    const sorted: Record<string, unknown> = Object.create(null)
     for (const key of Object.keys(value).sort()) {
       sorted[key] = sortKeys(value[key as keyof typeof value])
     }

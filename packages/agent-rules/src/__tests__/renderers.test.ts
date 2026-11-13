@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { listRuleFormats, renderRule } from "../index.js"
+import { formatForRulesFile, listRuleFormats, renderRule, renderRuleForAgent } from "../index.js"
+import { getAgent } from "@lyrashield/agent-registry"
 
 describe("rule renderers", () => {
   const formats = listRuleFormats()
@@ -21,7 +22,7 @@ describe("rule renderers", () => {
 
   for (const info of formats) {
     for (const file of info.defaultFiles) {
-      it(`${info.format} (${file}) produces non-empty output`, () => {
+      it(`${info.format} (${file}) produces a complete managed rule with the honesty clause`, () => {
         const rule = renderRule({
           format: info.format,
           file,
@@ -33,15 +34,6 @@ describe("rule renderers", () => {
         expect(rule.content).toContain("lyrashield:begin")
         expect(rule.content).toContain("lyrashield:end")
         expect(rule.sha).toMatch(/^[0-9a-f]{12}$/)
-      })
-
-      it(`${info.format} (${file}) includes the honesty clause`, () => {
-        const rule = renderRule({
-          format: info.format,
-          file,
-          agentId: "test-agent",
-          agentDisplayName: info.label,
-        })
         expect(rule.inner).toMatch(/clean check result does not guarantee/i)
         expect(rule.inner).toMatch(/passing check is not a guarantee/i)
       })
@@ -93,5 +85,21 @@ describe("rule renderers", () => {
     expect(rule.inner).toContain("terminal state")
     expect(rule.inner).toContain("retest outcome and scan reference")
     expect(rule.inner).toContain("separate independent-verification receipt")
+  })
+
+  it("renders Augment project rules as plain Markdown in the rules directory", () => {
+    const file = ".augment/rules/lyrashield.md"
+    const agent = getAgent("augment-vscode")
+
+    expect(formatForRulesFile(file)).toBe("agents-md")
+    expect(agent).toBeDefined()
+    const rule = renderRuleForAgent(agent!, file)
+    expect(rule.format).toBe("agents-md")
+    expect(rule.file).toBe(file)
+    expect(rule.content).toContain("lyrashield:begin")
+  })
+
+  it("renders Augment's root guidelines file as plain Markdown", () => {
+    expect(formatForRulesFile(".augment-guidelines")).toBe("agents-md")
   })
 })

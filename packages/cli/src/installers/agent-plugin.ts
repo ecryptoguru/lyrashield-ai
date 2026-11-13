@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { cp, lstat, mkdir, realpath, rename, rm } from "node:fs/promises"
+import { chmod, cp, lstat, mkdir, realpath, rename, rm } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { execFile } from "node:child_process"
 import { homedir } from "node:os"
@@ -25,7 +25,6 @@ export interface InstallAgentPluginOptions {
 }
 
 const CODEX_PLUGIN_ID = "lyrashield@lyrashield-ai"
-const CODEX_MARKETPLACE = "ecryptoguru/lyrashield-marketplace"
 
 function runCodexPluginCommand(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -34,39 +33,6 @@ function runCodexPluginCommand(args: string[]): Promise<void> {
       else resolve()
     })
   })
-}
-
-async function installCodexPlugin(dryRun?: boolean): Promise<InstallAgentResult> {
-  const commands = [
-    `codex plugin marketplace add ${CODEX_MARKETPLACE}`,
-    `codex plugin add ${CODEX_PLUGIN_ID}`,
-  ]
-  if (dryRun) {
-    return {
-      agent: "openai-codex-agent-plugin",
-      displayName: "OpenAI Codex (Agent Plugin)",
-      outcome: "DELEGATED",
-      message: commands.map((command) => `Would run ${command}`).join("\n"),
-    }
-  }
-
-  try {
-    await runCodexPluginCommand(["plugin", "marketplace", "add", CODEX_MARKETPLACE])
-    await runCodexPluginCommand(["plugin", "add", CODEX_PLUGIN_ID])
-    return {
-      agent: "openai-codex-agent-plugin",
-      displayName: "OpenAI Codex (Agent Plugin)",
-      outcome: "DELEGATED",
-      message: `Installed ${CODEX_PLUGIN_ID}. Restart the ChatGPT desktop app to load it.`,
-    }
-  } catch (error) {
-    return {
-      agent: "openai-codex-agent-plugin",
-      displayName: "OpenAI Codex (Agent Plugin)",
-      outcome: "FAILED",
-      message: `Codex plugin install failed: ${(error as Error).message}`,
-    }
-  }
 }
 
 function resolvePluginLocation(
@@ -83,6 +49,49 @@ function resolvePluginLocation(
   if (path.isAbsolute(expanded)) return expanded
   if (loc.scope === "global") return path.join(homedir(), expanded)
   return path.join(opts?.cwd ?? process.cwd(), expanded)
+}
+
+async function createPluginBackupPath(
+  loc: ConfigLocation,
+  opts?: { scope?: string; cwd?: string }
+): Promise<string> {
+  const scopeRoot = loc.scope === "global" ? homedir() : (opts?.cwd ?? process.cwd())
+  const rawBackupRoot = path.join(scopeRoot, ".lyrashield", "plugin-backups")
+  const backupRoot = await assertContainedPluginDest(rawBackupRoot, loc, opts)
+
+  const beforeCreate = await lstat(backupRoot).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return undefined
+    throw error
+  })
+  if (beforeCreate?.isSymbolicLink()) {
+    throw new Error(`Refusing plugin backup path through symlink: ${backupRoot}`)
+  }
+  if (beforeCreate && !beforeCreate.isDirectory()) {
+    throw new Error(`Refusing plugin backup path that is not a directory: ${backupRoot}`)
+  }
+
+  await mkdir(backupRoot, { recursive: true, mode: 0o700 })
+  await assertContainedPluginDest(backupRoot, loc, opts)
+
+  const backupRootStat = await lstat(backupRoot)
+  if (backupRootStat.isSymbolicLink() || !backupRootStat.isDirectory()) {
+    throw new Error(`Refusing unsafe plugin backup directory: ${backupRoot}`)
+  }
+  if ((backupRootStat.mode & 0o777) !== 0o700) {
+    await chmod(backupRoot, 0o700)
+  }
+  await assertContainedPluginDest(backupRoot, loc, opts)
+  const securedBackupRoot = await lstat(backupRoot)
+  if (
+    securedBackupRoot.isSymbolicLink() ||
+    !securedBackupRoot.isDirectory() ||
+    (securedBackupRoot.mode & 0o777) !== 0o700
+  ) {
+    throw new Error(`Could not restrict plugin backup directory permissions: ${backupRoot}`)
+  }
+
+  const backupPath = path.join(backupRoot, `plugin-${randomUUID()}`)
+  return assertContainedPluginDest(backupPath, loc, opts)
 }
 
 /**
@@ -137,8 +146,6 @@ export async function installAgentPlugin(
   opts: InstallAgentPluginOptions
 ): Promise<InstallAgentResult> {
   const { agent } = opts
-  if (agent.id === "openai-codex-agent-plugin") return installCodexPlugin(opts.dryRun)
-
   if (agent.id === "kiro-agent-plugin" && opts.transport === "remote-http") {
     return {
       agent: agent.id,
@@ -263,7 +270,7 @@ export async function installAgentPlugin(
   let backupPath: string | undefined
   try {
     if (destExists) {
-      backupPath = `${dest}.lyrashield-backup-${randomUUID()}`
+      backupPath = await createPluginBackupPath(loc, opts)
       await rename(dest, backupPath)
     }
   } catch (error) {
@@ -417,13 +424,16 @@ export async function uninstallAgentPlugin(
       message: `Would remove ${dest}`,
     }
   try {
-    await rm(dest, { recursive: true, force: true })
+    await assertContainedPluginDest(dest, loc, opts)
+    const backupPath = await createPluginBackupPath(loc, opts)
+    await rename(dest, backupPath)
     return {
       agent: agent.id,
       displayName: agent.displayName,
       outcome: "CONFIGURED",
       path: dest,
-      message: "Plugin removed.",
+      backupPath,
+      message: `Plugin removed. Previous files retained at ${backupPath}`,
     }
   } catch (error) {
     return {

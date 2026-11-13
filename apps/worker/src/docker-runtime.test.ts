@@ -52,6 +52,12 @@ const desktopReleaseWorkflow = readFileSync(
   fileURLToPath(new URL("../../../.github/workflows/release-tauri.yml", import.meta.url)),
   "utf8"
 )
+const recoveryCandidateWorkflow = readFileSync(
+  fileURLToPath(
+    new URL("../../../.github/workflows/prepare-worker-recovery-candidate.yml", import.meta.url)
+  ),
+  "utf8"
+)
 // The path is anchored to this test module rather than derived from external input.
 const ciWorkflow = readFileSync(
   fileURLToPath(new URL("../../../.github/workflows/ci.yml", import.meta.url)),
@@ -100,7 +106,7 @@ const pinnedNodeBase =
 describe("worker Docker runtime", () => {
   it("pins every Node base stage to one immutable digest", () => {
     expect(dockerfile).not.toMatch(/^FROM node:24-alpine AS/m)
-    expect(dockerfile.match(/^FROM node:24-alpine@sha256:[0-9a-f]{64} AS/gm) ?? []).toHaveLength(6)
+    expect(dockerfile.match(/^FROM node:24-alpine@sha256:[0-9a-f]{64} AS/gm) ?? []).toHaveLength(7)
     expect(new Set(dockerfile.match(/node:24-alpine@sha256:[0-9a-f]{64}/g))).toHaveLength(1)
   })
 
@@ -169,14 +175,36 @@ describe("worker Docker runtime", () => {
     expect(dockerIgnore.split("\n")).toContain("lyrashield-engine/")
   })
 
-  it("pins and records the exact engine revision used by production workers", () => {
-    const reviewedEngineRevision = "12daa1d4c2b012826c4df576a66b3d7bf99057c3"
+  it("pins and records the exact engine revision for release worker builds", () => {
+    const reviewedEngineRevision = "0793bcb9644a1985165963375586124c993c020a"
     expect(deployWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(desktopReleaseWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
+    expect(recoveryCandidateWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(deployWorkflow).toContain("ref: ${{ env.ENGINE_REVISION }}")
     expect(deployWorkflow).toContain("io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}")
-    expect(deployWorkflow).not.toContain("continue-on-error: true")
-    expect(deployWorkflow.match(/persist-credentials: false/g) ?? []).toHaveLength(2)
+    const housekeepingStep = deployRuntimeWorkflow
+      .split(/^      - name: /m)
+      .slice(1)
+      .find((step) => step.startsWith("Deactivate superseded Container App revisions\n"))
+    expect(housekeepingStep).toBeDefined()
+    expect(housekeepingStep).toContain("id: revision-cleanup")
+    expect(housekeepingStep).toContain("continue-on-error: true")
+    expect(housekeepingStep).toContain(
+      "run: bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions"
+    )
+    expect(housekeepingStep).not.toContain("remove-excess-scanner-secrets")
+    const secretCleanupStep = deployRuntimeWorkflow
+      .split(/^      - name: /m)
+      .slice(1)
+      .find((step) => step.includes("id: scanner-secret-removal"))
+    expect(secretCleanupStep).toBeDefined()
+    expect(secretCleanupStep).toContain("remove-excess-scanner-secrets")
+    expect(secretCleanupStep).not.toContain("continue-on-error: true")
+    const runtimeCheckouts = deployRuntimeWorkflow.match(/uses: actions\/checkout@/g) ?? []
+    const runtimeCheckoutsWithoutPersistedCredentials =
+      deployRuntimeWorkflow.match(/persist-credentials: false/g) ?? []
+    expect(runtimeCheckouts.length).toBeGreaterThanOrEqual(2)
+    expect(runtimeCheckoutsWithoutPersistedCredentials).toHaveLength(runtimeCheckouts.length)
     expect(deployWorkflow).not.toContain("runs-on: ubuntu-latest")
     // v16 4.3: the deploy job now uses federated OIDC for Azure login
     // (id-token: write in ITS permissions block only). The reproducibility
@@ -225,7 +253,10 @@ describe("worker Docker runtime", () => {
     expect(workflowStepBody(deployRolloutScript, "deploy-app-container-app")).toContain(
       '"POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}"'
     )
-    expect(deployWorkflow.match(/--remove-env-vars/g) ?? []).toHaveLength(2)
+    expect(deployWorkflow.match(/--remove-env-vars/g) ?? []).toHaveLength(3)
+    expect(workflowStepBody(deployRolloutScript, "deploy-egress-proxy-container-app")).toContain(
+      "--remove-env-vars LYRASHIELD_RELAY_SIGNING_SECRET"
+    )
     for (const legacyName of [
       "LYRASHIELD_DEPLOYMENT_ENVIRONMENT",
       "BILLING_STAGING_ADMISSION",

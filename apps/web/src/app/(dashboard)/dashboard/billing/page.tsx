@@ -1,23 +1,28 @@
+import { STANDARD_OVERAGE_PER_MINUTE_USD, formatUSD } from "@lyrashield/pricing"
 import type { Metadata } from "next"
 import { CreditCard, Clock, Zap, AlertCircle } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from "@lyrashield/ui"
-import { prisma } from "@lyrashield/db"
+import { Card, CardContent, CardHeader, CardTitle, Badge } from "@lyrashield/ui"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import {
   getUsageBalance,
   getAccountTrialState,
   getGraceState,
   isTrialAvailable,
+  canPurchaseMinutePack,
   resolveAccountBilling,
+  listAccountBilling,
   resolveWorkspaceScanSponsor,
   CLOUD_PLAN_MAP,
+  TRIAL_AGENT_MINUTES,
 } from "@lyrashield/billing"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { LocalTime } from "@/components/local-time"
 import { BillingActions } from "./billing-actions"
+import { BillingManagementCard } from "./billing-management-card"
 import { BuyPackButton } from "./buy-pack-button"
-import { UpgradeNowButton } from "./upgrade-now-button"
+import { TrialStatusCard } from "./trial-status-card"
 import { SpendLimitForm } from "./spend-limit-form"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
@@ -80,16 +85,26 @@ export default async function BillingPage({
   // 2.1: fetch the account's governing BillingAccount once here — previously
   // this page re-read it inside each helper. Subscriptions are account-owned:
   // the page renders the CALLER's account billing state.
-  const [billingAccount, trialAvailable] = await Promise.all([
+  const [billingAccount, trialAvailable, billingContracts] = await Promise.all([
     resolveAccountBilling(session.userId),
     canManageBilling ? isTrialAvailable(workspaceId, session.userId) : Promise.resolve(false),
+    canManageBilling ? listAccountBilling(session.userId) : Promise.resolve([]),
   ])
+  // Match /billing/portal's contract selection, not the checkout region or
+  // the governing entitlement row (which may be a trial marker).
+  const managementProvider = billingContracts.find(
+    (row) => row.externalId !== null && row.provider !== "trial" && row.provider !== "complimentary"
+  )?.provider
+  const opensBillingSupport = managementProvider === "razorpay"
   const teamSponsor = await resolveWorkspaceScanSponsor(workspaceId, session.userId)
 
-  const [balance, trialState, graceState] = await Promise.all([
+  const [balance, trialState, graceState, workspaceTargetCount] = await Promise.all([
     getUsageBalance(session.userId, { billing: billingAccount }),
     getAccountTrialState(session.userId),
     getGraceState(session.userId, billingAccount),
+    withWorkspaceRLS(workspaceId, (tx) =>
+      tx.target.count({ where: { workspaceId, deletedAt: null } })
+    ),
   ])
 
   const plan = billingAccount?.currentPlan ?? "FREE"
@@ -97,10 +112,11 @@ export default async function BillingPage({
   const cloudPlan =
     CLOUD_PLAN_MAP[(trialState.isActive ? "TRIAL" : plan) as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = trialState.isActive
-  const displayedTrialMinutesLeft =
-    effectivePlan === "FREE" && trialState.isExpired ? 0 : trialState.minutesLeft
-  const displayedAccountMinutesRemaining =
-    effectivePlan === "FREE" && trialState.isExpired ? 0 : balance.totalRemaining
+  const isExpiredFreeTrial = effectivePlan === "FREE" && trialState.isExpired
+  const canBuyMinutePack = canPurchaseMinutePack({ effectivePlan, trialState })
+  const displayedTrialMinutesLeft = isExpiredFreeTrial ? 0 : trialState.minutesLeft
+  const displayedAccountMinutesRemaining = isExpiredFreeTrial ? 0 : balance.totalRemaining
+  const displayedPoolMinutes = isExpiredFreeTrial ? TRIAL_AGENT_MINUTES : balance.poolMinutes
   const trialDaysLabel = `${NUMBER_FORMAT.format(trialState.daysLeft)} ${trialState.daysLeft === 1 ? "day" : "days"}`
   const isLaunchAssurance = plan === "LAUNCH_ASSURANCE"
   const isComplimentary = billingAccount?.provider === "complimentary"
@@ -171,16 +187,19 @@ export default async function BillingPage({
                 )}
               </div>
               {canManageBilling && (
-                <BillingActions
-                  plan={plan}
-                  isLaunchAssurance={isLaunchAssurance}
-                  isComplimentary={isComplimentary}
-                  workspaceId={workspaceId}
-                  purchasesAvailable={purchasesAvailable}
-                  trialAvailable={trialAvailable}
-                  selectedPlan={selectedPlan}
-                  billingRegion={checkoutRegion}
-                />
+                <div id="billing-plan-picker">
+                  <BillingActions
+                    plan={plan}
+                    isLaunchAssurance={isLaunchAssurance}
+                    isComplimentary={isComplimentary}
+                    workspaceId={workspaceId}
+                    purchasesAvailable={purchasesAvailable}
+                    trialAvailable={trialAvailable}
+                    selectedPlan={selectedPlan}
+                    billingRegion={checkoutRegion}
+                    managementProvider={managementProvider}
+                  />
+                </div>
               )}
               <div className="rounded-md border p-3 text-sm">
                 <p className="font-medium">
@@ -214,51 +233,14 @@ export default async function BillingPage({
           </CardContent>
         </Card>
 
-        {/* Keep an expired-trial upgrade prompt on FREE accounts, but never
-            contradict an active paid or complimentary plan. */}
-        {(isTrial || (trialState.isExpired && effectivePlan === "FREE")) && (
-          <Card>
-            <CardHeader>
-              <CardTitle as="h2">Trial Status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <p className="text-sm text-muted-foreground">Days Left</p>
-                  <p className="text-xl font-semibold">
-                    {NUMBER_FORMAT.format(trialState.daysLeft)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Minutes Left</p>
-                  <p className="text-xl font-semibold">
-                    {NUMBER_FORMAT.format(displayedTrialMinutesLeft)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Targets</p>
-                  <p className="text-xl font-semibold">
-                    {NUMBER_FORMAT.format(trialState.targetsUsed)} /{" "}
-                    {NUMBER_FORMAT.format(trialState.targetCap)}
-                  </p>
-                </div>
-              </div>
-              {trialState.isExpired && (
-                <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>
-                    {purchasesAvailable
-                      ? "Your trial has expired. Unused trial minutes were forfeited. Upgrade to continue scanning."
-                      : "Your trial has expired. New purchases are temporarily unavailable."}
-                  </span>
-                </div>
-              )}
-              {!trialState.isExpired && purchasesAvailable && (
-                <UpgradeNowButton workspaceId={workspaceId} />
-              )}
-            </CardContent>
-          </Card>
-        )}
+        <TrialStatusCard
+          trial={trialState}
+          effectivePlan={effectivePlan}
+          displayedMinutesLeft={displayedTrialMinutesLeft}
+          workspaceTargetCount={workspaceTargetCount}
+          purchasesAvailable={purchasesAvailable}
+          canManageBilling={Boolean(canManageBilling)}
+        />
 
         {/* Usage */}
         <Card>
@@ -274,7 +256,7 @@ export default async function BillingPage({
                 <p className="text-sm text-muted-foreground">Pool Minutes</p>
                 <p className="text-xl font-semibold">
                   {NUMBER_FORMAT.format(balance.poolConsumed)} used of{" "}
-                  {NUMBER_FORMAT.format(balance.poolMinutes)}
+                  {NUMBER_FORMAT.format(displayedPoolMinutes)}
                 </p>
               </div>
               <div>
@@ -298,27 +280,28 @@ export default async function BillingPage({
                   className="h-full rounded-full bg-primary"
                   style={{
                     width: `${
-                      balance.poolMinutes > 0
-                        ? Math.min(100, (balance.poolConsumed / balance.poolMinutes) * 100)
+                      displayedPoolMinutes > 0
+                        ? Math.min(100, (balance.poolConsumed / displayedPoolMinutes) * 100)
                         : 0
                     }%`,
                   }}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Agent-minutes are measured as wall-clock time. Deep/Custom scans consume 3× minutes.
+                Agent-minutes measure wall-clock AI scan time. Any partial minute is rounded up to
+                the next whole minute. Deep/Custom scans consume 3× minutes after rounding.
               </p>
               <p className="text-xs text-muted-foreground">
-                You are only billed for usable scans: a failed scan bills nothing and a cancelled
-                scan bills only the time it actually ran.
+                Failed scans are not billed. Cancelled scans with billable work use elapsed time
+                with the same whole-minute rounding; no elapsed time means no charge.
               </p>
               <p className="text-xs text-muted-foreground">
-                A partial scan keeps its completed findings and bills only the portion that ran —
-                partial minutes are metered the same as completed minutes.
+                A partial scan keeps its completed findings. Billable work uses the same
+                whole-minute rounding as completed scans.
               </p>
               <p className="text-xs text-muted-foreground">
-                A budget-stopped scan ended because its spend ceiling was reached. Minutes already
-                used are billed; nothing further runs until usage is available again.
+                A budget-stopped scan has reached a usage or spend limit. Review its status and your
+                account balance before starting another scan.
               </p>
             </div>
 
@@ -344,7 +327,7 @@ export default async function BillingPage({
           <CardContent className="space-y-3">
             {balance.packs.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {purchasesAvailable
+                {purchasesAvailable && canBuyMinutePack
                   ? "No active minute packs. Buy a pack to add agent-minutes to your account."
                   : "No active minute packs."}
               </p>
@@ -373,7 +356,20 @@ export default async function BillingPage({
                 ))}
               </div>
             )}
-            {canManageBilling && purchasesAvailable && <BuyPackButton workspaceId={workspaceId} />}
+            {canManageBilling && purchasesAvailable && !canBuyMinutePack && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                <p>Minute packs are available after you subscribe.</p>
+                <Link
+                  href="#billing-plan-picker"
+                  className="mt-2 inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+                >
+                  Choose a plan
+                </Link>
+              </div>
+            )}
+            {canManageBilling && purchasesAvailable && canBuyMinutePack && (
+              <BuyPackButton workspaceId={workspaceId} />
+            )}
           </CardContent>
         </Card>
 
@@ -386,7 +382,7 @@ export default async function BillingPage({
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
                 Set a monthly spend limit for overage minutes (beyond your included pool). Overage
-                is billed at $0.15/min.
+                is billed at {formatUSD(STANDARD_OVERAGE_PER_MINUTE_USD)}/min.
               </p>
               <SpendLimitForm
                 workspaceId={workspaceId}
@@ -401,19 +397,10 @@ export default async function BillingPage({
             path). Gating the card on provider === "polar" left Razorpay
             subscribers with no manage path at all. */}
         {canManageBilling && plan !== "FREE" && billingAccount && !isComplimentary && (
-          <Card>
-            <CardHeader>
-              <CardTitle as="h2">Manage Subscription</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Link
-                href={`/billing/portal?workspaceId=${encodeURIComponent(workspaceId)}`}
-                className={`${buttonVariants({ variant: "outline" })} w-full`}
-              >
-                Open Customer Portal
-              </Link>
-            </CardContent>
-          </Card>
+          <BillingManagementCard
+            workspaceId={workspaceId}
+            opensBillingSupport={opensBillingSupport}
+          />
         )}
       </div>
     </div>

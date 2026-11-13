@@ -115,6 +115,18 @@ async function mockMyra(
   )
 }
 
+async function expectNoHorizontalOverflow(
+  page: import("@playwright/test").Page,
+  expectedViewportWidth: number
+) {
+  const dimensions = await page.evaluate(() => ({
+    viewportWidth: window.innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+  }))
+  expect(dimensions.viewportWidth).toBe(expectedViewportWidth)
+  expect(dimensions.documentWidth).toBeLessThanOrEqual(dimensions.viewportWidth)
+}
+
 test("closing Myra during a stream clears composer and streaming state on reopen", async ({
   page,
 }) => {
@@ -152,7 +164,7 @@ test("mobile Myra contains focus and restores page interaction after close and r
   await page.emulateMedia({ reducedMotion: "reduce" })
   await mockMyra(page)
   await page.goto("/")
-  await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 390)
+  await expectNoHorizontalOverflow(page, 390)
   const launcher = page.getByRole("button", { name: "Ask Myra" })
   await launcher.click()
   const dialog = page.getByRole("dialog", { name: "Myra support" })
@@ -172,9 +184,9 @@ test("mobile Myra contains focus and restores page interaction after close and r
   await expect(dialog).toHaveAttribute("aria-modal", "false")
   await expect(page.locator("main")).not.toHaveAttribute("inert", "")
   await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden")
-  await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 768)
+  await expectNoHorizontalOverflow(page, 768)
   await page.setViewportSize({ width: 1440, height: 900 })
-  await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 1440)
+  await expectNoHorizontalOverflow(page, 1440)
   expect(pageErrors).toEqual([])
 })
 
@@ -339,4 +351,37 @@ test("public support case verification omits browser cookies", async ({ page }) 
       expect.objectContaining({ path: "/api/myra/identity/confirm", credentials: "omit" }),
     ])
   )
+})
+
+test("Myra clears the entire final conversion section and returns above it", async ({ page }) => {
+  await mockMyra(page)
+  for (const width of [360, 390, 768, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto("/")
+    const launcher = page.locator("#myra-launcher")
+    await expect(launcher).toBeVisible()
+    await page.locator(".final-cta").scrollIntoViewIfNeeded()
+    await expect(launcher).not.toBeVisible()
+    if (width === 390 || width === 1440)
+      await page.screenshot({
+        path: `../../output/playwright/motion-myra-final/final-cta-${test.info().project.name}-${width}.png`,
+      })
+    await page
+      .getByRole("heading", { name: "The launch gate for AI-built apps." })
+      .scrollIntoViewIfNeeded()
+    await expect(launcher).toBeVisible()
+  }
+})
+
+test("closing Myra near the final conversion restores focus to the visible CTA", async ({
+  page,
+}) => {
+  await mockMyra(page)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto("/")
+  await page.getByRole("button", { name: "Ask Myra" }).click()
+  await page.locator(".final-cta").scrollIntoViewIfNeeded()
+  await expect(page.locator("#myra-launcher")).toHaveAttribute("data-conversion-visible", "")
+  await page.getByRole("button", { name: "Close Myra" }).click()
+  await expect(page.locator('[data-cta-id="final-cta-create-account"]')).toBeFocused()
 })

@@ -248,6 +248,9 @@ fn test_activate_envelope_v1_deserializes() {
     struct ActivateData {
         version: u8,
         license: crate::license::types::LicenseFile,
+        /// Present in the envelope; this test asserts the version and licence
+        /// identity, so the blob is deserialized but not read.
+        #[allow(dead_code)]
         blob: String,
         license_id: String,
     }
@@ -272,6 +275,9 @@ fn test_verify_envelope_v1_deserializes() {
         version: u8,
         valid: bool,
         revoked: bool,
+        /// Present in the envelope; this test asserts the version, validity and
+        /// revocation flags.
+        #[allow(dead_code)]
         update_eligible: bool,
     }
     let typed: ApiEnvelope<VerifyData> =

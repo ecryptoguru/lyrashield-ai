@@ -97,7 +97,7 @@ Confirm that incident contacts, credential-revocation steps, provider escalation
 
 When a finding is fixed, run a fresh check against the changed target. A code diff can show an intended repair, but it does not show the deployed behavior. Preserve the original condition, the fix commit, the retest method, applicable coverage, outcome and limitations.
 
-Do not call a missing result independently verified. A deterministic check that fully covered the original condition may support a retest-confirmed outcome. If the check was incomplete or the relevant path was not exercised, the honest result is inconclusive.
+Do not call a missing result retest-confirmed. A deterministic check that fully covered the original condition may support a retest-confirmed outcome. If the check was incomplete or the relevant path was not exercised, the honest result is inconclusive.
 
 The free browser-local [AI app security checklist](/tools/ai-app-security-checklist) helps document 11 launch controls and identify gaps. It does not inspect code, configuration, infrastructure or a live app. Checking a box does not verify implementation.
 

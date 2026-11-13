@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { EngineBudgetCeilingUsdSchema } from "@lyrashield/types"
 
 export interface ScanSubmissionScope {
   principalId: string
@@ -73,6 +74,15 @@ function normalizeForIdentity(value: unknown): unknown {
 
 export function scanRequestIdentity(payload: unknown): string {
   return JSON.stringify(normalizeForIdentity(payload))
+}
+
+/** Restore only the operator's request, never a workspace or deployment budget. */
+export function pendingEngineBudgetInput(submission: PendingScanSubmission | null): string {
+  if (!submission || submission.state !== "pending") return ""
+  const request = z
+    .object({ engineBudgetCeilingUsd: EngineBudgetCeilingUsdSchema.optional() })
+    .parse(JSON.parse(submission.requestIdentity))
+  return request.engineBudgetCeilingUsd === undefined ? "" : String(request.engineBudgetCeilingUsd)
 }
 
 export function readPendingScanSubmission(
@@ -193,6 +203,20 @@ export function clearPendingScanSubmission(
   }
   storage.removeItem(storageKey(scope))
   return true
+}
+
+/** Clear only on the explicit outcome marker; the expected key protects newer submissions. */
+export function clearPendingScanSubmissionIfNotSubmitted(
+  scope: ScanSubmissionScope,
+  idempotencyKey: string,
+  errorDetails: unknown,
+  storage?: ScanSubmissionStorage
+): boolean {
+  const result = z
+    .object({ operationOutcome: z.literal("OPERATION_NOT_SUBMITTED") })
+    .safeParse(errorDetails)
+  if (!result.success) return false
+  return clearPendingScanSubmission(scope, idempotencyKey, storage)
 }
 
 export function operationIdFromErrorDetails(details: unknown): string | null {

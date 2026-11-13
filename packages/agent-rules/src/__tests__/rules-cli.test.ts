@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
+import {
+  lstat,
+  mkdtemp,
+  readFile,
+  readlink,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { getAgent } from "@lyrashield/agent-registry"
@@ -112,5 +122,33 @@ describe("rules CLI core", () => {
     expect(remaining).toContain("User header")
     expect(remaining).toContain("User footer")
     expect(remaining).not.toContain("lyrashield:begin")
+  })
+
+  it("refuses to remove managed content through a symlinked rule file", async () => {
+    const agent = getAgent("claude-code")
+    await addRules(agent!, { projectRoot: tmp })
+    const rulePath = path.join(tmp, "CLAUDE.md")
+    const targetPath = path.join(tmp, "shared-rules.md")
+    const original = await readFile(rulePath, "utf-8")
+    await rm(rulePath)
+    await writeFile(targetPath, original, "utf-8")
+    await symlink(targetPath, rulePath)
+
+    await expect(removeRules(agent!, { projectRoot: tmp })).rejects.toThrow(/symlink/i)
+
+    expect((await lstat(rulePath)).isSymbolicLink()).toBe(true)
+    expect(await readlink(rulePath)).toBe(targetPath)
+    expect(await readFile(targetPath, "utf-8")).toBe(original)
+    expect((await readdir(tmp)).sort()).toEqual(["CLAUDE.md", "shared-rules.md"])
+  })
+
+  it("refuses to install rules through a symlinked project directory", async () => {
+    const agent = getAgent("claude-code")
+    const projectAlias = path.join(tmp, "project-alias")
+    await symlink(tmp, projectAlias)
+
+    await expect(addRules(agent!, { projectRoot: projectAlias })).rejects.toThrow(/symlink/i)
+
+    expect(await readdir(tmp)).toEqual(["project-alias"])
   })
 })

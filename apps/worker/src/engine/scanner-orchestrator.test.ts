@@ -150,12 +150,15 @@ vi.mock("./scanners/ai-app-security", () => ({
   }),
 }))
 
-vi.mock("fs/promises", () => ({
+vi.mock("fs/promises", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("fs/promises")>()),
   mkdir: vi.fn().mockResolvedValue(undefined),
 }))
 
 import { runScannerOrchestrator } from "./scanner-orchestrator"
 import { scanSca } from "./scanners/sca-scanner"
+import { scanSast } from "./scanners/sast-scanner"
+import { scanIac } from "./scanners/iac-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
@@ -221,6 +224,16 @@ describe("runScannerOrchestrator", () => {
     expect(result.agentConfigFindings).toEqual([])
     expect(result.mlSupplyChainFindings).toEqual([])
     expect(result.allFindings.length).toBe(3)
+    const critical = result.allFindings.filter((f) => f.normalizedSeverity === "CRITICAL")
+    const high = result.allFindings.filter((f) => f.normalizedSeverity === "HIGH")
+    expect(critical.length).toBe(1) // github token
+    expect(high.length).toBe(2) // xss + sca
+
+    expect(result.stats.total).toBe(3)
+    expect(result.stats.bySeverity["CRITICAL"]).toBe(1)
+    expect(result.stats.bySeverity["HIGH"]).toBe(2)
+
+    expect(result.secretsFindings[0]?.scannerSource).toBe("secrets")
   })
 
   it("resolves and queries exact advisory packages once for SCA and AI-03", async () => {
@@ -418,41 +431,6 @@ describe("runScannerOrchestrator", () => {
     expect(scanUrl).not.toHaveBeenCalled()
   })
 
-  it("normalizes all findings with correct severity", async () => {
-    const result = await runScannerOrchestrator({
-      scanId: "scan-1",
-      workspaceId: "ws-1",
-      targetId: "target-1",
-      target: { id: "target-1", type: "REPO", name: "Test" },
-      goal: "TEST_APP",
-      mode: "STANDARD",
-      engineFindings,
-      workspaceDir: sourceCheckout,
-    })
-
-    const critical = result.allFindings.filter((f) => f.normalizedSeverity === "CRITICAL")
-    const high = result.allFindings.filter((f) => f.normalizedSeverity === "HIGH")
-    expect(critical.length).toBe(1) // github token
-    expect(high.length).toBe(2) // xss + sca
-  })
-
-  it("calculates stats correctly", async () => {
-    const result = await runScannerOrchestrator({
-      scanId: "scan-1",
-      workspaceId: "ws-1",
-      targetId: "target-1",
-      target: { id: "target-1", type: "REPO", name: "Test" },
-      goal: "TEST_APP",
-      mode: "STANDARD",
-      engineFindings,
-      workspaceDir: sourceCheckout,
-    })
-
-    expect(result.stats.total).toBe(3)
-    expect(result.stats.bySeverity["CRITICAL"]).toBe(1)
-    expect(result.stats.bySeverity["HIGH"]).toBe(2)
-  })
-
   it("handles empty engine findings", async () => {
     const result = await runScannerOrchestrator({
       scanId: "scan-1",
@@ -525,6 +503,69 @@ describe("runScannerOrchestrator", () => {
       "warning",
       "SCA/secrets/AI app security skipped — validated source checkout unavailable for repository target",
       expect.any(Object)
+    )
+  })
+
+  it("marks the URL detector as a coverage gap when a URL target has no resolved profile", async () => {
+    const result = await runScannerOrchestrator({
+      scanId: "scan-url-no-profile",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "WEB_APP", name: "Web app", url: "https://example.test" },
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      engineFindings: [],
+    })
+
+    // The detector never ran — a silent skip would leave the url coverage
+    // receipt COMPLETED for a scanner that produced nothing.
+    expect(scanUrl).not.toHaveBeenCalled()
+    expect(result.urlFindings).toEqual([])
+    expect(result.coverageIssues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ scanner: "url", status: "unsupported" })])
+    )
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-url-no-profile",
+      "scanner",
+      "warning",
+      "URL scanner skipped — no resolved profile for this target",
+      expect.any(Object)
+    )
+  })
+
+  it("marks the URL detector as a coverage gap when a resolved profile has no target URL", async () => {
+    const result = await runScannerOrchestrator({
+      scanId: "scan-profile-no-url",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "WEB_APP", name: "Web app" },
+      goal: "TEST_APP",
+      mode: "SAFE",
+      engineFindings: [],
+      urlProfile: {
+        id: "WEB_APP_SAFE",
+        targetType: "WEB_APP",
+        mode: "SAFE",
+        label: "Surface Review",
+        description: "...",
+        maxDocuments: 1,
+        maxAssets: 6,
+        maxDepth: 0,
+        maxTotalBytes: 8 * 1024 * 1024,
+        maxResponseBytes: 3 * 1024 * 1024,
+        maxConcurrency: 3,
+        maxWallTimeMs: 60_000,
+        maxOperations: 0,
+        maxMethodProbes: 0,
+        maxOriginProbes: 0,
+        allowedMethods: ["GET"],
+        requiresApiSpec: false,
+      },
+    })
+
+    expect(scanUrl).not.toHaveBeenCalled()
+    expect(result.coverageIssues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ scanner: "url", status: "unsupported" })])
     )
   })
 
@@ -755,21 +796,6 @@ describe("runScannerOrchestrator", () => {
     ).rejects.toThrow("Scanner phase cancelled")
   })
 
-  it("tags detector provenance so secret findings receive the score cap", async () => {
-    const result = await runScannerOrchestrator({
-      scanId: "scan-1",
-      workspaceId: "ws-1",
-      targetId: "target-1",
-      target: { id: "target-1", type: "REPO", name: "Test" },
-      goal: "TEST_APP",
-      mode: "STANDARD",
-      engineFindings,
-      workspaceDir: sourceCheckout,
-    })
-
-    expect(result.secretsFindings[0]?.scannerSource).toBe("secrets")
-  })
-
   it("keeps higher severity finding on cross-source dedupeKey collision", async () => {
     // Both engine and URL scanner produce a finding with the same dedupeKey.
     // Engine finding is LOW, URL scanner finding is HIGH.
@@ -827,3 +853,43 @@ describe("runScannerOrchestrator", () => {
     }
   })
 })
+
+it.each(["STANDARD", "DEEP"])(
+  "carries actual PHP scanner findings and scoped discovery through %s orchestration",
+  async (mode) => {
+    const fs = await vi.importActual<typeof import("fs/promises")>("fs/promises")
+    const { tmpdir } = await import("node:os")
+    const { join } = await import("node:path")
+    const directory = await fs.mkdtemp(join(tmpdir(), "php-orchestrator-"))
+    try {
+      await fs.writeFile(join(directory, "Dockerfile"), "FROM php:8.4.26-fpm\nUSER www-data\n")
+      await fs.writeFile(join(directory, "index.php"), "<?php system($_GET['command']);")
+      const sast =
+        await vi.importActual<typeof import("./scanners/sast-scanner")>("./scanners/sast-scanner")
+      const iac =
+        await vi.importActual<typeof import("./scanners/iac-scanner")>("./scanners/iac-scanner")
+      vi.mocked(scanSast).mockImplementationOnce(sast.scanSast)
+      vi.mocked(scanIac).mockImplementationOnce(iac.scanIac)
+      const result = await runScannerOrchestrator({
+        scanId: "scan-php",
+        workspaceId: "ws-1",
+        targetId: "target-php",
+        target: { id: "target-php", type: "REPO", name: "PHP" },
+        goal: "TEST_APP",
+        mode,
+        engineFindings: [],
+        workspaceDir: directory,
+      })
+      expect(result.sastFindings).toContainEqual(
+        expect.objectContaining({ finding_class: "php_source_flow" })
+      )
+      expect(result.iacFindings).toContainEqual(expect.objectContaining({ cve: "CVE-2026-109618" }))
+      expect(result.scannerDiscovery?.iac?.php).toMatchObject({
+        scopes: [{ directory: ".", hasExactRuntimeIdentity: true }],
+        incomplete: false,
+      })
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  }
+)

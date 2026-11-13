@@ -1,3 +1,5 @@
+import { confirmScanCapacityStopped } from "../../billing/src/usage/capacity"
+import { releaseStoppedScanSlot } from "./scan-slot"
 import { createHash, randomUUID } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { PrismaPg } from "@prisma/adapter-pg"
@@ -200,8 +202,16 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
 
   it("creates exactly one scan for concurrent deliveries and resumes it after queue failure", async () => {
     const guard = vi.fn(async () => {})
+    const options = {
+      workspaceId: id,
+      branchName: branch,
+      prNumber: 1,
+      assertRetestAllowed: guard,
+      repoFullName: undefined,
+      assertRetestWorkerAvailable: async () => {},
+    }
     const outcomes = await Promise.all(
-      Array.from({ length: 5 }, () => handleFixPrMergedAndReevaluate(id, branch, 1, guard))
+      Array.from({ length: 5 }, () => handleFixPrMergedAndReevaluate(options))
     )
     expect(outcomes[0]?.retestScanId).toBeTruthy()
     expect(outcomes.every((outcome) => outcome?.retestScanId === outcomes[0]?.retestScanId)).toBe(
@@ -209,14 +219,16 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
     )
     expect(await owner.scan.count({ where: { workspaceId: id, triggerType: "retest" } })).toBe(1)
     expect(await owner.retest.count({ where: { workspaceId: id, findingId } })).toBe(1)
-    expect((await handleFixPrMergedAndReevaluate(id, branch, 1, guard))?.retestScanId).toBe(
+    expect((await handleFixPrMergedAndReevaluate(options))?.retestScanId).toBe(
       outcomes[0]?.retestScanId
     )
     await owner.scan.update({
       where: { id: outcomes[0]!.retestScanId },
       data: { status: "COMPLETED" },
     })
-    expect(await handleFixPrMergedAndReevaluate(id, branch, 1, guard)).toBeNull()
+    await confirmScanCapacityStopped(id, outcomes[0]!.retestScanId, true)
+    await releaseStoppedScanSlot(id, outcomes[0]!.retestScanId)
+    expect(await handleFixPrMergedAndReevaluate(options)).toBeNull()
   })
   it("persists PARTIAL elapsed minutes under RLS without charging a failed outcome", async () => {
     // Settlement resolves the sponsor from the persisted Scan.createdById —
@@ -238,6 +250,7 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
         workspaceId: id,
         accountId: id,
         currentPlan: "LAUNCH_ASSURANCE",
+        status: "active",
         currentPeriodStart: new Date(0),
         spendLimitCents: 15,
       },
@@ -394,14 +407,28 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
       )
     try {
       await expect(
-        handleFixPrMergedAndReevaluate(id, recoveryBranch, 2, async () => {})
+        handleFixPrMergedAndReevaluate({
+          workspaceId: id,
+          branchName: recoveryBranch,
+          prNumber: 2,
+          assertRetestAllowed: async () => {},
+          repoFullName: undefined,
+          assertRetestWorkerAvailable: async () => {},
+        })
       ).rejects.toThrow("late transaction failure")
     } finally {
       spy.mockRestore()
     }
     expect(await owner.scan.count({ where: { workspaceId: id } })).toBe(count)
     expect(await owner.retest.count({ where: { workspaceId: id, findingId: finding.id } })).toBe(0)
-    const recovered = await handleFixPrMergedAndReevaluate(id, recoveryBranch, 2, async () => {})
+    const recovered = await handleFixPrMergedAndReevaluate({
+      workspaceId: id,
+      branchName: recoveryBranch,
+      prNumber: 2,
+      assertRetestAllowed: async () => {},
+      repoFullName: undefined,
+      assertRetestWorkerAvailable: async () => {},
+    })
     expect(recovered?.retestScanId).toBeTruthy()
     expect(await owner.scan.count({ where: { workspaceId: id } })).toBe(count + 1)
     await owner.scan.update({
@@ -659,7 +686,14 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
           coverageStatement: {},
           nonCoverage: {},
           blockingReasons: [],
-          evidenceSummary: {},
+          evidenceSummary: {
+            detected: 0,
+            validated: 0,
+            verified: 0,
+            retestConfirmed: 0,
+            inconclusive: 0,
+            blockingUnverified: 0,
+          },
           staleness: {},
           inputChecksum: "fixture",
           verdictChecksum: "fixture",
@@ -697,7 +731,14 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
         coverageStatement: {},
         nonCoverage: {},
         blockingReasons: [],
-        evidenceSummary: {},
+        evidenceSummary: {
+          detected: 0,
+          validated: 0,
+          verified: 0,
+          retestConfirmed: 0,
+          inconclusive: 0,
+          blockingUnverified: 0,
+        },
         staleness: {},
         inputChecksum: "fixture",
         verdictChecksum: "fixture",
@@ -709,8 +750,8 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
         evaluatedAt: new Date(now - 2 * 60 * 60 * 1000 - 4000),
       },
     })
-    // A scan created AFTER the assessment completed: the newer-attempt check
-    // must fail the drifted target's verdict closed.
+    // A scan started earlier but ended after the assessment: it still makes
+    // the earlier verdict unavailable.
     await owner.scan.create({
       data: {
         workspaceId: id,
@@ -719,7 +760,8 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
         mode: "SAFE",
         status: "COMPLETED",
         createdById: id,
-        endedAt: new Date(),
+        createdAt: new Date(now - 3 * 60 * 60 * 1000),
+        endedAt: new Date(now),
       },
     })
 
@@ -742,7 +784,14 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
         coverageStatement: {},
         nonCoverage: {},
         blockingReasons: [],
-        evidenceSummary: {},
+        evidenceSummary: {
+          detected: 0,
+          validated: 0,
+          verified: 0,
+          retestConfirmed: 0,
+          inconclusive: 0,
+          blockingUnverified: 0,
+        },
         staleness: {},
         inputChecksum: "fixture",
         verdictChecksum: "fixture",
@@ -787,21 +836,23 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
       "ASSESSMENT_UNAVAILABLE",
     ])
 
-    // Clean target: read mode applies the assessment's own identity, READY.
+    // The synthetic snapshot names no stored scan. Its claimed READY must
+    // stay unavailable even though its policy and identity otherwise match.
     const verdict = batch.get(cleanTarget.id)
     expect(verdict).toMatchObject({
       schemaVersion: "lyrashield-gate-response/2.0.0",
-      state: "READY",
+      state: "INSUFFICIENT_EVIDENCE",
       applicability: {
-        applicable: true,
+        applicable: false,
         evaluatedIdentity: { kind: "COMMIT", value: commit },
       },
     })
-    expect(verdict?.applicability.reasons).toEqual([])
+    expect(verdict?.applicability.reasons.map((reason) => reason.code)).toContain(
+      "UNTRUSTED_GATE_EVIDENCE"
+    )
 
-    // Drifted target: a scan was created after its assessment completed, so
-    // the set-wide newer-attempt join must fail it closed (the drift check
-    // the batch exists to preserve).
+    // Drifted target: the earlier-started scan ended after the assessment,
+    // so the set-wide newer-attempt check must fail it closed.
     const drifted = batch.get(driftedTarget.id)
     expect(drifted?.state).toBe("INSUFFICIENT_EVIDENCE")
     expect(drifted?.applicability.reasons.map((reason) => reason.code)).toContain(

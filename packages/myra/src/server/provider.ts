@@ -15,7 +15,7 @@ import { sanitizeInstructionInput } from "@lyrashield/security"
 import { sanitizeLinkHref, sanitizeMarkdown } from "../sanitize"
 import { MyraServiceError } from "./errors"
 
-export interface ProviderMessage {
+interface ProviderMessage {
   role: "user" | "assistant" | "tool"
   content: string
 }
@@ -361,7 +361,7 @@ function sanitizeContextValue(value: unknown, depth = 0): unknown {
   return undefined
 }
 
-export function serializeModelContext(context: ModelGenerateInput["context"]): string | null {
+function serializeModelContext(context: ModelGenerateInput["context"]): string | null {
   if (!context) return null
   const sanitized = sanitizeContextValue(context) as Record<string, unknown>
   let serialized = JSON.stringify(sanitized)
@@ -388,7 +388,7 @@ export const MYRA_LUNA_USD_PER_MILLION = {
   output: 0.5,
 } as const
 
-export function calculateLunaCostUsd(
+function calculateLunaCostUsd(
   inputTokens: number,
   cachedInputTokens: number,
   cacheWriteInputTokens: number,

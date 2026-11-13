@@ -65,6 +65,7 @@ interface TurnstileGlobal {
     container: HTMLElement,
     options: {
       sitekey: string
+      action?: string
       size?: "normal" | "compact" | "flexible"
       appearance?: "always" | "execute" | "interaction-only"
       execution?: "auto" | "execute"
@@ -120,7 +121,10 @@ function loadTurnstile(): Promise<TurnstileGlobal | undefined> {
     )
     script.onload = () => {
       clearTimeout(timer)
-      resolve(w.turnstile)
+      // A load event alone does not establish that the API initialized.
+      // Clear a failed result so a later interaction can retry the script.
+      if (w.turnstile) resolve(w.turnstile)
+      else fail()
     }
     script.onerror = () => {
       clearTimeout(timer)
@@ -201,6 +205,7 @@ async function requestTurnstileToken(): Promise<string | undefined> {
         const timer = setTimeout(() => settle(undefined), TURNSTILE_TIMEOUT_MS)
         widgetId = turnstile.render(host, {
           sitekey,
+          action: "lyrashield-public",
           size: "flexible",
           appearance: "interaction-only",
           execution: "execute",

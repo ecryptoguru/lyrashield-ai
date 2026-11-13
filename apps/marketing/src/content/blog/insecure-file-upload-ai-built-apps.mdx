@@ -2,6 +2,7 @@
 title: Insecure File Upload in AI-Built Apps
 description: Why AI generated file upload code fails open, what attackers abuse and how to verify type size and storage safely in production.
 pubDate: 2026-09-25
+updatedDate: 2026-10-24
 author: lyrashield-team
 tags: [vibe-coding-security, web-security, verification]
 draft: false
@@ -37,7 +38,9 @@ If you are reviewing an AI built app today, look for routes that call `fs.writeF
 
 The exploitation is not theoretical. Attackers chain small gaps.
 
-One pattern is executable upload. An app allows images but only checks extension. An attacker uploads `shell.php.png` or `avatar.svg` containing script. If the server stores it under `/public/uploads/` and serves it with a sniffed content type, the file can execute or trigger stored XSS when viewed. SVG is especially risky because it can contain JavaScript.
+One pattern is executable upload. An app accepts `shell.php.png` because it checks only extensions. PHP executes only when a server handler or application processing path interprets the upload; MIME sniffing alone cannot execute PHP on the server. The [PHP Apache reference](https://www.php.net/manual/en/install.unix.apache2.php) warns about double-extension handler mappings. An active SVG served to a browser creates a separate stored XSS risk.
+
+Upload validation cannot patch PHP itself. Review [PHP2Shell runtime replacement](/blog/patch-php2shell-docker-fpm-apache) and the separate [session upload progress conditions](/blog/cve-2026-115560-session-upload-progress) to assess interpreter and request-startup configuration risks.
 
 Another pattern is path traversal via filename. AI code often uses `path.join(uploadDir, req.file.originalname)` without sanitization. An upload named `../../.env` or `..%2f..%2fconfig.js` can escape the intended folder. The result overlaps with [path traversal in generated code](/blog/path-traversal-generated-code), which is why restricting filename and folder handling matters.
 

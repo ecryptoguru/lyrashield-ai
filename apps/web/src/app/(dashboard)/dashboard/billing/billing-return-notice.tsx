@@ -68,7 +68,7 @@ export function BillingReturnNotice({
         <div>
           {state.kind === "cancelled" ? (
             <>
-              <p className="font-medium">The provider returned a canceled checkout status.</p>
+              <p className="font-medium">The provider returned a cancelled checkout status.</p>
               <p>Your current account state remains authoritative.</p>
             </>
           ) : state.kind === "account-current" ? (

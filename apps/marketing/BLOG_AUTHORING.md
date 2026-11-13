@@ -25,7 +25,7 @@ Do not publish an ad hoc article outside the manifest. The twelve defined releas
 ## Non-negotiable claim rules
 
 1. Never mention the upstream engine or publish pricing, customer, benchmark, accuracy, or false-positive claims without approved evidence.
-2. Keep detected, independently verified, retest-confirmed, and inconclusive states distinct. Confidence is triage metadata, not proof.
+2. Keep detected, retest-confirmed and inconclusive states distinct. Confidence is triage metadata, not proof.
 3. Do not imply automatic PR execution. A fix proposal remains approval-bound, and PR execution remains fail-closed until a server-generated patch is bound to the exact approval. Describe this as **"approval-gated"** or **"not unattended fixes"** — never "automatic fixes" or "automatic PR". Both phrases are hard-blocked by `PROHIBITED_CLAIMS` in `apps/marketing/scripts/blog-validation-lib.mjs`, and the regex has no concept of negation: a disclaimer sentence like _"proposals requiring review, not automatic fixes"_ still trips it, because the phrase itself is present. Write around the phrase entirely rather than trying to negate it.
 4. Describe the Lite Check as a bounded passive review of a public surface. It does not authenticate, fuzz, exploit, prove RLS, or cover the full application.
 5. Never invent incidents, scans, customers, quotes, metrics, first-person experience, or source conclusions.
@@ -47,7 +47,7 @@ Before drafting, the brief must record:
 - the assigned image ID and its narrative purpose;
 - risky claims, limitations, and statements that require explicit hedging.
 
-The research record must map each material claim to a source, include the access date, prefer specifications and first-party documentation, and mark unresolved conflicts. Supporting articles require at least three credible sources, including at least two official or primary sources. Authority articles require at least eight credible sources and should generally run 2,500–3,000 words; supporting articles should generally run 1,200–1,500 words. Length never substitutes for value.
+The research record must map each material claim to a source, include the access date, prefer specifications and first-party documentation, and mark unresolved conflicts. Supporting articles require at least three credible sources, including at least two official or primary sources. Authority articles require at least eight credible sources and should generally run 2,500–3,000 words; supporting articles should generally run 1,200–1,500 words. These ranges and the program's `targetWords` are editorial recommendations, not minimum or maximum validation limits. Use the length needed to answer the reader's question; length never substitutes for value.
 
 ## Frontmatter contract
 

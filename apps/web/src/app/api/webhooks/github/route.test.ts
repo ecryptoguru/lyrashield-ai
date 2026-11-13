@@ -213,6 +213,28 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     enqueueScanJob.mockResolvedValue("job-1")
   })
 
+  it("carries deterministic recovery proof only after signature verification", async () => {
+    const key = "a".repeat(64)
+    const body = `<!-- lyrashield-fix:${key} -->`
+    const payload = {
+      head: { ref: `lyrashield/fix-${key}`, repo: { full_name: "test/repo" } },
+      body,
+    }
+    verifyWebhookSignature.mockReturnValueOnce(false)
+    expect((await POST(pullRequestRequest(payload) as never)).status).toBe(401)
+    expect(handleMerged).not.toHaveBeenCalled()
+    expect((await POST(pullRequestRequest(payload) as never)).status).toBe(200)
+    expect(handleMerged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        repoFullName: "test/repo",
+        branchName: `lyrashield/fix-${key}`,
+        prNumber: 7,
+        recoveryIdentity: { headRepoFullName: "test/repo", body },
+      })
+    )
+  })
+
   it("enqueues exactly one retest scan for a trusted merge", async () => {
     const response = await POST(pullRequestRequest() as never)
     expect(response.status).toBe(200)
@@ -255,13 +277,8 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     // The route passes an entitlement callback into the loop-closure handler;
     // the mock must exercise it the way the real handler does.
     handleMerged.mockImplementation(
-      async (
-        _ws: unknown,
-        _ref: unknown,
-        _pr: unknown,
-        ensure: (mode: string) => Promise<void>
-      ) => {
-        await ensure("STANDARD")
+      async (options: { assertRetestAllowed: (mode: string) => Promise<void> }) => {
+        await options.assertRetestAllowed("STANDARD")
         return null
       }
     )

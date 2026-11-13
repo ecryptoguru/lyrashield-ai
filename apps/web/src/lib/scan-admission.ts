@@ -9,46 +9,44 @@
  * ref resolution, queue submission or audit write belongs here; side effects
  * stay on POST.
  */
-import { prisma } from "@lyrashield/db"
+import { findCurrentDomainProof, prisma } from "@lyrashield/db"
 import type { ScanMode } from "@lyrashield/db"
-import { resolveScanProfile, resolveTargetScanMode } from "@lyrashield/types"
-import { normalizeDomainForProof } from "@lyrashield/security"
+import {
+  resolveScanProfile,
+  resolveUrlReviewMode,
+  resolveUrlReviewAvailability,
+  TARGET_RELAY_UNAVAILABLE_MESSAGE,
+} from "@lyrashield/types"
 import { resolveAccountBilling, resolveWorkspaceScanSponsor } from "@lyrashield/billing"
-import { env, evaluateAuthAssessmentAdmission } from "@lyrashield/config"
+import { isTargetRelayWorkerAvailable } from "@lyrashield/integrations"
 import { getManualScanOptions, type ManualScanOption } from "./scan-presets"
 
 const URL_TARGET_TYPES = new Set(["WEB_APP", "API"])
 
-export type UrlReviewMode =
-  { ok: true; engineBacked: boolean } | { ok: false; code: string; reason: string }
+export { TARGET_RELAY_UNAVAILABLE_MESSAGE }
 
-/**
- * Whether a URL/API review tier is engine-backed — the fact that decides the
- * free-URL and domain-verification consent gates. Non-URL targets are never
- * engine-backed. Pure: mirrors the shared resolveTargetScanMode policy.
- */
-export function resolveUrlReviewMode(input: {
-  targetType: string
-  mode: string
-  hasApiSpec: boolean
-}): UrlReviewMode {
-  if (!URL_TARGET_TYPES.has(input.targetType)) {
-    return { ok: true, engineBacked: false }
-  }
-  const resolved = resolveTargetScanMode({
-    targetType: input.targetType,
-    mode: input.mode,
-    hasApiSpec: input.hasApiSpec,
-  })
-  if (!resolved.ok) {
-    return { ok: false, code: resolved.code, reason: resolved.reason }
-  }
-  return {
-    ok: true,
-    engineBacked:
-      resolved.profile !== null &&
-      resolveScanProfile({ targetType: input.targetType, mode: input.mode }).usesAi,
-  }
+/** Delegated OAuth grants currently carry no policy selection scope. */
+export function assertSelectableScanPolicy(session: { oauth?: unknown }, policyId?: string): void {
+  if (session.oauth && policyId !== undefined) throw new Error("FORBIDDEN")
+}
+
+export async function getTargetRelayAvailability(targetType: string): Promise<boolean> {
+  return !URL_TARGET_TYPES.has(targetType) || (await isTargetRelayWorkerAvailable())
+}
+
+export { findCurrentDomainProof, resolveUrlReviewMode }
+
+/** Shared worker/API admission with an advisory snapshot when already fetched. */
+export async function resolveAvailableUrlReview(
+  input: Parameters<typeof resolveUrlReviewMode>[0],
+  relayAvailable?: boolean
+) {
+  const resolved = resolveUrlReviewMode(input)
+  if (!resolved.ok || !resolved.engineBacked) return resolved
+  return resolveUrlReviewAvailability(
+    resolved,
+    relayAvailable ?? (await getTargetRelayAvailability(input.targetType))
+  )
 }
 
 export type CanonicalReviewMode =
@@ -98,24 +96,6 @@ export async function resolveSponsorScanPlan(workspaceId: string, userId: string
  * target's normalized domain. Returns the normalized domain alongside so the
  * caller can build remediation hints without re-deriving it. Read-only.
  */
-export async function findCurrentDomainProof(
-  workspaceId: string,
-  url: string | null | undefined
-): Promise<{ domain: string | null; verified: boolean }> {
-  const domain = url ? normalizeDomainForProof(url) : null
-  if (!domain) return { domain, verified: false }
-  const proof = await prisma.targetDomainVerification.findFirst({
-    where: {
-      workspaceId,
-      domain,
-      status: "VERIFIED",
-      expiresAt: { gt: new Date() },
-    },
-    select: { id: true },
-  })
-  return { domain, verified: Boolean(proof) }
-}
-
 /**
  * The policy row a scan admission would consult: the explicit policyId when
  * given, else the workspace's default policy. Read-only.
@@ -125,23 +105,44 @@ export async function findScanPolicy(workspaceId: string, policyId?: string) {
     where: policyId
       ? { id: policyId, workspaceId, deletedAt: null }
       : { workspaceId, name: "Default Policy", deletedAt: null },
-    orderBy: policyId ? undefined : { createdAt: "asc" },
-    select: { id: true, destructiveTestsAllowed: true },
+    orderBy: policyId ? undefined : [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      scanWindow: true,
+      blockedPaths: true,
+      allowedDomains: true,
+      rateLimit: true,
+      networkEgressPolicy: true,
+      destructiveTestsAllowed: true,
+      approvalRequired: true,
+      maxBudgetUsd: true,
+      maxDurationMinutes: true,
+      piiRedactionEnabled: true,
+      evidenceRetentionDays: true,
+      updatedAt: true,
+    },
   })
 }
 
 /**
- * Deployment-level authenticated-assessment admission — the same flag +
- * per-workspace/target allowlist gate POST evaluates. Pure (env read).
+ * Deployment-level authenticated-assessment admission — the same gate POST and
+ * the eligibility preflight evaluate. Authenticated assessments are deferred
+ * from the launch offering: new admission is refused at this shared boundary
+ * while the recorded rows and the worker's execution-time re-check are left in
+ * place so in-flight work is never silently dropped. Pure.
  */
 export function authAssessmentAdmission(workspaceId: string, targetId: string) {
-  return evaluateAuthAssessmentAdmission({
-    enabled: env.LYRASHIELD_AUTH_ASSESSMENT_ENABLED === "1",
-    allowlist: env.LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST,
-    workspaceId,
-    targetId,
-  })
+  void workspaceId
+  void targetId
+  return { allowed: false, reason: "flag_off" } as const
 }
+
+/**
+ * Scheduled scans are deferred from the launch offering. New schedule creation
+ * and enabling an existing one are refused here; stored schedule rows are
+ * preserved and existing queued/in-flight work is reconciled by the worker.
+ */
+export const SCHEDULE_ADMISSION_ENABLED = false
 
 /**
  * The bounded list of review options a target offers — the same pure option

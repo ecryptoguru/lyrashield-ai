@@ -43,6 +43,16 @@ jobs:
       - name: Verify published MCP package
         run: node scripts/verify-published-mcp.mjs
 
+      # Restore the WASI build validate.yml already produced for this revision
+      # rather than recompiling it. The shared key matches validate.yml, so a
+      # green validation run leaves the compiled artifacts here. The build still
+      # runs when the cache misses, so this job never skips its own verification.
+      - name: Cache Zed WASI build
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          shared-key: zed-extension-wasm
+          workspaces: zed-extension
+
       - name: Build Zed extension
         run: |
           cargo fmt --check

@@ -1,13 +1,13 @@
 "use client"
 
 import { useCallback, useState } from "react"
-import { Button, Card, CardContent, Badge } from "@lyrashield/ui"
-import { Check, X, ShieldCheck, AlertCircle, Activity } from "lucide-react"
+import { Card, CardContent, Badge } from "@lyrashield/ui"
+import { ShieldCheck, AlertCircle, Activity } from "lucide-react"
 import Link from "next/link"
 import { apiPost } from "@/lib/api-client"
 import { type ApprovalListItem } from "@lyrashield/db"
-import { InlineConfirm } from "@/components/ui/inline-confirm"
-import { formatDateTime } from "@/lib/date-format"
+import { ApprovalDecisionControls } from "./approval-decision-controls"
+import { formatDateTimeUtc } from "@/lib/date-format"
 import { LocalTime } from "@/components/local-time"
 import type { AgentOperationListItem } from "@lyrashield/db"
 
@@ -27,7 +27,17 @@ const OPERATION_STATUS_VARIANT: Record<
 }
 
 /** Human action label for a recorded operation ("report.create" -> "Report created"). */
-function operationLabel(operationName: string): string {
+function operationLabel(operationName: string, pending = false): string {
+  if (pending) {
+    const requestLabels: Record<string, string> = {
+      "fix_pr.open": "Open a Fix PR",
+      "scan.create": "Start a scan",
+      "report.create": "Create a report",
+      "retest.create": "Start a retest",
+      "fix_proposal.create": "Create a fix proposal",
+    }
+    if (requestLabels[operationName]) return requestLabels[operationName]!
+  }
   const verb: Record<string, string> = {
     "scan.create": "Scan started",
     "report.create": "Report created",
@@ -70,6 +80,10 @@ function asObject(value: unknown): Record<string, unknown> {
 
 interface ApprovalsClientProps {
   workspaceId: string
+  /** Validated pending-approval cursor; independent of the operation page. */
+  pendingCursor?: string | null
+  canDecide?: boolean
+  canApproveFix?: boolean
   approvals: ApprovalListItem[]
   hasProposals: boolean
   /** Recent durable operations (W1-09): status, result, and recovery. */
@@ -86,12 +100,34 @@ function toApprovalItem(approval: ApprovalListItem): ApprovalItem {
 function approvalSummary(actionName: string, input: Record<string, unknown>): string {
   const title = input.title ?? input.findingTitle ?? input.targetName
   if (typeof title === "string") return title as string
-  const actionLabel = actionName.replace(/[-_]/g, " ")
+  if (actionName === "fix_pr.open")
+    return "Review the server-generated patch before opening a Fix PR"
+  const actionLabel = actionName.replace(/[._-]/g, " ")
   return actionLabel.charAt(0).toUpperCase() + actionLabel.slice(1)
 }
 
-export function ApprovalsClient({
+function ApprovalExpiry({ expiresAt }: { expiresAt: ApprovalItem["expiresAt"] }) {
+  return (
+    <p className="text-muted-foreground mt-1 text-xs">
+      Expires {expiresAt ? <LocalTime value={expiresAt} withTime /> : "Never"}
+    </p>
+  )
+}
+
+/** New pending pages reset their local rows; operation-only navigation retains decisions. */
+export function ApprovalsClient(props: ApprovalsClientProps) {
+  return (
+    <ApprovalPageState
+      key={JSON.stringify([props.workspaceId, props.pendingCursor ?? null])}
+      {...props}
+    />
+  )
+}
+
+function ApprovalPageState({
   workspaceId,
+  canDecide = false,
+  canApproveFix = false,
   approvals,
   hasProposals,
   operations = [],
@@ -187,7 +223,7 @@ export function ApprovalsClient({
                           {operationLabel(operation.operationName)}
                         </p>
                         <p className="text-muted-foreground mt-1 text-xs">
-                          {formatDateTime(operation.createdAt)}
+                          {formatDateTimeUtc(operation.createdAt)}
                           {operation.error ? ` · ${operation.error}` : ""}
                           {resultHref ? (
                             <>
@@ -219,10 +255,9 @@ export function ApprovalsClient({
       )}
       {items.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold tracking-tight">Legacy approvals</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Pending approvals</h2>
           <p className="text-muted-foreground text-sm">
-            These came from credentials created before automatic authorization. New connections do
-            not create these; approve or deny each exact input below.
+            Review each pending action and its exact input before a decision.
           </p>
           <div className="mt-3 grid gap-3">
             {items.map((approval) => (
@@ -234,7 +269,7 @@ export function ApprovalsClient({
                 <CardContent className="flex flex-wrap items-start justify-between gap-4 p-4">
                   <div className="min-w-0 flex-1 basis-64">
                     <p className="text-xs font-medium tracking-wide uppercase">
-                      {operationLabel(approval.actionName)}
+                      {operationLabel(approval.actionName, true)}
                     </p>
                     <p className="mt-1 wrap-break-word font-medium">
                       {approvalSummary(approval.actionName, approval.input)}
@@ -259,30 +294,16 @@ export function ApprovalsClient({
                         ))}
                       </dl>
                     </details>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      Expires{" "}
-                      {approval.expiresAt ? <LocalTime value={approval.expiresAt} /> : "Never"}
-                    </p>
+                    <ApprovalExpiry expiresAt={approval.expiresAt} />
                   </div>
-                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDeny(approval)}
-                      disabled={pending[approval.id]}
-                    >
-                      <X className="size-4" />
-                      Deny
-                    </Button>
-                    <InlineConfirm
-                      triggerLabel="Approve"
-                      triggerIcon={<Check className="size-4" />}
-                      disabled={pending[approval.id]}
-                      message="Approve this exact action input?"
-                      confirmLabel="Approve action"
-                      onConfirm={() => handleApprove(approval)}
-                    />
-                  </div>
+                  <ApprovalDecisionControls
+                    approval={approval}
+                    canDecide={canDecide}
+                    canApproveFix={canApproveFix}
+                    pending={Boolean(pending[approval.id])}
+                    onDeny={() => handleDeny(approval)}
+                    onApprove={() => handleApprove(approval)}
+                  />
                 </CardContent>
               </Card>
             ))}

@@ -230,6 +230,50 @@ export const ScanExecutionPlanSchema = z
 
 export type ScanExecutionPlan = z.infer<typeof ScanExecutionPlanSchema>
 
+/** Read-only provenance view. Budgets and authorization handles stay server-side. */
+export const PublicScanExecutionPlanSchema = z
+  .object({
+    version: ScanExecutionPlanSchema.shape.version,
+    workflow: ScanWorkflowSchema,
+    targetType: ScanPlanTargetTypeSchema,
+    depth: ScanPlanDepthSchema,
+    profileId: ScanExecutionPlanSchema.shape.profileId,
+    scope: ScanPlanScopeSchema,
+    source: ScanExecutionPlanSchema.shape.source,
+    limits: ScanPlanLimitsSchema.omit({ maxBudgetUsd: true }),
+    capabilities: ScanExecutionPlanSchema.shape.capabilities,
+    attachmentIds: ScanExecutionPlanSchema.shape.attachmentIds,
+    authorizationRequired: z.boolean(),
+  })
+  .strict()
+
+export function buildPublicScanExecutionPlan(raw: unknown) {
+  const parsed = ScanExecutionPlanSchema.safeParse(raw)
+  if (!parsed.success) return null
+  const plan = parsed.data
+  return PublicScanExecutionPlanSchema.parse({
+    version: plan.version,
+    workflow: plan.workflow,
+    targetType: plan.targetType,
+    depth: plan.depth,
+    profileId: plan.profileId,
+    scope: plan.scope,
+    source: plan.source,
+    limits: {
+      maxDurationMs: plan.limits.maxDurationMs,
+      maxEngineMs: plan.limits.maxEngineMs,
+      scannerReserveMs: plan.limits.scannerReserveMs,
+      ...(plan.limits.maxRequests !== undefined ? { maxRequests: plan.limits.maxRequests } : {}),
+      ...(plan.limits.maxResponseBytes !== undefined
+        ? { maxResponseBytes: plan.limits.maxResponseBytes }
+        : {}),
+    },
+    capabilities: plan.capabilities,
+    attachmentIds: plan.attachmentIds,
+    authorizationRequired: Boolean(plan.authorizationRef),
+  })
+}
+
 /** Error thrown when server-side inputs cannot produce a valid plan. The API
  * layer maps this to a 400 rather than a generic 500. */
 export class ScanExecutionPlanInputError extends Error {
@@ -258,7 +302,77 @@ const REPO_SOURCE_CAPABILITIES = [
   "ml_supply_chain",
 ] as const
 
-export interface BuildScanExecutionPlanInput {
+export const EngineBudgetCeilingUsdSchema = z
+  .number()
+  .finite()
+  .positive()
+  .describe(
+    "Optional upper bound in USD on the scan engine for an ordinary engine-backed review. Existing policy and profile limits can lower it. Other analysis may have separate costs."
+  )
+
+export const EngineBudgetCeilingTextSchema = z
+  .string()
+  .trim()
+  .regex(/^[0-9.eE+-]+$/)
+  .transform(Number)
+  .pipe(EngineBudgetCeilingUsdSchema)
+
+interface ScanEngineBudgetInputs {
+  engineBudgetCeilingUsd?: number
+  policyMaxBudgetUsd?: number | null
+  platformMaxBudgetUsd?: number
+}
+
+/** Keep the operator's optional upper bound separate from trusted policy and profile authority. */
+export function resolvePlanEngineBudget(
+  profileBudgetUsd: number,
+  engineBacked: boolean,
+  workflow: ScanWorkflow,
+  inputs: ScanEngineBudgetInputs
+): number {
+  const {
+    engineBudgetCeilingUsd: requested,
+    policyMaxBudgetUsd: policy,
+    platformMaxBudgetUsd: platform,
+  } = inputs
+  if (
+    requested !== undefined &&
+    (!EngineBudgetCeilingUsdSchema.safeParse(requested).success ||
+      !engineBacked ||
+      workflow === "AUTHENTICATED_ASSESSMENT")
+  ) {
+    throw new ScanExecutionPlanInputError(
+      "An engine spending limit requires an ordinary engine-backed review and a positive amount."
+    )
+  }
+  if (
+    (policy != null && (!Number.isFinite(policy) || policy < 0)) ||
+    (platform !== undefined && (!Number.isFinite(platform) || platform < 0))
+  ) {
+    throw new ScanExecutionPlanInputError("The configured engine spending limit is invalid.")
+  }
+  const ceiling = Math.min(
+    profileBudgetUsd,
+    policy ?? profileBudgetUsd,
+    platform ?? profileBudgetUsd,
+    requested ?? profileBudgetUsd
+  )
+  if (
+    workflow === "AUTHENTICATED_ASSESSMENT" &&
+    ceiling < AUTHENTICATED_ASSESSMENT_BETA_LIMITS.maxBudgetUsd
+  ) {
+    throw new ScanExecutionPlanInputError(
+      "The configured spending limit does not permit this authenticated assessment."
+    )
+  }
+  if (engineBacked && ceiling === 0)
+    throw new ScanExecutionPlanInputError(
+      "Engine spending is disabled for this review. Choose a checks-only review or ask a workspace owner to check the scan policy."
+    )
+  return ceiling
+}
+
+export interface BuildScanExecutionPlanInput extends ScanEngineBudgetInputs {
   /** Optional workflow selection; defaults to REVIEW_TARGET. */
   workflow?: ScanWorkflow
   /** Trusted stored target type — never client-supplied plan data. */
@@ -330,6 +444,12 @@ export function buildScanExecutionPlan(input: BuildScanExecutionPlanInput): Scan
             : {}),
         }
 
+  limits.maxBudgetUsd = resolvePlanEngineBudget(
+    limits.maxBudgetUsd,
+    capabilities.includes("engine"),
+    workflow,
+    input
+  )
   const parsed = ScanExecutionPlanSchema.safeParse({
     version: SCAN_EXECUTION_PLAN_VERSION,
     workflow,

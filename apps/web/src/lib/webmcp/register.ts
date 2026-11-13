@@ -29,7 +29,7 @@ export interface WebMcpInputSchema {
   required?: string[]
 }
 
-export interface WebMcpToolDefinition<TInput extends Record<string, unknown>> {
+interface WebMcpToolDefinition<TInput extends Record<string, unknown>> {
   name: string
   title: string
   description: string
@@ -370,5 +370,3 @@ function buildZodProperty(property: WebMcpJsonSchemaProperty): z.ZodType {
     ? schema.refine((value) => property.enum?.includes(value), "Invalid enum value")
     : schema
 }
-
-export type { WebMcpActivityReceipt, WebMcpReceiptStore }

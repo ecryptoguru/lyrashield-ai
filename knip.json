@@ -1,13 +1,18 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreExportsUsedInFile": false,
   "rules": {
     "duplicates": "off"
   },
   "workspaces": {
     ".": {
       "entry": ["e2e/**/*.{js,mjs,ts,tsx}"],
-      "project": ["e2e/**/*.{js,mjs,ts,tsx}"]
+      "project": ["e2e/**/*.{js,mjs,ts,tsx}"],
+      "playwright": false,
+      "paths": {
+        "react": ["./apps/web/node_modules/react"],
+        "react/*": ["./apps/web/node_modules/react/*"],
+        "react-dom/*": ["./apps/web/node_modules/react-dom/*"]
+      }
     },
     "apps/desktop": {
       "entry": [],
@@ -21,11 +26,15 @@
         "scripts/generate-og-cards.mjs",
         "src/**/*.test.{ts,tsx}"
       ],
-      "project": ["src/**/*.{ts,tsx,astro}", "tests-browser/**/*.ts", "scripts/**/*.{mjs,ts}"]
+      "project": [
+        "src/**/*.{ts,tsx,astro,mdx,css}",
+        "tests-browser/**/*.ts",
+        "scripts/**/*.{mjs,ts}"
+      ]
     },
     "apps/marketing-motion": {
-      "entry": ["tests/**/*.test.mjs"],
-      "project": ["scripts/**/*.mjs", "tests/**/*.mjs"]
+      "entry": ["src/main.ts", "tests/**/*.test.mjs"],
+      "project": ["index.html", "src/**/*.{ts,css}", "scripts/**/*.mjs", "tests/**/*.mjs"]
     },
     "apps/web": {
       "entry": [
@@ -33,15 +42,16 @@
         "src/instrumentation*.ts",
         "src/**/*.test.{ts,tsx}"
       ],
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx,css}"]
     },
     "apps/worker": {
       "entry": [
+        "src/index.ts",
         "src/operations/verify-evidence-storage.ts",
         "src/operations/verify-evidence-storage-fail-closed.ts",
         "src/**/*.test.{ts,tsx}"
       ],
-      "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,ts}"]
+      "project": ["src/**/*.{ts,tsx}"]
     },
     "packages/affiliate": {
       "entry": ["src/**/*.test.ts"],
@@ -84,8 +94,9 @@
       "project": ["src/**/*.ts"]
     },
     "packages/db": {
-      "entry": ["src/**/*.test.ts"],
-      "project": ["src/**/*.{js,mjs,ts}", "scripts/**/*.ts"]
+      "entry": ["src/**/*.test.ts", "src/generated/prisma/index.js"],
+      "project": ["src/**/*.{js,mjs,ts}", "scripts/**/*.ts"],
+      "ignoreDependencies": ["@prisma/client", "@prisma/client-runtime-utils"]
     },
     "packages/egress-proxy": {
       "entry": ["src/**/*.test.ts"],
@@ -120,7 +131,7 @@
       "project": ["src/**/*.ts"]
     },
     "packages/myra": {
-      "entry": ["src/**/*.test.ts", "scripts/import-knowledge.ts"],
+      "entry": ["src/**/*.test.ts"],
       "project": ["src/**/*.ts", "scripts/**/*.ts"]
     },
     "packages/pricing": {
@@ -148,8 +159,9 @@
       "project": ["src/**/*.{ts,tsx}"]
     },
     "apps/desktop/frontend": {
-      "entry": [],
-      "project": ["src/**/*.{ts,tsx}"]
+      "entry": ["src/main.tsx"],
+      "project": ["index.html", "src/**/*.{ts,tsx,css}"],
+      "ignoreDependencies": ["tailwindcss"]
     }
   }
 }

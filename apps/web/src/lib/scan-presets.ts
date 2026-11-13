@@ -82,7 +82,7 @@ const URL_LIMITS: Record<string, string> = {
   DEEP: "Up to 40 minutes of engine time",
 }
 
-export type ScanWorkflowId = "REVIEW_TARGET" | "REVIEW_CHANGES" | "AUTHENTICATED_ASSESSMENT"
+type ScanWorkflowId = "REVIEW_TARGET" | "REVIEW_CHANGES" | "AUTHENTICATED_ASSESSMENT"
 
 export type ManualScanOption = {
   id: string
@@ -109,6 +109,10 @@ export type ManualScanOption = {
   applicableChecks: readonly string[]
   /** Authorization the scan needs beyond workspace membership. */
   authorizationHint?: string
+}
+
+export function supportsEngineSpendingLimit(option?: ManualScanOption): boolean {
+  return option?.usesAi === true && option.workflow !== "AUTHENTICATED_ASSESSMENT"
 }
 
 function repoOptions(): ManualScanOption[] {
@@ -168,14 +172,14 @@ function goalForUrlMode(mode: UrlScanMode): string {
 }
 
 function urlOptions(targetType: UrlTargetType, hasApiSpec: boolean): ManualScanOption[] {
-  const modes: UrlScanMode[] = ["SAFE", "STANDARD", "DEEP"]
-  const options: ManualScanOption[] = []
-
-  for (const mode of modes) {
-    const availability = getUrlModeAvailability(targetType, mode, hasApiSpec)
-    const profile = getUrlScanProfile(targetType, mode)
-    const engineBacked = mode !== "SAFE"
-    options.push({
+  // URL/API launch offers only the deterministic SAFE/QUICK tier. Standard,
+  // Deep and Custom are removed from the offering, so they must not appear as
+  // selectable (or selectable-but-unavailable) options that admission refuses.
+  const mode: UrlScanMode = "SAFE"
+  const availability = getUrlModeAvailability(targetType, mode, hasApiSpec)
+  const profile = getUrlScanProfile(targetType, mode)
+  return [
+    {
       id: profile.id,
       label: profile.label,
       description: profile.description,
@@ -185,25 +189,31 @@ function urlOptions(targetType: UrlTargetType, hasApiSpec: boolean): ManualScanO
       estimate: URL_ESTIMATES[profile.id] ?? { low: 1, high: 2 },
       available: availability.available,
       disabledReason: availability.available ? undefined : availability.reason,
-      usesAi: engineBacked,
+      usesAi: false,
       workflow: "REVIEW_TARGET",
-      scopeSummary: engineBacked
-        ? "The live target origin through the scan-scoped relay."
-        : "The public surface of the target URL — no engine scan.",
+      scopeSummary: "The public surface of the target URL — no engine scan.",
       limitsSummary: URL_LIMITS[mode] ?? "Bounded scan",
-      applicableChecks: engineBacked
-        ? ["Engine scan", "Public surface checks"]
-        : ["Public surface checks"],
-      ...(engineBacked
-        ? {
-            authorizationHint:
-              "Requires a verified domain on a paid plan before the engine sends its first request.",
-          }
-        : {}),
-    })
-  }
+      applicableChecks: ["Public surface checks"],
+    },
+  ]
+}
 
-  return options
+function withStandardLaunchReview(options: ManualScanOption[]): ManualScanOption[] {
+  const standard = options.find(
+    (option) => option.mode === "STANDARD" && option.workflow === "REVIEW_TARGET"
+  )
+  if (!standard) return options
+  return [
+    ...options,
+    {
+      ...standard,
+      id: `${standard.id}_LAUNCH_REVIEW`,
+      label: "Standard launch review",
+      description: "A Standard-depth review before launch.",
+      goal: "LAUNCH_REVIEW",
+      isDefault: false,
+    },
+  ]
 }
 
 export function getManualScanOptions(target: {
@@ -215,14 +225,14 @@ export function getManualScanOptions(target: {
   }
 
   if (target.type === "REPO") {
-    return repoOptions()
+    return withStandardLaunchReview(repoOptions())
   }
 
   if (target.type === "WEB_APP" || target.type === "API") {
-    return urlOptions(target.type, Boolean(target.hasApiSpec))
+    return withStandardLaunchReview(urlOptions(target.type, Boolean(target.hasApiSpec)))
   }
 
-  return repoOptions()
+  return withStandardLaunchReview(repoOptions())
 }
 
 /** The preset id to preselect for a target: its marked default, else the

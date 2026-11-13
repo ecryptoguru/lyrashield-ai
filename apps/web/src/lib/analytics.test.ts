@@ -20,6 +20,28 @@ beforeEach(() => {
   setAnalyticsPreference(null)
 })
 
+describe("anonymous analytics preference cache", () => {
+  it("reuses an anonymous 401 result until authentication state is invalidated", async () => {
+    vi.stubGlobal("window", {})
+    vi.stubGlobal("document", { cookie: "" })
+    vi.stubGlobal("navigator", { doNotTrack: null, globalPrivacyControl: false })
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 401 }))
+    vi.stubGlobal("fetch", fetch)
+
+    try {
+      await expect(resolveAnalyticsPreference()).resolves.toBe(true)
+      await expect(resolveAnalyticsPreference()).resolves.toBe(true)
+      expect(fetch).toHaveBeenCalledTimes(1)
+
+      invalidateAnalyticsPreference()
+      await expect(resolveAnalyticsPreference()).resolves.toBe(true)
+      expect(fetch).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
 describe("sanitizeProperties", () => {
   it("returns only allowed properties for an event", () => {
     const result = sanitizeProperties("landing_view", {
@@ -28,6 +50,18 @@ describe("sanitizeProperties", () => {
       extra: "should be dropped",
     })
     expect(result).toEqual({ utm_source: "x", utm_campaign: "launch" })
+  })
+
+  it("keeps setup blocker diagnostics to a code and bounded surface", () => {
+    expect(
+      sanitizeProperties("setup_blocker_viewed", {
+        blocker_code: "DOMAIN_VERIFICATION_REQUIRED",
+        surface: "target",
+        workspace_id: "ws-secret",
+        target_url: "https://private.example",
+        message: "raw provider body",
+      })
+    ).toEqual({ blocker_code: "DOMAIN_VERIFICATION_REQUIRED", surface: "target" })
   })
 
   it("drops forbidden properties even when allowed by event", () => {

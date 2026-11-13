@@ -47,3 +47,19 @@ e02853f094dd61f5732b539b81143e6cc49f647d:codebase.md:generic-api-key:290
 # the example value is synthetic and the literal field was removed to avoid
 # future false positives from the generic-api-key rule.
 b8b0c672fef24eeeec71c0d08a5494cedaad54c9:packages/sdk/README.md:generic-api-key:38
+
+# Historical worker PEM validation delimiters only; no encoded key body.
+# Current source constructs public markers from the supported key kinds.
+fa3f24b6b714229d29387b3781578e494ea9bd76:ops/worker/refresh-secrets.sh:private-key:108
+
+# Synthetic redaction-test value only; renamed in current source.
+5f63271c29f63d0ffa4cf9af550a4be9f737f399:apps/marketing/src/tests/public-pages-ux.test.ts:generic-api-key:39
+
+# Synthetic OIDC request-token fixture in the historical test commit; the
+# current test generates a random dummy value. This does not exempt other findings.
+cb80200ff2d0f28267044ef2a0ba279ffd9984c3:.github/scripts/tests/paired-runtime-live-trust.test.mjs:generic-api-key:254
+
+# Public deterministic HMAC golden-vector input (0123456789abcdef repeated),
+# not a deployed credential. Ignore only this exact historical finding;
+# future secrets in the same file and generic-api-key findings stay scanned.
+b25ed21e865f340b1f9cb6c84d0eb7419e5e4cc9:packages/db/src/scan-supervisor-receipt-verifier.test.ts:generic-api-key:213

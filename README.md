@@ -6,7 +6,22 @@ LyraShield AI turns a target into a release-assurance loop:
 
 `Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report`
 
-It keeps detected findings, independently verified evidence, retest-confirmed results, and inconclusive checks distinct. A score or AI suggestion is never treated as proof by itself.
+It keeps detected findings, retest-confirmed results and inconclusive checks distinct. A score or AI suggestion is never treated as proof by itself.
+
+## Why LyraShield
+
+A scanner tells you what it flagged. LyraShield tells you what was tested, what was proven, what remains unknown — and hands you a record you can show to a client, investor or reviewer. Eight design choices carry that difference:
+
+1. **Evidence states, not confidence scores.** The three shipped states are `DETECTED`, `VALIDATED` and `INCONCLUSIVE`. `VERIFIED` is a future-only status and is not produced today. Confidence is triage metadata; engine-only absence remains inconclusive.
+2. **Built for how AI-built apps actually fail.** The public AI-Built Failure Taxonomy, eight AI App Security signals (AI-01–AI-08) mapped to the OWASP Top 10 for LLM Applications (2025), and 14 WebMCP controls that review the agent tool surface itself — agent rules, MCP configs, embedded secrets, prompt-injection exposure.
+3. **Agent-native.** Assurance runs where the coding agent already works: published CLI, MCP server (21 tools, stdio + remote Streamable HTTP with hosted OAuth), portable Agent Plugin, a 51-entry install registry resolving to 48 preferred client surfaces, and an account-less GitHub Action.
+4. **An approval-gated fix loop that closes itself.** Fix pull requests open only from a server-generated patch and only after approval. A browser session records a human approval. API-key and delegated OAuth callers act under the `fix:approve` permission instead of a per-request approval. Requesting a Fix PR also requires `fix:create_pr`. Nothing auto-merges. Fix output is a proposal requiring review. A merged fix branch automatically queues a retest and re-evaluates the gate.
+5. **A launch verdict anyone can verify.** The Launch Gate (`lyrashield-gate/2.4.0`) produces `READY` / `NOT_READY` / `INSUFFICIENT_EVIDENCE` per target; reports are ed25519-signed with a public verify endpoint; release-identity confirmation answers only `MATCH`, `MISMATCH` or `UNAVAILABLE`.
+6. **Honest coverage accounting.** The Vibe Security 50 contract (`vibe-security-50/1.2.0`) binds one coverage receipt per control into the checksummed result manifest — "no finding" is never "passed", and seven evidence-required controls are marked as such because no scan can prove them.
+7. **Two modes, one loop.** Cloud (subscription; LyraShield pays model cost) and Local/Desktop (one-year BYOK license with perpetual fallback; scans stay on your machine, nothing syncs by default).
+8. **Fail-closed trust architecture.** Postgres RLS tenant isolation, untrusted and bounded engine output, and every result manifest binding the exact product revision, worker image digest and engine revision into its checksum.
+
+These are design commitments, not detection-performance claims — see the claims boundary in [PRD §1](PRD.md#1-product-definition) and [policies.md](docs/policies.md).
 
 ## Try it
 
@@ -25,22 +40,25 @@ The public Lite Check is a bounded public-surface review. It is not the authenti
 
 LyraShield ships three ways to run checks without leaving your editor or CI pipeline:
 
-**CLI** — install and configure any supported agent in one command:
+**CLI** — preview client setup and run local or CI checks:
 
 ```bash
-npx lyrashield login --oauth      # select one workspace in the browser (recommended)
-npx lyrashield init                # detect installed agents and configure them
-npx lyrashield gate                # CI-friendly diff-aware security gate
+npx -y lyrashield@0.2.14 login --oauth  # select one workspace in the browser
+npx -y lyrashield@0.2.14 init --dry-run # preview the client's setup
+npx -y lyrashield@0.2.14 gate          # CI-friendly diff-aware security gate
+npx -y lyrashield@0.2.14 skills install pi --project # install LyraShield workflow skills for Pi
 ```
 
 `lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`, now deprecated). It installs through the paths defined in `packages/agent-registry`:
 
-- **Agent Plugin** — for supported plugin-capable clients, `npx lyrashield init` and `npx lyrashield install <agent>` prefer a portable plugin install from `@lyrashield/agent-plugin`. Plugin files land in the client-specific plugin directory and never inline a raw API key.
-- **Config-file** — for clients whose settings can be safely written, the CLI merges into the existing file, never overwrites and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
+- **Agent Plugin** — the published `@lyrashield/agent-plugin` package provides portable artifacts for supported clients. The CLI gives client-specific setup guidance where a writable local plugin path is not verified; public marketplace listing and authenticated client acceptance are tracked separately. Plugin files never inline a raw API key.
+- **Config-file** — the published CLI merges entries while preserving unrelated settings, refuses symlinked destinations and malformed roots, and preserves existing file permissions. It refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Guided manual** — for clients whose tooling has no writable config file, the CLI prints exact copy-paste command/argument/env values.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
 
-Run `npx lyrashield doctor` any time to check what's configured and what's missing.
+The coordinated CLI release adds the safe atomic config writer and shared skills installer. Config-file commands remain limited to clients whose install contract matches the verified CLI release; the CLI preserves unrelated settings and customized skills.
+
+Run `npx -y lyrashield@0.2.14 doctor` to inspect local configuration and credentials. Client activation and authenticated acceptance remain separate checks.
 
 **MCP server** — for editors that speak Model Context Protocol directly:
 
@@ -49,14 +67,14 @@ Run `npx lyrashield doctor` any time to check what's configured and what's missi
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
-      "env": { "LYRASHIELD_API_KEY": "lsk_your_key" }
+      "args": ["-y", "@lyrashield/mcp@0.2.12"],
+      "env": { "LYRASHIELD_API_URL": "https://app.lyrashieldai.com" }
     }
   }
 }
 ```
 
-`@lyrashield/mcp` is published on npm with 21 tools (read-only inspection plus scoped scan, attachment, fix and retest actions), both stdio and remote Streamable-HTTP transports and a [tool catalog](packages/mcp/README.md). A connected OAuth client runs its authorized operations automatically within its connection grant. A caller without a connected client — an API key or a legacy OAuth bearer — receives one structured `connect_required` response pointing at OAuth connect; nothing is queued and nothing executes. Full per-agent setup for 26 preferred client surfaces is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The `@lyrashield/agent-plugin` package is published at v0.1.29 with Cursor Streamable HTTP support and `packages/agent-registry` resolves 30 install entries into those preferred surfaces.
+`@lyrashield/mcp` is published on npm with 21 tools (read-only inspection plus scoped scan, attachment, fix and retest actions), both stdio and remote Streamable-HTTP transports and a [tool catalog](packages/mcp/README.md). A connected OAuth client runs its authorized operations automatically within its connection grant. Hosted mutations without a valid delegation — including API-key and legacy-token calls — receive one structured `connect_required` response pointing at OAuth connect; nothing is queued and no mutation executes. Authorized API keys can use read-only tools. The current source registry resolves 51 install entries into 48 preferred client surfaces, with client-specific setup at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The portable Agent Plugin package is versioned `0.1.31`; public marketplace listing and client-runtime acceptance are tracked separately.
 
 **GitHub Action** — a diff-aware CI gate that needs no LyraShield account, using `action.yml` at the repository root:
 
@@ -76,8 +94,8 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `apps/marketing-motion` — deterministic Three.js assurance-world motion workspace; the Astro site consumes rendered posters and clips.
 - `apps/desktop` — Tauri v2 BYOK desktop app (LyraShield Local/Desktop). Rust core + React frontend, ed25519 license verification, OS keychain BYOK credentials, and optional cloud sync.
 - `packages/cli` — the published `lyrashield` command-line tool. (`@lyrashield/cli` is deprecated and will be removed in the next major release; use `lyrashield` instead.)
-- `packages/agent-registry` — the single source of truth for 30 install entries resolving to 26 preferred client surfaces, including three explicit config-file alternatives for plugin-preferred clients and one experimental VS Code plugin entry. The CLI installers and docs site are generated against it.
-- `packages/agent-plugin` — the portable Agent Plugins v1.0.0 package (published as v0.1.29 with Cursor Streamable HTTP support) that bundles the MCP server and a `lyrashield` skill for five preferred Agent Plugin clients (Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro). GitHub Copilot remains experimental until a retained client-runtime receipt exists.
+- `packages/agent-registry` — the single source of truth for 51 install entries resolving to 48 preferred client surfaces. The CLI installers and docs site are generated against it.
+- `packages/agent-plugin` — the portable Agent Plugins v1.0.0 package. Version 0.1.31 provides Cursor Streamable HTTP support and six skills, including the backward-compatible `lyrashield` skill, for five preferred Agent Plugin clients (Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro). GitHub Copilot remains experimental until a retained client-runtime receipt exists.
 - `packages/agent-rules` — renders LyraShield's security policy into each agent's native rules/instructions format (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others).
 - `packages/mcp` — the published `@lyrashield/mcp` server.
 - `packages/sdk` — the typed REST client shared by the CLI and the MCP server, so their behavior can't drift apart.
@@ -90,7 +108,7 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 
 The fixed live AI safety catalog lives in `packages/types/src/ai-safety-tests.ts`; historical result provenance is recorded in [codebase.md](codebase.md#3-repository-map).
 
-The authenticated workflow supports project targets, findings, deterministic receipts, immutable manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution runs through a server-generated patch pipeline that is bound to explicit human approval and never merges.
+The authenticated workflow supports project targets, findings, deterministic receipts, checksum-bound manifests, score snapshots, reports, schedules, notifications, GitHub integrations and privacy-bounded sharing. Fix PR execution uses a server-generated patch bound to an exact authorization receipt: browser requests require human approval, while authorized API-key and delegated OAuth requests execute within verified permissions and scope. Nothing auto-merges.
 
 ## Evidence states
 
@@ -161,30 +179,30 @@ Repository scans can optionally call Parallel Search for real-time OSINT. Set `L
 
 ## Engine derivative and upstream maintenance
 
-Repository reviews run through [LyraShield Engine](https://github.com/ecryptoguru/lyrashield-engine), the separately versioned sandboxed analysis process used by the worker. It is a controlled derivative of [Strix](https://github.com/usestrix/strix), not a claim that upstream results or benchmarks apply to LyraShield.
+Repository reviews run through [LyraShield Engine](https://github.com/ecryptoguru/lyrashield-engine), the separately versioned sandboxed analysis process used by the worker. It is a controlled derivative of the upstream open-source engine, not a claim that upstream results or benchmarks apply to LyraShield.
 
 LyraShield owns the product-critical execution contract: GPT-6 model policy, bounded context/output/agent/spend controls, non-interactive lifecycle and telemetry-off behavior, deterministic finding identity, evidence/control metadata, and the bounded worker artifacts. The upstream substrate remains responsible for reviewed generic sandbox, tool, agent-SDK, and vulnerability-skill plumbing. Read the engine's [ownership boundary](https://github.com/ecryptoguru/lyrashield-engine#ownership-boundary) and [upstream-import ledger](https://github.com/ecryptoguru/lyrashield-engine/blob/main/UPGRADES.md) for the exact line.
 
-Upgrades are deliberately review-gated: the engine records its incorporated Strix base, compares stable releases, prepares a review PR, and requires human approval plus its read-only CI gate. It never auto-resolves conflicts, force-pushes history, or deploys from the sync workflow. The [engine verification and upgrade guidance](https://github.com/ecryptoguru/lyrashield-engine#verification) describes the checks; they prove implementation compatibility, not scan accuracy or universal coverage.
+Upgrades are deliberately review-gated: the engine records its incorporated base from the upstream open-source engine, compares stable releases, prepares a review PR and requires human approval plus its read-only CI gate. It never auto-resolves conflicts, force-pushes history or deploys from the sync workflow. The [engine verification and upgrade guidance](https://github.com/ecryptoguru/lyrashield-engine#verification) describes the checks; they prove implementation compatibility, not scan accuracy or universal coverage.
 
-The application pins an exact engine commit in `.github/workflows/deploy-azure.yml`, executes the engine-owned worker contract against that checkout, builds the worker with it, and verifies the exact pushed worker digest before deployment can succeed. A separate operator promotion reconciles that immutable digest on the dedicated worker VM; it never follows `latest` or another mutable tag. A new engine release is not active until that pin is deliberately advanced, the cross-repository gate passes, and the resulting worker digest is explicitly promoted.
+The application pins an exact engine commit in `.github/workflows/deploy-azure.yml`, executes the engine-owned worker contract against that checkout, builds the worker with it, and verifies the exact pushed worker digest before deployment can proceed. The production workflow carries that digest into the guarded worker-VM promotion, which checks idle work and queues, OCI labels, health, and runtime provenance; it never follows `latest` or another mutable tag. A new engine release is not active until that pin is deliberately advanced, the cross-repository gate passes, and the resulting worker digest is promoted by the release workflow.
 
 ## Security and release boundaries
 
 - Workspace data is tenant-scoped; sensitive operations are audit-logged; and child tables (`ScanEvent`, `Evidence`, `FixProposal`, `PullRequest`, `ScanCoverageReceipt`, `ScanResultManifest`, `ScorecardShare`, `ScorecardEvent`, `Ticket`) are protected by Postgres RLS.
-- Engine output is treated as untrusted; only independent verifier evidence can mark a finding verified.
+- Engine output is treated as untrusted. Current findings use Detected, Retest-confirmed or Inconclusive. `VERIFIED` is a future-only status and is not produced today.
 - URL/API targets use pinned deterministic URL scanners with a versioned `url-scan/3.0.0` capability registry (six profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) rather than the repository engine.
 - Queue admission fails closed without a healthy worker heartbeat.
 - Public scorecard payloads are allowlisted and sharing is revocable.
 - The MCP server's mutating tools (start a scan, record a fix, queue a retest) run within the connection grant for a connected OAuth client — their authorized operations execute automatically without a per-action approval. A caller without a connected client receives one structured `connect_required` response pointing at OAuth connect. The PENDING/approvalId cycle is retired on the remote path; historical approval records remain viewable and resolvable through the REST routes.
 - The public marketing surface and the authenticated workspace have separate deployment boundaries.
-- Worker image provenance is verified end-to-end: PR CI proves the pinned engine commit is merged, its engine checks passed, and the worker contract is compatible; the main deployment repeats provenance/contract checks, builds the SHA-only worker candidate, pulls its exact digest, and verifies app and engine OCI labels before any deploy. Operator promotion of that digest on the worker VM remains a separate manual action.
+- Worker image provenance is verified end-to-end: PR CI proves the pinned engine commit is merged, its engine checks passed, and the worker contract is compatible; the main deployment repeats provenance/contract checks, builds the SHA-only worker candidate, pulls its exact digest, and verifies app and engine OCI labels before deployment. The same production workflow then promotes that digest through the guarded VM maintenance path and checks runtime health and provenance.
 
 See [PRD release status](PRD.md#9-release-status) for the current deployment and verification gates. Do not treat this repository, the Lite Check, the CLI, or a local run as proof of an authenticated provider-backed production scan.
 
 ## Further reading
 
-See the [documentation map](docs/README.md) for current owners, including the [operator runbook](docs/operations.md).
+See the [documentation map](docs/README.md) for current owners, including the [operator runbook](docs/operations.md), the [litepaper](docs/litepaper.md) (executive overview), the [whitepaper](docs/whitepaper.md) (authoritative public description) and the [yellowpaper](docs/yellowpaper.md) (technical specification).
 
 ## License
 

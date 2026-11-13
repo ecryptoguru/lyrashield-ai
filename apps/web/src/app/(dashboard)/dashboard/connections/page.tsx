@@ -1,5 +1,4 @@
-import { connectionHealth } from "@/lib/connection-health"
-import { ConnectionActions } from "./connection-actions"
+import { ConnectedClientCard } from "./connected-client-card"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { listAgentConnections } from "@lyrashield/db"
@@ -7,25 +6,10 @@ import { Bot, Plug } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
-import { LocalTime } from "@/components/local-time"
-import { Badge, Card, CardContent, CardHeader, CardTitle, buttonVariants } from "@lyrashield/ui"
+import { Card, CardContent, CardHeader, CardTitle, buttonVariants } from "@lyrashield/ui"
 
 export const metadata: Metadata = {
   title: "Connections",
-}
-
-function connectionStatusVariant(status: string): "success" | "warning" | "danger" | "muted" {
-  switch (status) {
-    case "ACTIVE":
-      return "success"
-    case "PAUSED":
-      return "warning"
-    case "REVOKED":
-    case "EXPIRED":
-      return "danger"
-    default:
-      return "muted"
-  }
 }
 
 /**
@@ -63,7 +47,7 @@ export default async function ConnectionsPage() {
         description="Connected clients first, then the install catalog for coding agents, source control and other services."
       />
 
-      <section className="space-y-3" aria-labelledby="connected-heading">
+      <section className="space-y-3" aria-labelledby="connected-connections">
         <h2 id="connected-connections" className="text-lg font-semibold tracking-tight">
           Connected clients
         </h2>
@@ -75,58 +59,15 @@ export default async function ConnectionsPage() {
             </CardContent>
           </Card>
         ) : (
-          <ul className="grid gap-2">
+          <ul className="grid min-w-0 grid-cols-1 gap-2">
             {connections.map((connection) => {
-              const health = connectionHealth(connection)
               return (
-                <li key={connection.id}>
-                  <Card>
-                    <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">
-                          {connection.clientName ?? connection.clientType}
-                        </p>
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          {connection.scopes.length > 0
-                            ? `Scopes: ${connection.scopes.join(", ")}`
-                            : "No scopes granted"}
-                          {" · "}
-                          {health.usability}
-                          {" · "}
-                          Connected <LocalTime value={connection.createdAt} />
-                          {" · "}
-                          {connection.lastSuccessfulOperationAt ? (
-                            <>
-                              Last used{" "}
-                              <LocalTime value={connection.lastSuccessfulOperationAt} withTime />
-                            </>
-                          ) : (
-                            "No successful operation recorded"
-                          )}
-                          {connection.allTargets ? " · all current and future targets" : ""}
-                          {connection.expiresAt ? (
-                            <>
-                              {" · authorization expires "}
-                              <LocalTime value={connection.expiresAt} />
-                            </>
-                          ) : (
-                            ""
-                          )}
-                        </p>
-                      </div>
-                      <Badge variant={connectionStatusVariant(health.status)}>
-                        {health.status.replaceAll("_", " ").toLowerCase()}
-                      </Badge>
-                      {connection.userId === session.userId && (
-                        <ConnectionActions
-                          id={connection.id}
-                          workspaceId={workspaceId}
-                          status={health.status}
-                          clientName={connection.clientName ?? connection.clientType}
-                        />
-                      )}
-                    </CardContent>
-                  </Card>
+                <li key={connection.id} className="min-w-0">
+                  <ConnectedClientCard
+                    connection={connection}
+                    workspaceId={workspaceId}
+                    userId={session.userId}
+                  />
                 </li>
               )
             })}
@@ -134,6 +75,18 @@ export default async function ConnectionsPage() {
         )}
       </section>
 
+      <div className="mt-5 flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-muted-foreground text-sm">
+          Choose a target to scan from the dashboard, or use your connected client. Coding-agent
+          setup is optional.
+        </p>
+        <Link
+          href="/dashboard/scans?new=1"
+          className={buttonVariants({ className: "shrink-0 min-h-11" })}
+        >
+          Configure a scan
+        </Link>
+      </div>
       <section className="mt-8 space-y-3" aria-labelledby="catalog-connections">
         <h2 id="catalog-connections" className="text-lg font-semibold tracking-tight">
           Install catalog

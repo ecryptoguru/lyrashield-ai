@@ -257,6 +257,23 @@ pub struct ScanSummary {
     pub finding_count: usize,
 }
 
+/// Stable keyset cursor for scan history. `started_at` is the fixed-width UTC
+/// sort key, so equivalent RFC3339 offsets and fractional precision compare
+/// consistently; `scan_id` breaks ties.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanHistoryCursor {
+    pub started_at: String,
+    pub scan_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanHistoryPage {
+    pub scans: Vec<ScanSummary>,
+    pub next_cursor: Option<ScanHistoryCursor>,
+}
+
 fn local_backend() -> String {
     "local".to_string()
 }
@@ -329,7 +346,13 @@ pub struct SequencedEvent {
 }
 
 /// Terminal crash codes for durable terminal state mapping.
+///
+/// `SpawnFailed` and `PersistenceFailed` are reserved members of the persisted
+/// exit-code contract. They are not constructed by this revision, but the
+/// numeric values are part of the stored history the desktop reads back, so the
+/// set is kept complete rather than renumbered.
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum CrashCode {
     SpawnFailed = 100,
     PersistenceFailed = 101,

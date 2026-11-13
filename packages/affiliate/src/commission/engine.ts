@@ -28,7 +28,7 @@ import {
   DEFAULT_HOLD_DAYS,
   DEFAULT_CAP_MONTHS,
   AFFILIATE_RULE_VERSION,
-} from "../index"
+} from "../constants"
 
 export interface OrderPaidPayload {
   /** Provider name: "polar" | "razorpay" */

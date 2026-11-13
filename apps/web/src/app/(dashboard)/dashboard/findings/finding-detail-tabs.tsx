@@ -1,6 +1,7 @@
 "use client"
 
-import { CreateFixPrAction } from "@/components/create-fix-pr-action"
+import { FindingEvidenceInsights } from "./finding-evidence-insights"
+import { HistoryProposalAction } from "./history-proposal-action"
 import Link from "next/link"
 import { z } from "zod"
 import { Badge, Button, Spinner } from "@lyrashield/ui"
@@ -149,115 +150,7 @@ export function FindingTechnicalTab({
         </div>
       )}
 
-      {detail.evidenceInsights && (
-        <div className="rounded-lg border p-3">
-          <h3 className="text-sm font-medium">Engine-declared evidence</h3>
-          <p className="text-muted-foreground mt-1 text-xs">
-            Assertions the engine recorded for this finding. They are evidence about the
-            engine&apos;s own view — not LyraShield verification.
-          </p>
-          <dl className="mt-2 space-y-2 text-sm">
-            {detail.evidenceInsights.advisoryCvss != null && (
-              <div className="flex flex-wrap gap-2">
-                <dt className="text-muted-foreground text-xs">Advisory severity</dt>
-                <dd>
-                  <Badge variant="warning">
-                    Advisory CVSS {detail.evidenceInsights.advisoryCvss.score}
-                  </Badge>
-                </dd>
-              </div>
-            )}
-            {detail.evidenceInsights.advisoryCvss?.vector && (
-              <div>
-                <dt className="text-muted-foreground text-xs">Advisory vector</dt>
-                <dd className="text-muted-foreground mt-0.5 break-all font-mono text-xs">
-                  {detail.evidenceInsights.advisoryCvss.vector}
-                </dd>
-              </div>
-            )}
-            {detail.evidenceInsights.advisoryCvss?.metric_reasoning && (
-              <div>
-                <dt className="text-muted-foreground text-xs">Advisory metric reasoning</dt>
-                <dd className="text-muted-foreground mt-0.5 text-xs">
-                  {detail.evidenceInsights.advisoryCvss.metric_reasoning}
-                </dd>
-              </div>
-            )}
-            {detail.evidenceInsights.engineConfidence && (
-              <div className="flex flex-wrap gap-2">
-                <dt className="text-muted-foreground text-xs">Engine confidence</dt>
-                <dd>
-                  <Badge variant="muted">
-                    {detail.evidenceInsights.engineConfidence} (engine-declared)
-                  </Badge>
-                </dd>
-              </div>
-            )}
-            {detail.evidenceInsights.engineVerificationState && (
-              <div className="flex flex-wrap gap-2">
-                <dt className="text-muted-foreground text-xs">Engine claim</dt>
-                <dd>
-                  <Badge variant="muted">
-                    {detail.evidenceInsights.engineVerificationState} (engine-declared)
-                  </Badge>
-                </dd>
-              </div>
-            )}
-            {detail.evidenceInsights.contextualCvssReasoning && (
-              <div>
-                <dt className="text-muted-foreground text-xs">Contextual severity reasoning</dt>
-                <dd className="text-muted-foreground mt-0.5 text-xs">
-                  {detail.evidenceInsights.contextualCvssReasoning}
-                </dd>
-              </div>
-            )}
-            {detail.evidenceInsights.confidenceRationale && (
-              <div>
-                <dt className="text-muted-foreground text-xs">Confidence rationale</dt>
-                <dd className="text-muted-foreground mt-0.5 text-xs">
-                  {detail.evidenceInsights.confidenceRationale}
-                </dd>
-              </div>
-            )}
-            {detail.evidenceInsights.counterevidence && (
-              <div>
-                <dt className="text-muted-foreground text-xs">Counterevidence</dt>
-                <dd className="text-muted-foreground mt-0.5 whitespace-pre-wrap text-xs">
-                  {detail.evidenceInsights.counterevidence}
-                </dd>
-              </div>
-            )}
-            {detail.evidenceInsights.severityChangeConditions && (
-              <div>
-                <dt className="text-muted-foreground text-xs">Severity change conditions</dt>
-                <dd className="text-muted-foreground mt-0.5 whitespace-pre-wrap text-xs">
-                  {detail.evidenceInsights.severityChangeConditions}
-                </dd>
-              </div>
-            )}
-            {detail.evidenceInsights.assumptions && (
-              <div>
-                <dt className="text-muted-foreground text-xs">Assumptions</dt>
-                <dd className="text-muted-foreground mt-0.5 whitespace-pre-wrap text-xs">
-                  {detail.evidenceInsights.assumptions}
-                </dd>
-              </div>
-            )}
-            {(detail.evidenceInsights.evidenceWarnings?.length ?? 0) > 0 && (
-              <div>
-                <dt className="text-muted-foreground text-xs">Evidence warnings</dt>
-                <dd>
-                  <ul className="mt-0.5 list-inside list-disc text-xs text-amber-600">
-                    {detail.evidenceInsights.evidenceWarnings!.map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
-                </dd>
-              </div>
-            )}
-          </dl>
-        </div>
-      )}
+      {detail.evidenceInsights && <FindingEvidenceInsights insights={detail.evidenceInsights} />}
 
       {detail.verificationReason && (
         <div className="bg-muted/30 rounded-lg border p-3">
@@ -278,7 +171,8 @@ export function FindingTechnicalTab({
         !detail.cwe &&
         !detail.cvssScore &&
         !detail.category &&
-        !detail.evidence?.length && (
+        !detail.evidence?.length &&
+        !detail.evidenceInsights && (
           <p className="text-muted-foreground text-sm">
             No technical details are available for this finding.
           </p>
@@ -365,12 +259,12 @@ export function FindingHistoryTab({
               <div key={fp.id} className="space-y-2 text-sm">
                 <Badge variant="info">{humanizeToken(fp.status)}</Badge>
                 <span className="text-muted-foreground">{fp.summary}</span>
-                {canCreatePr &&
-                  (fp.status === "ready" ||
-                    (finding.status === "FIX_READY" &&
-                      ["draft", "approved"].includes(fp.status))) && (
-                    <CreateFixPrAction workspaceId={workspaceId} proposalId={fp.id} />
-                  )}
+                <HistoryProposalAction
+                  proposal={fp}
+                  findingStatus={finding.status}
+                  canCreatePr={canCreatePr}
+                  workspaceId={workspaceId}
+                />
               </div>
             ))}
           </div>

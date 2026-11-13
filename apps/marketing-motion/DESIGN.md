@@ -1,48 +1,21 @@
-# LyraShield Assurance World
+# LyraShield AI evidence workspace
 
-## Style Prompt
+## Visual direction
 
-Premium institutional technology rendered as one continuous evidence environment: matte graphite structures in a deep navy volume, translucent evidence planes, sparse particulate depth, and a single restrained cyan signal path. The camera travels deliberately through real geometry. The world feels clinical and trustworthy rather than neon, gamified, or speculative.
+A continuous architectural evidence workspace: machined navy ribs and platforms, directional light, cyan scope paths and one traveling record. Each station explains a different relationship: a bounded target, parallel review routes, a retained finding, a separate approval layer, a retest gap and a report stack. The amber limitation remains open.
 
-## Colors
+## Palette
 
-- Background: `#08111c`
-- Raised structure: `#0e1a28`
-- Signal: `#54d6df`
-- Proof: `#5cdb95`
-- Caution: `#f5b84b`
-- Failure: `#ff7168`
-- Foreground: `#edf6fb`
-- Muted foreground: `#91a7b8`
+Background #08111c; structure #0e1a28; edge #203246; foreground #edf6fb; dashboard signal #00bae6; uncertainty #f3b95f. No green success conversion for the illustrative case.
 
-## Typography
+## Composition
 
-- Statements: Bricolage Grotesque Variable, 800
-- Evidence data: JetBrains Mono Variable, 350–600
+Separate desktop and native portrait cameras. One forward axis, no roll or abrupt lateral alternation. The record stays readable in the upper/central portrait field; HTML owns real labels, lower reading space and all controls. Factual labels are never baked into film.
 
-The display face carries human confidence. The mono face carries machine-verifiable state.
+## Determinism
 
-## Motion
+Absolute time sampling, no history-dependent animation or remote assets. GSAP supplies a paused seekable timeline. Three.js and GSAP stay in the build workspace. Seven eight-second stations comprise the initial 56-second draft.
 
-- Continuous Catmull-Rom camera travel with controlled dolly and restrained lateral drift.
-- Desktop alternates label-safe left/right focal fields. Portrait keeps active geometry in the upper 58% and reserves the lower field for HTML copy.
-- Focus-pull transitions at chapter boundaries.
-- One cinematic zoom for the evidence-state reveal.
-- Slow color dip at the report payoff.
-- Entrances use varied transform, opacity, and easing. No pre-transition exits.
-- Six fixed signal pulses mark movement between named stages. They are schematic transitions, never quantities.
+## Avoid
 
-## What NOT to Do
-
-- No purple gradients, neon grids, barrel rolls, shake, or glitch montage.
-- No generated text, fake dashboards, customer claims, pricing, or performance metrics.
-- No people, logos, repeated card grids, or decorative pills.
-- No decorative particle clouds, baked-in factual labels, or motion that implies scan volume, risk, coverage, or performance.
-- No `Math.random()`, wall-clock animation, `THREE.Clock`, or network-loaded runtime modules.
-
-## Reference Concepts
-
-- `reference/hero-desktop.webp`
-- `reference/evidence-world-desktop.webp`
-- `reference/report-desktop.webp`
-- `reference/mobile.webp`
+Floating-box collections, fake counters, neon tunnels, particle clouds, focus-flash chapter transitions, misleading success imagery and runtime 3D in the marketing browser.

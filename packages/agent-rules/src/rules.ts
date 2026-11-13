@@ -1,10 +1,11 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { access, copyFile, mkdir, readFile, rm } from "node:fs/promises"
-import { createHash } from "node:crypto"
+import { access, lstat, mkdir, open, readFile, rm } from "node:fs/promises"
+import { createHash, randomUUID } from "node:crypto"
 import { execFile } from "node:child_process"
 import path from "node:path"
+import type { Stats } from "node:fs"
 import type { AgentEntry } from "@lyrashield/agent-registry"
-import { atomicWrite as hardenedAtomicWrite } from "./atomic-write.js"
+import { assertSafeDestination, atomicWrite as hardenedAtomicWrite } from "./atomic-write.js"
 import type {
   CheckRulesOptions,
   RemoveRulesOptions,
@@ -63,15 +64,38 @@ function resolveWithinProject(projectRoot: string, relativeFile: string): string
 }
 
 async function backupExisting(filePath: string): Promise<string | undefined> {
+  await assertSafeDestination(filePath)
+
+  let sourceStat: Stats
   try {
-    await access(filePath)
-  } catch {
+    // filePath is the resolved rule file destination selected by the caller.
+    sourceStat = await lstat(filePath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
     return undefined
   }
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-")
-  const backupPath = `${filePath}.lyrashield-backup-${stamp}`
-  await copyFile(filePath, backupPath)
-  return backupPath
+  if (sourceStat.isSymbolicLink()) {
+    throw new Error(`Refusing to back up a symlinked rule file: ${filePath}`)
+  }
+  if (!sourceStat.isFile()) {
+    throw new Error(`Refusing to back up a non-file rule destination: ${filePath}`)
+  }
+
+  // filePath is the resolved rule file destination selected by the caller.
+  const source = await open(filePath, "r")
+  try {
+    const openedStat = await source.stat()
+    if (openedStat.dev !== sourceStat.dev || openedStat.ino !== sourceStat.ino) {
+      throw new Error(`The rule file changed while creating its backup: ${filePath}`)
+    }
+    const content = await source.readFile("utf-8")
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+    const backupPath = `${filePath}.lyrashield-backup-${stamp}-${randomUUID()}`
+    await hardenedAtomicWrite(backupPath, content, { mode: sourceStat.mode & 0o777 })
+    return backupPath
+  } finally {
+    await source.close()
+  }
 }
 
 async function isGitTrackedUnignored(projectRoot: string, targetPath: string): Promise<boolean> {
@@ -315,6 +339,7 @@ export async function removeRules(
     const trimmed = cleaned.trim()
     if (trimmed.length === 0) {
       const backup = await backupExisting(target)
+      await assertSafeDestination(target)
       await rm(target, { force: true })
       outcomes.push({
         file,

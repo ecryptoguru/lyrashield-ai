@@ -1,13 +1,16 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
+import { parse } from "yaml"
 import { createAllTools, McpServer } from "@lyrashield/mcp"
+import { buildPlugin } from "../build.js"
 import { exportMarketplace } from "../export.js"
+import { validatePlugin } from "../validate.js"
 
 const execFileAsync = promisify(execFile)
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..")
@@ -32,7 +35,74 @@ afterEach(async () => {
   )
 })
 
+// Artifact consumers get independent copies; the baseline is never returned to a test.
+// Source parity, provenance, publication, concurrency and determinism keep fresh exports.
+let validExport: string | undefined
+beforeAll(async () => {
+  validExport = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-baseline-"))
+  await exportMarketplace(validExport)
+  await expect(runValidator(validExport)).resolves.toContain("Marketplace validation passed")
+}, 60000)
+
+afterAll(async () => {
+  if (validExport) await rm(validExport, { recursive: true, force: true })
+})
+
+async function copyValidExport(output: string): Promise<void> {
+  if (!validExport) throw new Error("Marketplace baseline was not initialized")
+  await cp(validExport, output, { recursive: true })
+}
+
+function splitSkillDocument(text: string): { frontmatter: string; body: string } {
+  const match = text.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/)
+  if (!match) throw new Error("Skill document is missing YAML frontmatter")
+  return { frontmatter: match[0], body: text.slice(match[0].length) }
+}
+
 describe("exportMarketplace", () => {
+  it("preserves client skill frontmatter and keeps Lovable ZIPs in source parity", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-skills-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+
+    for (const skill of [
+      "get-started",
+      "review-changes",
+      "scan-project",
+      "fix-and-retest",
+      "launch-readiness",
+    ]) {
+      const canonical = splitSkillDocument(
+        await readFile(
+          path.join(repoRoot, "packages/agent-plugin/plugin/skills", skill, "SKILL.md"),
+          "utf8"
+        )
+      )
+      const mistral = splitSkillDocument(
+        await readFile(path.join(output, "mistral-vibe/skills", skill, "SKILL.md"), "utf8")
+      )
+      expect(mistral.frontmatter).toContain("user-invocable: true")
+      expect(mistral.body).toBe(canonical.body)
+
+      const lovable = splitSkillDocument(
+        await readFile(path.join(output, "lovable/skills", skill, "SKILL.md"), "utf8")
+      )
+      expect(lovable.frontmatter).toContain('description: "Use when the user asks to')
+      expect(lovable.body).toBe(canonical.body)
+    }
+
+    // The shipped validator parses the actual ZIP headers, requires ZIP_STORED,
+    // and compares each archive's root SKILL.md bytes with the exported source.
+    await expect(runValidator(output)).resolves.toContain("Marketplace validation passed")
+  }, 60000)
+
+  it("exports safely while plugin-generated files are atomically refreshed", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-concurrent-"))
+    outputs.push(output)
+    await Promise.all([buildPlugin(), exportMarketplace(output)])
+    await expect(runValidator(output)).resolves.toContain("Marketplace validation passed")
+  }, 60000)
+
   it("rejects release-candidate exports from a dirty source checkout", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     const dirtyMarker = path.join(
@@ -53,7 +123,7 @@ describe("exportMarketplace", () => {
   it("does not let documented placeholders hide other credentials on the same line", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-validator-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const probe = path.join(output, "README.md")
     const original = await readFile(probe, "utf8")
     await writeFile(probe, `${original}\nExamples: <YOUR_API_KEY> lsk_… lsk_...\n`)
@@ -71,8 +141,12 @@ describe("exportMarketplace", () => {
   it("rejects undeclared files added after export", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-validator-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     await writeFile(path.join(output, "probe.txt"), "untracked\n")
+    const untouched = await mkdtemp(path.join(tmpdir(), "lyrashield-validator-sibling-"))
+    outputs.push(untouched)
+    await copyValidExport(untouched)
+    await expect(runValidator(untouched)).resolves.toContain("Marketplace validation passed")
     await expect(
       execFileAsync(process.execPath, ["scripts/validate.mjs"], { cwd: output })
     ).rejects.toThrow(/file set or hash differs/)
@@ -81,7 +155,7 @@ describe("exportMarketplace", () => {
   it("preserves explicit API URL overrides for stored OAuth in npm and embedded Zed launchers", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield extension "))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const gemini = JSON.parse(await readFile(path.join(output, "gemini-extension.json"), "utf8"))
     const preloadOption = gemini.mcpServers.lyrashield.args[1].replace("${extensionPath}", output)
     const preload = await readFile(path.join(output, "zed-extension/mcp-env.cjs"), "utf8")
@@ -137,6 +211,8 @@ describe("exportMarketplace", () => {
       generatedFiles: string[]
       artifactVersions?: Record<string, string>
       mutatingTools?: string[]
+      geminiAllowedMutatingTools?: string[]
+      geminiExcludedTools?: string[]
       manifestSchemaVersion?: string
       sourceCommit?: string
       generator?: { package?: string; version?: string }
@@ -151,7 +227,7 @@ describe("exportMarketplace", () => {
     expect(manifest.forbidden).toContain("apps/worker")
     expect(manifest.manifestSchemaVersion).toBe("marketplace-export/2")
     expect(manifest.sourceCommit).toMatch(/^[a-f0-9]{40}$/)
-    expect(manifest.generator).toEqual({ package: "@lyrashield/agent-plugin", version: "0.1.30" })
+    expect(manifest.generator).toEqual({ package: "@lyrashield/agent-plugin", version: "0.1.31" })
     expect(manifest.publication?.status).toBe("unpublished")
     expect(manifest.files?.some((file) => file.path === "manifest.json")).toBe(false)
     const exportedPaths = manifest.files?.map((file) => file.path) ?? []
@@ -177,7 +253,7 @@ describe("exportMarketplace", () => {
     }
     expect(portableMcp.mcpServers).toEqual({
       lyrashield: {
-        type: "http",
+        type: "streamable-http",
         url: "https://app.lyrashieldai.com/api/mcp",
       },
     })
@@ -191,7 +267,7 @@ describe("exportMarketplace", () => {
     expect(claudeManifest).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
       repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
-      version: "0.1.30",
+      version: "0.1.31",
     })
     // The marketplace catalog is what makes the exported repo addressable via
     // `/plugin marketplace add` and VS Code's "Install Plugin From Source".
@@ -207,14 +283,14 @@ describe("exportMarketplace", () => {
     expect(marketplace).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-marketplace.json",
       name: "lyrashield-ai",
-      version: "0.1.30",
+      version: "0.1.31",
       owner: { name: "LyraShield AI" },
     })
     expect(marketplace.plugins).toHaveLength(1)
     expect(marketplace.plugins?.[0]).toMatchObject({
       name: "lyrashield",
       source: "./",
-      version: "0.1.30",
+      version: "0.1.31",
       license: "Apache-2.0",
     })
     const codexManifest = JSON.parse(
@@ -234,7 +310,7 @@ describe("exportMarketplace", () => {
     )
     expect(codexMarketplace.plugins?.[0]).toMatchObject({
       name: "lyrashield",
-      version: "0.1.30",
+      version: "0.1.31",
       source: { source: "local", path: "./codex-plugin" },
     })
     const installedCodexManifest = JSON.parse(
@@ -242,7 +318,7 @@ describe("exportMarketplace", () => {
     )
     expect(installedCodexManifest).toMatchObject({
       name: "lyrashield",
-      version: "0.1.30",
+      version: "0.1.31",
       mcpServers: "./.mcp.json",
     })
     expect(
@@ -279,13 +355,39 @@ describe("exportMarketplace", () => {
     ).resolves.toContain("lyrashield-mcp")
     await expect(
       readFile(path.join(output, "codebuff", "lyrashield-review.ts"), "utf8")
-    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.30"[\s\S]*mcpServers:/)
+    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.31"[\s\S]*mcpServers:/)
     await expect(
       readFile(path.join(output, "gemini-extension", "gemini-extension.json"), "utf8")
     ).resolves.toContain("lyrashield-ai")
     await expect(readFile(path.join(output, "kiro-power", "POWER.md"), "utf8")).resolves.toContain(
       "Apache-2.0"
     )
+    await expect(readFile(path.join(output, "amp", "README.md"), "utf8")).resolves.toContain(
+      "amp skill add /tmp/lyrashield-marketplace/amp"
+    )
+    await expect(
+      readFile(path.join(output, "amp", "scan-project", "mcp.json"), "utf8")
+    ).resolves.toContain("lyrashield_scan_target")
+    await expect(
+      readFile(path.join(output, "opencode", "opencode.json"), "utf8")
+    ).resolves.toContain("https://app.lyrashieldai.com/api/mcp")
+    await expect(
+      readFile(path.join(output, "opencode", "skills", "scan-project", "SKILL.md"), "utf8")
+    ).resolves.toContain("lyrashield_scan_target")
+    const antigravityManifest = JSON.parse(
+      await readFile(path.join(output, "antigravity", "plugin.json"), "utf8")
+    ) as Record<string, unknown>
+    expect(antigravityManifest).toEqual({
+      $schema: "https://antigravity.google/schemas/v1/plugin.json",
+      name: "lyrashield",
+      description: expect.any(String),
+    })
+    const antigravityMcp = JSON.parse(
+      await readFile(path.join(output, "antigravity", "mcp_config.json"), "utf8")
+    ) as { mcpServers?: Record<string, Record<string, unknown>> }
+    expect(antigravityMcp.mcpServers).toEqual({
+      lyrashield: { serverUrl: "https://app.lyrashieldai.com/api/mcp" },
+    })
     await expect(
       readFile(path.join(output, "cline", "submission.json"), "utf8")
     ).resolves.toContain("lyrashield.read")
@@ -328,10 +430,34 @@ describe("exportMarketplace", () => {
       "zed-extension",
       "codebuff",
       "gemini-extension",
+      "antigravity",
+      "amp",
+      "opencode",
       "kiro-power",
       "cline",
       "kilo",
       "openclaw",
+      "aider",
+      "augment",
+      "continue",
+      "devin-cli",
+      "devin-desktop",
+      "factory",
+      "goose",
+      "hermes",
+      "jetbrains-ai-assistant",
+      "jetbrains-junie",
+      "lovable",
+      "mcp-registry",
+      "mimo-code",
+      "mistral-vibe",
+      "oh-my-pi",
+      "roo-code",
+      "pi",
+      "qoder",
+      "qwen",
+      "replit",
+      "v0",
       "reviewer-pack",
       "assets",
       "scripts",
@@ -340,39 +466,237 @@ describe("exportMarketplace", () => {
     await expect(
       readFile(path.join(output, "assets", "lyrashield-400.svg"), "utf8")
     ).resolves.toContain('width="400"')
+    await expect(readFile(path.join(output, "augment", "validate.mjs"))).rejects.toThrow()
+    await expect(readFile(path.join(output, "mcp-registry", "validate.mjs"))).rejects.toThrow()
+    await expect(readFile(path.join(output, "scripts", "validate.mjs"), "utf8")).resolves.toContain(
+      "manifestSchemaVersion"
+    )
     const icon = await readFile(path.join(output, "assets", "lyrashield-400.png"))
     expect(icon.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a")
 
-    // Gemini policy is catalog-derived: the exporter must emit the exact set of
-    // mutating tools recorded in the MCP catalog, into both gemini manifests.
+    // Gemini exposes the explicitly invoked scan and fix/retest workflows;
+    // unrelated mutators remain excluded in both extension manifests.
     const mutating = createAllTools({ apiBaseUrl: "", apiKey: "" })
       .filter((tool) => tool.mutating)
       .map((tool) => tool.name)
     expect(manifest.mutatingTools).toEqual(mutating)
+    const allowed = [
+      "lyrashield_scan_target",
+      "lyrashield_run_pr_scan",
+      "lyrashield_record_fix_proposal",
+      "lyrashield_verify_fix",
+    ]
+    const excluded = mutating.filter((name) => !allowed.includes(name))
+    expect(manifest.geminiAllowedMutatingTools).toEqual(allowed)
+    expect(manifest.geminiExcludedTools).toEqual(excluded)
+    await expect(
+      readFile(path.join(output, "gemini-extension", "skills", "scan-project", "SKILL.md"), "utf8")
+    ).resolves.toBe(
+      await readFile(
+        path.join(repoRoot, "packages/agent-plugin/plugin/skills/scan-project/SKILL.md"),
+        "utf8"
+      )
+    )
     for (const location of ["gemini-extension.json", "gemini-extension/gemini-extension.json"]) {
       const gemini = JSON.parse(await readFile(path.join(output, location), "utf8")) as {
         excludeTools?: string[]
+        mcpServers: { lyrashield: { excludeTools?: string[] } }
         version?: string
       }
-      expect(gemini.excludeTools).toEqual(mutating)
+      expect(gemini.excludeTools).toEqual(excluded)
+      expect(gemini.mcpServers.lyrashield.excludeTools).toEqual(excluded)
+      for (const skill of ["scan-project", "review-changes", "fix-and-retest"]) {
+        const workflow = await readFile(
+          path.join(output, "gemini-extension/skills", skill, "SKILL.md"),
+          "utf8"
+        )
+        for (const name of workflow.match(/lyrashield_[a-z_]+/g) ?? []) {
+          expect(excluded, `${skill} references excluded tool ${name}`).not.toContain(name)
+        }
+      }
       expect(gemini.version).toBe(manifest.artifactVersions?.gemini)
     }
 
     // Manifest versions must match each artifact's own source-of-truth file.
     expect(manifest.artifactVersions).toEqual({
-      zed: "0.1.30",
-      gemini: "0.1.30",
-      codebuff: "0.1.30",
-      openclaw: "0.1.30",
+      zed: "0.1.31",
+      gemini: "0.1.31",
+      codebuff: "0.1.31",
+      openclaw: "0.1.31",
     })
+  })
+
+  it("ships no dead relative links and no self-referential status in the exported markdown tree", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await copyValidExport(output)
+
+    const markdownFiles: string[] = []
+    async function collect(directory: string): Promise<void> {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const full = path.join(directory, entry.name)
+        if (entry.isDirectory()) await collect(full)
+        else if (entry.name.endsWith(".md")) markdownFiles.push(full)
+      }
+    }
+    await collect(output)
+    expect(markdownFiles.length).toBeGreaterThan(0)
+
+    const dead: string[] = []
+    for (const file of markdownFiles) {
+      const text = await readFile(file, "utf8")
+      // The optional title is spelled as an empty alternative rather than a
+      // quantifier around the group: a `?` there would put a repeat inside a
+      // repeat, which `security/detect-unsafe-regex` flags. The language is
+      // unchanged — a target, then either a title and the closing paren or just
+      // the closing paren.
+      for (const match of text.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*"|)\)/g)) {
+        const target = match[1]
+        if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(target)) continue
+        const clean = target.split("#")[0].split("?")[0]
+        if (clean.length === 0) continue
+        const resolved = path.resolve(path.dirname(file), clean)
+        // A relative link that leaves the export root is broken for the
+        // published repository even when the file exists in the product repo.
+        if (resolved !== output && !resolved.startsWith(`${output}${path.sep}`)) {
+          dead.push(`${path.relative(output, file)} -> ${target} (escapes export root)`)
+          continue
+        }
+        try {
+          await access(resolved)
+        } catch {
+          dead.push(`${path.relative(output, file)} -> ${target} (missing target)`)
+        }
+      }
+    }
+    expect(dead).toEqual([])
+
+    // The generated README must not embed a revision or a readback section: it
+    // would name its own parent commit and go stale the moment it merges.
+    // Point-in-time status lives in manifest.json instead.
+    const readme = await readFile(path.join(output, "README.md"), "utf8")
+    expect(readme).not.toMatch(/\b[a-f0-9]{40}\b/)
+    expect(readme).not.toContain("Source and publication readback")
+  }, 60000)
+
+  it("runs the Zed WASI checks when either exported workflow changes", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await copyValidExport(output)
+
+    const validateWorkflow = await readFile(
+      path.join(output, ".github", "workflows", "validate.yml"),
+      "utf8"
+    )
+    expect(validateWorkflow).toContain("changed=true")
+    expect(validateWorkflow).toContain('if merge_base="$(git merge-base "$base" HEAD)"; then')
+    expect(validateWorkflow).toContain('echo "changed=$changed" >> "$GITHUB_OUTPUT"')
+    const diffCommand = 'git diff --quiet "$merge_base" HEAD --'
+    const diffStart = validateWorkflow.indexOf(diffCommand)
+    expect(diffStart).not.toBe(-1)
+    const pathsStart = validateWorkflow.indexOf("\n", diffStart) + 1
+    const pathsEnd = validateWorkflow.indexOf("; then", pathsStart)
+    const guardedPaths = validateWorkflow
+      .slice(pathsStart, pathsEnd)
+      .split("\n")
+      .map((line) => line.replace(/\\$/, "").trim())
+      .filter(Boolean)
+    expect(guardedPaths).toEqual([
+      "zed-extension",
+      ".github/workflows/validate.yml",
+      ".github/workflows/release.yml",
+    ])
   })
 })
 
 describe("exported validator", () => {
-  it("exports runnable verifier fixtures and the required client schema contract", async () => {
+  it("rejects a Gemini authored workflow that calls an excluded mutation", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await copyValidExport(output)
+    const relative = "gemini-extension/commands/lyrashield/review-changes.toml"
+    const text = await readFile(path.join(output, relative), "utf8")
+    await writeFile(
+      path.join(output, relative),
+      text.replace("lyrashield_check_diff", "lyrashield_cancel_scan")
+    )
+    await updateManifestHash(output, relative)
+    await expect(runValidator(output)).rejects.toThrow(
+      /references excluded tool lyrashield_cancel_scan/
+    )
+  })
+
+  it("keeps offline validation separate from published MCP gates in CI and releases", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
     await exportMarketplace(output)
+    const preloadDir = await mkdtemp(path.join(tmpdir(), "lyrashield-registry-fixture-"))
+    outputs.push(preloadDir)
+    const preload = path.join(preloadDir, "registry.mjs")
+    await writeFile(
+      preload,
+      `globalThis.fetch = async url => {
+      if (url !== "https://registry.npmjs.org/@lyrashield%2fmcp/0.2.12") throw new Error("unexpected registry URL");
+      return new Response('{"error":"E404"}', { status: 404 });
+    };`
+    )
+    await expect(
+      execFileAsync(process.execPath, ["--import", preload, "scripts/validate.mjs"], {
+        cwd: output,
+      })
+    ).resolves.toMatchObject({ stdout: expect.stringContaining("Marketplace validation passed") })
+    await expect(
+      execFileAsync(
+        process.execPath,
+        ["--import", preload, "scripts/validate.mjs", "--release-ready"],
+        {
+          cwd: output,
+        }
+      )
+    ).rejects.toThrow(/pinned MCP package is unavailable: HTTP 404/)
+    const releaseWorkflow = await readFile(
+      path.join(output, ".github/workflows/release.yml"),
+      "utf8"
+    )
+    expect(releaseWorkflow).toContain("node scripts/validate.mjs --release")
+    expect(releaseWorkflow).toContain("node scripts/verify-published-mcp.mjs")
+    const workflow = parse(
+      await readFile(path.join(output, ".github/workflows/validate.yml"), "utf8")
+    ) as {
+      jobs: { validate: { steps: Array<{ run?: string }> } }
+    }
+    const validateCommand = workflow.jobs.validate.steps.find((step) =>
+      step.run?.startsWith("node scripts/validate.mjs")
+    )?.run
+    expect(validateCommand).toBe("node scripts/validate.mjs --release-ready")
+    await expect(
+      execFileAsync(
+        process.execPath,
+        ["--import", preload, ...validateCommand!.split(/\s+/).slice(1)],
+        {
+          cwd: output,
+        }
+      )
+    ).rejects.toThrow(/pinned MCP package is unavailable: HTTP 404/)
+    const manifestPath = path.join(output, "manifest.json")
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"))
+    manifest.publication = {
+      ...manifest.publication,
+      status: "release-candidate",
+      sourceClean: true,
+    }
+    await writeFile(manifestPath, JSON.stringify(manifest))
+    await expect(
+      execFileAsync(process.execPath, ["--import", preload, "scripts/validate.mjs", "--release"], {
+        cwd: output,
+      })
+    ).rejects.toThrow(/pinned MCP package is unavailable: HTTP 404/)
+  }, 20_000)
+
+  it("exports runnable verifier fixtures and the required client schema contract", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await copyValidExport(output)
     await expect(runValidator(output)).resolves.toContain("Marketplace validation passed")
     await execFileAsync(
       process.execPath,
@@ -397,7 +721,7 @@ describe("exported validator", () => {
   it("rejects published MCP verification with npm lifecycle scripts enabled", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const verifierFile = "scripts/verify-published-mcp.mjs"
     const verifierPath = path.join(output, verifierFile)
@@ -412,7 +736,7 @@ describe("exported validator", () => {
   it("rejects unreviewed read-only Codebuff tools after hashes are refreshed", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const codebuffFile = "codebuff/lyrashield-review.ts"
     const codebuffPath = path.join(output, codebuffFile)
@@ -432,12 +756,12 @@ describe("exported validator", () => {
   })
 
   it.each([
-    ["manifest version", "manifest.json", '"version": "0.1.30"', '"version": "9.9.9"'],
-    ["generator version", "manifest.json", '"version": "0.1.30"', '"version": "9.9.9"'],
+    ["manifest version", "manifest.json", '"version": "0.1.31"', '"version": "9.9.9"'],
+    ["generator version", "manifest.json", '"version": "0.1.31"', '"version": "9.9.9"'],
     [
       "installed Codex version",
       "codex-plugin/.codex-plugin/plugin.json",
-      '"version": "0.1.30"',
+      '"version": "0.1.31"',
       '"version": "9.9.9"',
     ],
     [
@@ -449,13 +773,13 @@ describe("exported validator", () => {
     [
       "Codebuff executable pin with approved comment",
       "codebuff/lyrashield-review.ts",
-      'args: ["-y", "@lyrashield/mcp@0.2.11"]',
-      'args: ["-y", "@lyrashield/mcp@9.9.9"], // @lyrashield/mcp@0.2.11',
+      'args: ["-y", "@lyrashield/mcp@0.2.12"]',
+      'args: ["-y", "@lyrashield/mcp@9.9.9"], // @lyrashield/mcp@0.2.12',
     ],
   ])("rejects %s drift after hashes are refreshed", async (_label, file, before, after) => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const target = path.join(output, file)
     const original = await readFile(target, "utf8")
     if (file === "manifest.json" && _label === "generator version") {
@@ -477,7 +801,7 @@ describe("exported validator", () => {
   ])("rejects a synthetic credential in %s after hashes are refreshed", async (file) => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const secret = "lsk" + "_" + "A".repeat(24)
     await writeFile(
       path.join(output, file),
@@ -492,13 +816,13 @@ describe("exported validator", () => {
       '"command": "npx"',
       '"env": {"LYRASHIELD_API_URL":"https://app.lyrashieldai.com"}, "command": "npx"',
     ],
-    ["gemini-extension.json", "@lyrashield/mcp@0.2.11", "@lyrashield/mcp"],
+    ["gemini-extension.json", "@lyrashield/mcp@0.2.12", "@lyrashield/mcp"],
     ["codebuff/lyrashield-review.ts", '"read_files"', '"run_terminal_command", "read_files"'],
     ["openclaw/SKILL.md", "pull requests never auto-merge", "pull requests auto-merge"],
   ])("rejects unsafe distribution drift in %s", async (file, before, after) => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const target = path.join(output, file)
     await writeFile(target, (await readFile(target, "utf8")).replace(before, after))
     await expect(
@@ -512,13 +836,62 @@ describe("exported validator", () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
     await exportMarketplace(output)
+    await expect(validatePlugin(output)).resolves.toEqual({ ok: true, errors: [] })
+    for (const packageName of ["kiro-power", "antigravity"]) {
+      for (const skill of [
+        "lyrashield",
+        "get-started",
+        "review-changes",
+        "scan-project",
+        "fix-and-retest",
+        "launch-readiness",
+      ]) {
+        await expect(
+          readFile(path.join(output, packageName, "skills", skill, "SKILL.md"), "utf8")
+        ).resolves.toBe(await readFile(path.join(output, "skills", skill, "SKILL.md"), "utf8"))
+      }
+    }
     await expect(runValidator(output)).resolves.toContain("Marketplace validation passed")
+  })
+
+  it("rejects Antigravity MCP config that does not use its documented serverUrl after hash refresh", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await copyValidExport(output)
+    const mcpPath = path.join(output, "antigravity", "mcp_config.json")
+    const config = JSON.parse(await readFile(mcpPath, "utf8")) as {
+      mcpServers: Record<string, Record<string, string>>
+    }
+    const server = config.mcpServers.lyrashield
+    server.url = server.serverUrl
+    delete server.serverUrl
+    await writeFile(mcpPath, `${JSON.stringify(config, null, 2)}\n`)
+    await updateManifestHash(output, "antigravity/mcp_config.json")
+    await expect(runValidator(output)).rejects.toThrow(/Antigravity MCP config/)
+  })
+
+  it("rejects Kilo companion-skill list and frontmatter drift after hash refresh", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await copyValidExport(output)
+
+    const mcpPath = path.join(output, "kilo/mcps/lyrashield/MCP.yaml")
+    const mcpYaml = await readFile(mcpPath, "utf8")
+    await writeFile(mcpPath, mcpYaml.replace("  - launch-readiness\n", ""))
+    await updateManifestHash(output, "kilo/mcps/lyrashield/MCP.yaml")
+    await expect(runValidator(output)).rejects.toThrow(/Kilo MCP.yaml skills list/)
+
+    const skillPath = path.join(output, "kilo/skills/scan-project/SKILL.md")
+    const skill = await readFile(skillPath, "utf8")
+    await writeFile(skillPath, skill.replace("name: scan-project", "name: review-changes"))
+    await updateManifestHash(output, "kilo/skills/scan-project/SKILL.md")
+    await expect(runValidator(output)).rejects.toThrow(/frontmatter name must match its directory/)
   })
 
   it("rejects a tag whose version differs from the export", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const validator = path.join(output, "scripts", "validate.mjs")
     await expect(
       execFileAsync(process.execPath, [validator], {
@@ -535,7 +908,7 @@ describe("exported validator", () => {
     await expect(
       execFileAsync(process.execPath, [validator], {
         cwd: output,
-        env: { ...process.env, GITHUB_REF: "refs/tags/v0.1.30" },
+        env: { ...process.env, GITHUB_REF: "refs/tags/v0.1.31" },
       })
     ).resolves.toMatchObject({ stdout: expect.stringContaining("Marketplace validation passed") })
   })
@@ -543,7 +916,7 @@ describe("exported validator", () => {
   it("ignores repository metadata while validating the exported tree", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const gitMetadata = path.join(output, ".git", "objects")
     await mkdir(gitMetadata, { recursive: true })
     await writeFile(path.join(gitMetadata, "probe"), "repository metadata\n", "utf8")
@@ -553,7 +926,7 @@ describe("exported validator", () => {
   it("fails when an artifact version drifts from the manifest", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const manifestPath = path.join(output, "manifest.json")
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
@@ -568,7 +941,7 @@ describe("exported validator", () => {
   it("fails when a nested forbidden credential file enters the export", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const nested = path.join(output, "reviewer-pack", "fixture")
     await mkdir(nested, { recursive: true })
@@ -580,7 +953,7 @@ describe("exported validator", () => {
   it("fails when the exported gemini excludeTools drift from the manifest", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const geminiPath = path.join(output, "gemini-extension", "gemini-extension.json")
     const gemini = JSON.parse(await readFile(geminiPath, "utf8")) as { excludeTools: string[] }
@@ -593,12 +966,37 @@ describe("exported validator", () => {
   it("produces identical clean exports from one source commit", async () => {
     const first = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     const second = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
-    outputs.push(first, second)
-    await exportMarketplace(first)
-    await exportMarketplace(second)
-    expect(await readFile(path.join(first, "manifest.json"), "utf8")).toBe(
-      await readFile(path.join(second, "manifest.json"), "utf8")
+    const provenance = await mkdtemp(path.join(tmpdir(), "lyrashield-export-provenance-"))
+    outputs.push(first, second, provenance)
+    await execFileAsync("git", ["init", provenance])
+    await execFileAsync(
+      "git",
+      [
+        "-c",
+        "user.name=Export Test",
+        "-c",
+        "user.email=export@example.invalid",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "fixture",
+        "--no-gpg-sign",
+      ],
+      { cwd: provenance }
     )
+    // Other suites write temporary files in the shared checkout. Keep Git
+    // provenance stable while still exercising the real exporter and Git calls.
+    vi.stubEnv("GIT_DIR", path.join(provenance, ".git"))
+    vi.stubEnv("GIT_WORK_TREE", provenance)
+    try {
+      await exportMarketplace(first)
+      await exportMarketplace(second)
+      const manifest = await readFile(path.join(first, "manifest.json"), "utf8")
+      expect(JSON.parse(manifest).publication.sourceClean).toBe(true)
+      expect(manifest).toBe(await readFile(path.join(second, "manifest.json"), "utf8"))
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 

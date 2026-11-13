@@ -25,7 +25,7 @@ export type AiAssuranceState =
   | "EVIDENCE_EXPIRED"
   | "NOT_APPLICABLE"
 
-export const CONTROL_EVIDENCE_VERSION_STATUSES = [
+const CONTROL_EVIDENCE_VERSION_STATUSES = [
   "SUBMITTED",
   "ACCEPTED",
   "REJECTED",
@@ -34,7 +34,7 @@ export const CONTROL_EVIDENCE_VERSION_STATUSES = [
 
 export type ControlEvidenceVersionStatus = (typeof CONTROL_EVIDENCE_VERSION_STATUSES)[number]
 
-export const ArtifactManifestItemSchema = z
+const ArtifactManifestItemSchema = z
   .object({
     id: z.string().min(1),
     filename: z.string().min(1),
@@ -116,8 +116,8 @@ export interface ControlEvidenceWithVersion {
   currentVersion: ControlEvidenceVersionSummary | null
 }
 
-export const MAX_CONTROL_EVIDENCE_ARTIFACTS = 5
-export const MAX_CONTROL_EVIDENCE_ARTIFACT_BYTES = 20 * 1024 * 1024
+const MAX_CONTROL_EVIDENCE_ARTIFACTS = 5
+const MAX_CONTROL_EVIDENCE_ARTIFACT_BYTES = 20 * 1024 * 1024
 
 const ARTIFACT_MEDIA_TYPES: Record<string, string> = {
   ".pdf": "application/pdf",

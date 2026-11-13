@@ -14,9 +14,12 @@ pub enum LicenseSku {
 
 /// The payload that is canonically serialized and signed with ed25519.
 ///
-/// Mirrors `LicensePayload` in `packages/licenses/src/types.ts`.
+/// Mirrors `LicensePayload` in `packages/licenses/src/types.ts`. Kept as the
+/// documented wire shape even though the desktop only ever consumes
+/// `LicenseFile`; the field set must stay in step with the published type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct LicensePayload {
     pub sku: LicenseSku,
     pub seat_count: u32,
@@ -62,16 +65,6 @@ pub struct ActivateData {
     pub license: LicenseFile,
     pub blob: String,
     pub license_id: String,
-}
-
-/// Legacy alias — keep for backwards compat in tests, now backed by ActivateData with camelCase.
-pub type ActivateResponse = ActivateData;
-
-/// Generic {success,data} envelope used by all license web routes.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ApiSuccessEnvelope<T> {
-    pub success: bool,
-    pub data: T,
 }
 
 /// Inner data for `POST /api/licenses/verify` — versioned v1.

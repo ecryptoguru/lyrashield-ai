@@ -1,9 +1,10 @@
-import { withCookieMutation } from "../../../lib/api-auth"
-import { createHash } from "crypto"
+import { scanCreationConflict } from "../../../lib/scan-admission-conflicts"
+import { releaseUnstartedScanSlot } from "@lyrashield/db"
+import { withCookieMutation, authErrorResponse } from "../../../lib/api-auth"
+import { serializeScanListItem } from "./scan-list-response"
 import {
   prisma,
   createScan,
-  listScans,
   updateScanStatus,
   claimOrGetAgentOperation,
   completeAgentOperation,
@@ -13,33 +14,24 @@ import {
   resolveAuthenticatedAssessmentAuthorization,
   LiveAiSafetyError,
   ScanAttachmentError,
-  WorkspaceScanConcurrencyLimitError,
-  type ScanListItem,
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import {
-  CreateScanInputSchema,
-  MAX_CONCURRENT_WORKSPACE_SCANS,
-  ScanExecutionPlanInputError,
-  ScanStatusSchema,
-} from "@lyrashield/types"
-import { parseScanStateFilter, scanStateStatuses } from "@/lib/scan-presentation"
+import { CreateScanInputSchema, ScanExecutionPlanInputError } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
-import { NextResponse } from "next/server"
-import { z } from "zod"
 import { assertScanAllowed } from "@lyrashield/billing"
 import {
   authAssessmentAdmission,
+  assertSelectableScanPolicy,
   findCurrentDomainProof,
   findScanPolicy,
   resolveCanonicalReviewMode,
   resolveSponsorScanPlan,
-  resolveUrlReviewMode,
+  resolveAvailableUrlReview,
 } from "../../../lib/scan-admission"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
-import { authErrorResponse } from "../../../lib/api-auth"
-import { apiError, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
+import { publicScanProvenance } from "../../../lib/scan-provenance"
+import { apiError, apiSuccess } from "../../../lib/api-response"
 import {
   assertScanWorkerAvailable,
   enqueueScanJob,
@@ -51,10 +43,17 @@ import {
   checkScanCreateRateLimit,
   clientIpFromRequest,
 } from "../../../lib/rate-limit"
+import { createScanRefusalContext } from "../../../lib/scan-refusal"
+import {
+  claimOrdinaryScanOperation,
+  isDelegatedScanAdmissionError,
+  resolveDelegatedScanAdmission,
+  type DelegatedScanAdmission,
+} from "./scan-operation-admission"
 
 /** Full lowercase git object IDs (SHA-1 = 40, SHA-256 = 64) pass through as
  * immutable revisions; anything else resolves through the installation. */
-const FULL_GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+const FULL_GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
 
 async function resolveRepoRevision(
   installationId: number,
@@ -62,13 +61,9 @@ async function resolveRepoRevision(
   repo: string,
   ref: string
 ): Promise<string> {
-  if (FULL_GIT_OBJECT_ID.test(ref)) return ref
+  if (FULL_GIT_OBJECT_ID.test(ref)) return ref.toLowerCase()
   return getBranchRefSha(installationId, owner, repo, ref)
 }
-const ScanIdQuerySchema = z
-  .array(z.string().trim().min(1).max(128))
-  .min(1)
-  .max(MAX_CONCURRENT_WORKSPACE_SCANS)
 
 /**
  * Concurrent in-flight reviews per workspace (shared with the scheduled-scan
@@ -77,41 +72,7 @@ const ScanIdQuerySchema = z
  * normal multi-product use unaffected.
  */
 
-/**
- * Serialize a scan list row for the client. Dates become ISO strings so the
- * polled payload matches the SSR-rendered shape exactly (the client's ScanItem
- * type expects strings, and `findingCount` is already flattened by listScans).
- */
-function serializeScanListItem(scan: ScanListItem) {
-  return {
-    ...scan,
-    startedAt: scan.startedAt ? scan.startedAt.toISOString() : null,
-    endedAt: scan.endedAt ? scan.endedAt.toISOString() : null,
-    createdAt: scan.createdAt.toISOString(),
-  }
-}
-
-/**
- * ETag over the entire response representation. The active-scan poll re-requests
- * this list on an interval; when nothing has moved the client gets a 304 with no
- * body to parse.
- *
- * Hashing the full payload (not a subset of fields) is deliberate: a summary,
- * error message, or target rename can change while status and counts stay put,
- * and a partial hash would then serve a 304 and freeze stale data on screen.
- */
-function scanListEtag(
-  items: ReturnType<typeof serializeScanListItem>[],
-  nextCursor: string | null
-): string {
-  // Hash the exact response representation, envelope included: the body is
-  // { success, data: { items, nextCursor } }, so any envelope change also
-  // invalidates the tag instead of serving a stale-shaped 304.
-  const payload = JSON.stringify({ success: true, data: { items, nextCursor } })
-  return `"${createHash("sha256").update(payload).digest("hex")}"`
-}
-
-async function post(request: Request) {
+async function parseCreateScanRequest(request: Request) {
   let body: unknown
   try {
     body = await request.json()
@@ -123,25 +84,60 @@ async function post(request: Request) {
   if (!parsed.success) {
     return apiError("VALIDATION_ERROR", parsed.error.message, 400)
   }
+  return parsed.data
+}
 
-  const data = parsed.data
+async function post(request: Request) {
+  const data = await parseCreateScanRequest(request)
+  if (data instanceof Response) return data
   const workspaceId = data.workspaceId
 
   let operationClaim: Awaited<ReturnType<typeof claimOrGetAgentOperation>> | null = null
-  let submissionAttempted = false
   let submittedScanId: string | undefined
   let operationCompleted = false
+  let delegatedScanAdmission: DelegatedScanAdmission | undefined
+  // Captured once auth succeeds so catch-block refusals can attribute the actor.
+  let actorUserId: string | undefined
+  const { submission, refuseScan } = createScanRefusalContext(request)
   try {
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    assertSelectableScanPolicy(session, data.policyId)
+    actorUserId = session.userId
+
+    // Deny out-of-grant targets before lookup so their existence is not exposed.
+    assertOAuthDelegatedScope(session, data.targetId, data.mode)
+
+    const delegatedAdmission = await resolveDelegatedScanAdmission({
+      request,
+      workspaceId,
+      oauth: session.oauth,
+    })
+    if (delegatedAdmission.kind === "invalid") return delegatedAdmission.response
+    if (delegatedAdmission.kind === "admitted") {
+      delegatedScanAdmission = delegatedAdmission.admission
+      operationClaim = {
+        status: "NEW",
+        operation: delegatedAdmission.operation,
+        admissionProof: delegatedAdmission.admission.admissionProof,
+      }
+    }
 
     const target = await prisma.target.findFirst({
       where: { id: data.targetId, workspaceId, deletedAt: null },
     })
     if (!target) {
-      return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "target_not_found",
+        code: "TARGET_NOT_FOUND",
+        message: "Target not found in this workspace",
+        status: 404,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
-
-    assertOAuthDelegatedScope(session, data.targetId, data.mode)
 
     // Resolve workspace-scoped attachment IDs before any billing/queue work.
     // The stored rows — never client-supplied fields — prove ownership,
@@ -153,11 +149,17 @@ async function post(request: Request) {
         await resolveScanAttachments(workspaceId, attachmentIds)
       } catch (error) {
         if (error instanceof ScanAttachmentError) {
-          return apiError(
-            error.code,
-            error.message,
-            error.code === "SCAN_ATTACHMENT_NOT_FOUND" ? 404 : 400
-          )
+          return refuseScan({
+            workspaceId,
+            actorUserId,
+            reason: "attachment_rejected",
+            code: error.code,
+            message: error.message,
+            status: error.code === "SCAN_ATTACHMENT_NOT_FOUND" ? 404 : 400,
+            targetId: data.targetId,
+            mode: data.mode,
+            workflow: data.workflow,
+          })
         }
         throw error
       }
@@ -167,13 +169,23 @@ async function post(request: Request) {
     // actually does: engine-backed tiers (STANDARD/DEEP) require a verified
     // domain on paid plans, while the deterministic-only tier needs no proof —
     // it only fetches what a browser could.
-    const urlAdmission = resolveUrlReviewMode({
+    const urlAdmission = await resolveAvailableUrlReview({
       targetType: target.type,
       mode: data.mode,
       hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
     })
     if (!urlAdmission.ok) {
-      return apiError(urlAdmission.code, urlAdmission.reason, 400)
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "url_not_admitted",
+        code: urlAdmission.code,
+        message: urlAdmission.reason,
+        status: urlAdmission.code === "TARGET_RELAY_UNAVAILABLE" ? 503 : 400,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
     const urlEngineBacked = urlAdmission.engineBacked
 
@@ -191,42 +203,61 @@ async function post(request: Request) {
         // per client IP; Turnstile is the follow-up.
         const freeUrlLimit = await checkFreeUrlScanRateLimit(clientIpFromRequest(request))
         if (freeUrlLimit.limited) {
-          return apiError(
-            "FREE_URL_SCAN_RATE_LIMITED",
-            "Free-plan remote URL reviews are temporarily limited for your network. Verify the domain or upgrade for unrestricted reviews.",
-            429,
-            { "Retry-After": String(Math.max(freeUrlLimit.retryAfter, 1)) }
-          )
+          return refuseScan({
+            workspaceId,
+            actorUserId,
+            reason: "free_scan_rate_limited",
+            code: "FREE_URL_SCAN_RATE_LIMITED",
+            message:
+              "Free-plan remote URL reviews are temporarily limited for your network. Verify the domain or upgrade for unrestricted reviews.",
+            status: 429,
+            headers: { "Retry-After": String(Math.max(freeUrlLimit.retryAfter, 1)) },
+            targetId: data.targetId,
+            mode: data.mode,
+            workflow: data.workflow,
+          })
         }
       }
-      if (sponsorPlan !== "FREE" && urlEngineBacked) {
+      if (urlEngineBacked) {
         const { domain, verified } = await findCurrentDomainProof(workspaceId, target.url)
         if (!verified) {
-          return apiError(
-            "DOMAIN_VERIFICATION_REQUIRED",
-            "Verify control of this domain once to enable engine-backed reviews.",
-            403,
-            undefined,
-            {
+          return refuseScan({
+            workspaceId,
+            actorUserId,
+            reason: "domain_verification_required",
+            code: "DOMAIN_VERIFICATION_REQUIRED",
+            message: "Verify control of this domain once to enable engine-backed reviews.",
+            status: 403,
+            details: {
               remediation: {
                 txtName: domain ? `_lyrashield.${domain}` : null,
                 verifyPath: target.id ? `/dashboard/targets/${target.id}` : null,
               },
-            }
-          )
+            },
+            targetId: data.targetId,
+            mode: data.mode,
+            workflow: data.workflow,
+          })
         }
       }
     }
 
     const canonical = resolveCanonicalReviewMode({ targetType: target.type, mode: data.mode })
     if (!canonical.ok) {
-      return apiError(
-        canonical.code,
-        canonical.code === "TARGET_TYPE_UNSUPPORTED"
-          ? "This target cannot be reviewed yet."
-          : "This review type is not available for the selected target.",
-        400
-      )
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "profile_unavailable",
+        code: canonical.code,
+        message:
+          canonical.code === "TARGET_TYPE_UNSUPPORTED"
+            ? "This target cannot be reviewed yet."
+            : "This review type is not available for the selected target.",
+        status: 400,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
     const canonicalMode = canonical.canonicalMode
 
@@ -236,107 +267,86 @@ async function post(request: Request) {
     // TRIAL/STARTER plans; check usage balance; enforce trial throttle.
     const entitlement = await assertScanAllowed(workspaceId, canonicalMode, session.userId)
     if (!entitlement.allowed) {
-      return apiError(
-        entitlement.code ?? "SCAN_NOT_ALLOWED",
-        entitlement.message ?? "Scan not allowed",
-        403,
-        undefined,
-        {
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "entitlement_denied",
+        code: entitlement.code ?? "SCAN_NOT_ALLOWED",
+        message: entitlement.message ?? "Scan not allowed",
+        status: 403,
+        details: {
           plan: entitlement.plan,
           isTrial: entitlement.isTrial,
           remainingMinutes: entitlement.remainingMinutes,
-        }
-      )
+        },
+        targetId: data.targetId,
+        mode: canonicalMode,
+        workflow: data.workflow,
+      })
     }
 
     const policy = await findScanPolicy(workspaceId, data.policyId)
     if (data.policyId && !policy) {
-      return apiError("POLICY_NOT_FOUND", "Policy not found in this workspace", 404)
-    }
-    const policyId = policy?.id
-
-    // W3-01: durable operation identity is opt-in. Callers that send an
-    // Idempotency-Key get identical-retry replay semantics; without the
-    // header the route behaves exactly as before.
-    const idempotencyKey = request.headers.get("idempotency-key")?.trim()
-    if (idempotencyKey !== undefined) {
-      if (idempotencyKey.length < 1 || idempotencyKey.length > 128) {
-        return apiError("VALIDATION_ERROR", "Idempotency-Key must be 1-128 characters", 400)
-      }
-      const claim = await claimOrGetAgentOperation({
+      return refuseScan({
         workspaceId,
-        operationName: "scan.create",
-        idempotencyKey,
-        input: { ...data, mode: canonicalMode, policyId: policyId ?? null },
-        connectionId: session.oauth?.connectionId,
-        authorizationVersion: session.oauth?.authorizationVersion,
-        apiKeyId: session.apiKey?.keyId,
-        userId: session.apiKey || session.oauth ? undefined : session.userId,
+        actorUserId,
+        reason: "policy_not_found",
+        code: "POLICY_NOT_FOUND",
+        message: "Policy not found in this workspace",
+        status: 404,
+        targetId: data.targetId,
+        mode: canonicalMode,
+        workflow: data.workflow,
       })
-      if (claim.status === "CONFLICT") {
-        return apiError("IDEMPOTENCY_CONFLICT", claim.message, 409)
-      }
-      if (claim.status === "REPLAY") {
-        if (!claim.operation.result || !claim.operation.resultReference) {
-          return apiError(
-            "OPERATION_RESULT_UNAVAILABLE",
-            "The recorded scan cannot be replayed. Inspect its operation status.",
-            409,
-            undefined,
-            { operationId: claim.operation.id }
-          )
-        }
-        return apiSuccess(
-          {
-            ...(claim.operation.result as Record<string, unknown>),
-            operationId: claim.operation.id,
-          },
-          200
-        )
-      }
-      if (claim.status === "FAILED") {
-        return apiError(
-          "OPERATION_FAILED",
-          "This operation previously failed. Inspect its status before starting another scan.",
-          409,
-          undefined,
-          { operationId: claim.operation.id }
-        )
-      }
-      if (claim.status === "IN_PROGRESS") {
-        return apiError(
-          "OPERATION_IN_PROGRESS",
-          "An identical scan start is already in progress. Poll the operation status instead of retrying.",
-          409,
-          undefined,
-          { operationId: claim.operation.id }
-        )
-      }
-      operationClaim = claim
     }
+
+    const ordinaryClaim = await claimOrdinaryScanOperation({
+      request,
+      workspaceId,
+      input: { ...data, mode: canonicalMode, policyId: policy?.id ?? null },
+      oauth: session.oauth,
+      apiKeyId: session.apiKey?.keyId,
+      userId: session.userId,
+      member: workspace.member,
+      delegated: Boolean(delegatedScanAdmission),
+    })
+    if (ordinaryClaim.response) return ordinaryClaim.response
+    if (ordinaryClaim.claim) operationClaim = ordinaryClaim.claim
 
     // Spend controls, cheapest check first. The existing per-target guard below stops the
     // same target running twice; neither of these bounded a workspace fanning out across
     // many targets, where each scan can commit up to PLATFORM_MAX_SCAN_BUDGET_USD.
     const scanRate = await checkScanCreateRateLimit(workspaceId)
     if (scanRate.limited) {
-      return apiError(
-        "SCAN_RATE_LIMITED",
-        "Too many reviews started in the last minute. Please wait a moment and try again.",
-        429,
-        { "Retry-After": String(Math.max(scanRate.retryAfter, 1)) }
-      )
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "rate_limited",
+        code: "SCAN_RATE_LIMITED",
+        message: "Too many reviews started in the last minute. Please wait a moment and try again.",
+        status: 429,
+        headers: { "Retry-After": String(Math.max(scanRate.retryAfter, 1)) },
+        targetId: data.targetId,
+        mode: canonicalMode,
+        workflow: data.workflow,
+      })
     }
 
     try {
       await assertScanWorkerAvailable()
     } catch (error) {
       if (error instanceof ScanWorkerUnavailableError) {
-        return apiError(
-          "SCAN_SERVICE_UNAVAILABLE",
-          "Scanning is temporarily unavailable. Please try again shortly.",
-          503
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "worker_unavailable",
+          code: "SCAN_SERVICE_UNAVAILABLE",
+          message: "Scanning is temporarily unavailable. Please try again shortly.",
+          status: 503,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       throw error
     }
@@ -353,37 +363,62 @@ async function post(request: Request) {
       // pair; absence of either keeps the workflow unavailable.
       const betaAdmission = authAssessmentAdmission(workspaceId, data.targetId)
       if (!betaAdmission.allowed) {
-        return apiError(
-          "SCAN_WORKFLOW_UNAVAILABLE",
-          "Authenticated assessment is not enabled for this workspace and target.",
-          400
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "workflow_unavailable",
+          code: "SCAN_WORKFLOW_UNAVAILABLE",
+          message: "Authenticated assessment is not enabled for this workspace and target.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       if (target.type !== "WEB_APP" && target.type !== "API") {
-        return apiError(
-          "SCAN_PLAN_INVALID",
-          "Authenticated assessment requires a live web app or API target.",
-          400
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "plan_invalid",
+          code: "SCAN_PLAN_INVALID",
+          message: "Authenticated assessment requires a live web app or API target.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       // The beta never runs under a destructive-allowed policy.
       if (policy?.destructiveTestsAllowed === true) {
-        return apiError(
-          "SCAN_PLAN_DENIED",
-          "The selected policy allows destructive tests, which the authenticated assessment forbids.",
-          400
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "plan_denied",
+          code: "SCAN_PLAN_DENIED",
+          message:
+            "The selected policy allows destructive tests, which the authenticated assessment forbids.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       // The authorization reference must name a recorded, scoped artifact —
       // verified staging consent, current domain proof, incident contact, and
       // a bound short-lived test-session credential — covering this exact
       // target host. The worker re-verifies all of it at execution time.
       if (!data.authorizationRef) {
-        return apiError(
-          "SCAN_AUTHORIZATION_REQUIRED",
-          "Authenticated assessment requires a recorded scoped authorization reference.",
-          400
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "authorization_required",
+          code: "SCAN_AUTHORIZATION_REQUIRED",
+          message: "Authenticated assessment requires a recorded scoped authorization reference.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       try {
         await resolveAuthenticatedAssessmentAuthorization({
@@ -393,28 +428,50 @@ async function post(request: Request) {
         })
       } catch (authErr) {
         if (authErr instanceof LiveAiSafetyError) {
-          return apiError(
-            authErr.code,
-            "The recorded assessment authorization does not cover this target.",
-            authErr.code === "AUTH_ASSESSMENT_PRODUCTION_DENIED" ? 403 : 400
-          )
+          return refuseScan({
+            workspaceId,
+            actorUserId,
+            reason: "authorization_denied",
+            code: authErr.code,
+            message: "The recorded assessment authorization does not cover this target.",
+            status: authErr.code === "AUTH_ASSESSMENT_PRODUCTION_DENIED" ? 403 : 400,
+            targetId: data.targetId,
+            mode: canonicalMode,
+            workflow: data.workflow,
+          })
         }
         throw authErr
       }
     }
     if (data.workflow === "REVIEW_CHANGES") {
       if (target.type !== "REPO") {
-        return apiError("SCAN_PLAN_INVALID", "Review Changes requires a repository target.", 400)
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "plan_invalid",
+          code: "SCAN_PLAN_INVALID",
+          message: "Review Changes requires a repository target.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       const installationId = target.installationId ? Number(target.installationId) : null
       const repoOwner = target.repoOwner ?? target.repoFullName?.split("/")[0]
       const repoName = target.repoName ?? target.repoFullName?.split("/")[1]
       if (!installationId || !repoOwner || !repoName) {
-        return apiError(
-          "SCAN_SOURCE_UNAVAILABLE",
-          "Review Changes requires a repository connected through the GitHub App.",
-          409
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "source_unavailable",
+          code: "SCAN_SOURCE_UNAVAILABLE",
+          message: "Review Changes requires a repository connected through the GitHub App.",
+          status: 409,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       try {
         const headSha = await resolveRepoRevision(
@@ -439,7 +496,17 @@ async function post(request: Request) {
           headSha
         )
         if (!mergeBaseSha) {
-          return apiError("SCAN_NO_MERGE_BASE", "The selected refs have no common merge base.", 409)
+          return refuseScan({
+            workspaceId,
+            actorUserId,
+            reason: "merge_base_missing",
+            code: "SCAN_NO_MERGE_BASE",
+            message: "The selected refs have no common merge base.",
+            status: 409,
+            targetId: data.targetId,
+            mode: canonicalMode,
+            workflow: data.workflow,
+          })
         }
         planSource = {
           revision: headSha,
@@ -452,11 +519,17 @@ async function post(request: Request) {
           targetId: data.targetId,
           error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr),
         })
-        return apiError(
-          "SCAN_REF_UNRESOLVED",
-          "Could not resolve the requested refs to immutable revisions.",
-          400
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "ref_unresolved",
+          code: "SCAN_REF_UNRESOLVED",
+          message: "Could not resolve the requested refs to immutable revisions.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
     } else if (target.type === "REPO" && target.installationId) {
       // Pin the head revision when the authorized integration can resolve it.
@@ -482,14 +555,30 @@ async function post(request: Request) {
       }
     }
 
-    submissionAttempted = true
-    const scan = await createScan({
+    const scanIdentity = {
       workspaceId,
       targetId: data.targetId,
       goal: data.goal,
       mode: canonicalMode,
-      policyId,
+      policyId: policy?.id,
+    }
+    submission.attempted = true
+    const scan = await createScan({
+      ...scanIdentity,
+      verifyWorkspaceDefaultPolicy: !data.policyId,
+      engineBudgetCeilingUsd: data.engineBudgetCeilingUsd,
       createdById: session.userId,
+      // W0.4 — bind the delegated grant that just passed assertOAuthDelegatedScope
+      // into the durable scan record, so the async execution boundary re-verifies
+      // the exact connection/version instead of inheriting the request-time allow.
+      ...(session.oauth?.connectionId && session.oauth.authorizationVersion
+        ? {
+            delegatedConnection: {
+              connectionId: session.oauth.connectionId,
+              authorizationVersion: session.oauth.authorizationVersion,
+            },
+          }
+        : {}),
       workflow: data.workflow,
       ...(planSource ? { source: planSource } : {}),
       // Verified above for AUTHENTICATED_ASSESSMENT; the schema rejects it on
@@ -499,17 +588,14 @@ async function post(request: Request) {
       // references — the deduped, scope/checksum-validated list resolved
       // above. This API never treats the list as proof of staged input.
       ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
+      ...(delegatedScanAdmission ? { delegatedOperation: delegatedScanAdmission } : {}),
     })
 
     submittedScanId = scan.id
     try {
       await enqueueScanJob({
         scanId: scan.id,
-        workspaceId,
-        targetId: data.targetId,
-        goal: data.goal,
-        mode: canonicalMode,
-        policyId,
+        ...scanIdentity,
         focus: data.focus,
       })
     } catch (enqueueErr) {
@@ -521,12 +607,19 @@ async function post(request: Request) {
         errorCategory: "QUEUE",
         errorMessage: "Scan worker became unavailable while queueing the scan",
       })
+      await releaseUnstartedScanSlot(workspaceId, scan.id)
       revalidateDashboardAggregates(workspaceId)
-      return apiError(
-        "SCAN_SERVICE_UNAVAILABLE",
-        "Scanning became unavailable while starting this scan. Please try again shortly.",
-        503
-      )
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "enqueue_failed",
+        code: "SCAN_SERVICE_UNAVAILABLE",
+        message: "Scanning became unavailable while starting this scan. Please try again shortly.",
+        status: 503,
+        targetId: data.targetId,
+        mode: canonicalMode,
+        workflow: data.workflow,
+      })
     }
 
     await prisma.auditLog.create({
@@ -577,12 +670,7 @@ async function post(request: Request) {
           repoFullName: target.repoFullName,
         },
       }),
-      // The server-owned immutable plan recorded at creation and its content
-      // digest — the provenance contract every client (SDK/CLI/MCP/Action/
-      // Desktop) reads on a recorded scan. GET /api/scans/[id] returns the
-      // same fields from the stored row.
-      executionPlan: scan.executionPlan ?? null,
-      executionPlanHash: scan.executionPlanHash ?? null,
+      ...publicScanProvenance(scan.executionPlan),
     }
     if (operationClaim?.status === "NEW") {
       await completeAgentOperation(operationClaim.operation.id, workspaceId, {
@@ -599,28 +687,52 @@ async function post(request: Request) {
       201
     )
   } catch (error) {
-    if (error instanceof WorkspaceScanConcurrencyLimitError) {
+    if (isDelegatedScanAdmissionError(error)) {
       return apiError(
-        "SCAN_CONCURRENCY_LIMIT",
-        `This workspace already has ${MAX_CONCURRENT_WORKSPACE_SCANS} reviews running. Wait for one to finish before starting another.`,
-        409
+        "OPERATION_ADMISSION_INVALID",
+        "This delegated operation can no longer start a scan. Inspect its status.",
+        409,
+        undefined,
+        operationClaim && "operation" in operationClaim
+          ? { operationId: operationClaim.operation.id }
+          : undefined
       )
     }
-    if (
-      (error && typeof error === "object" && (error as { code?: string }).code === "P2002") ||
-      (error instanceof Error && error.message === "Target already has an active scan")
-    ) {
-      return apiError(
-        "SCAN_IN_PROGRESS",
-        "Target already has an active scan. Cancel it or wait for completion.",
-        409
-      )
-    }
+    const conflict = scanCreationConflict(error)
+    if (conflict)
+      return refuseScan({
+        ...conflict,
+        workspaceId,
+        actorUserId,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     if (error instanceof Error && error.message === "Target not found in this workspace") {
-      return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "target_not_found",
+        code: "TARGET_NOT_FOUND",
+        message: "Target not found in this workspace",
+        status: 404,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
     if (error instanceof ScanExecutionPlanInputError) {
-      return apiError("SCAN_PLAN_INVALID", error.message, 400)
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "plan_invalid",
+        code: "SCAN_PLAN_INVALID",
+        message: error.message,
+        status: 400,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
@@ -630,7 +742,7 @@ async function post(request: Request) {
     if (operationClaim?.status === "NEW" && !operationCompleted) {
       const operationId = operationClaim.operation.id
       await failAgentOperation(operationId, workspaceId, {
-        error: submissionAttempted ? "OPERATION_OUTCOME_UNKNOWN" : "OPERATION_NOT_SUBMITTED",
+        error: submission.attempted ? "OPERATION_OUTCOME_UNKNOWN" : "OPERATION_NOT_SUBMITTED",
         resultReference: submittedScanId,
       }).catch((error) =>
         logger.error("Failed to record scan operation outcome", {
@@ -642,110 +754,6 @@ async function post(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const workspaceId = searchParams.get("workspaceId")
-    const targetId = searchParams.get("targetId")
-    const rawStatus = searchParams.get("status")
-    const rawScanIds = searchParams.get("ids")
-    // URL-backed state filter (ALL | ACTIVE | COMPLETED | NEEDS_ATTENTION |
-    // CANCELLED). Composes with, but never replaces, the legacy status param.
-    const stateFilter = parseScanStateFilter(searchParams.get("state"))
-
-    if (!workspaceId) {
-      return apiError("MISSING_PARAM", "workspaceId is required", 400)
-    }
-
-    let scanIds: string[] | undefined
-    if (rawScanIds !== null) {
-      const parsed = ScanIdQuerySchema.safeParse(rawScanIds.split(",").map((id) => id.trim()))
-      if (!parsed.success) {
-        return apiError(
-          "INVALID_PARAM",
-          `ids must contain 1-${MAX_CONCURRENT_WORKSPACE_SCANS} valid scan IDs`,
-          400
-        )
-      }
-      scanIds = parsed.data
-    }
-
-    // Support a single status value or a comma-separated list of statuses.
-    let statusFilter: Parameters<typeof listScans>[0]["statuses"] | undefined
-    let singleStatus: Parameters<typeof listScans>[0]["status"] | undefined
-    if (rawStatus) {
-      const parts = rawStatus
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-      if (parts.length > 1) {
-        const parsed = parts.map((s) => ScanStatusSchema.safeParse(s))
-        const invalid = parsed.find((r) => !r.success)
-        if (invalid) {
-          return apiError("INVALID_PARAM", "status contains an invalid scan status value", 400)
-        }
-        statusFilter = parsed.map((r) => (r as { success: true; data: typeof singleStatus }).data!)
-      } else {
-        const parsed = ScanStatusSchema.safeParse(parts[0])
-        if (!parsed.success) {
-          return apiError("INVALID_PARAM", "status must be a valid scan status", 400)
-        }
-        singleStatus = parsed.data
-      }
-    }
-
-    await requirePermission(workspaceId, PERMISSIONS.scan.view)
-
-    const { cursor, limit } = parsePaginationParams(searchParams, 25)
-
-    // Intersect the state filter with an explicit legacy status filter so both
-    // contracts stay meaningful when combined.
-    const stateStatuses = scanStateStatuses(stateFilter)
-    const explicitStatuses = statusFilter ?? (singleStatus ? [singleStatus] : undefined)
-    let effectiveStatuses: string[] | undefined
-    if (stateStatuses && explicitStatuses) {
-      effectiveStatuses = explicitStatuses.filter((status) => stateStatuses.includes(status))
-      if (effectiveStatuses.length === 0) {
-        return NextResponse.json(
-          { success: true, data: { items: [], nextCursor: null } },
-          { status: 200, headers: { "Cache-Control": "private, no-store" } }
-        )
-      }
-    } else if (stateStatuses) {
-      effectiveStatuses = stateStatuses
-    }
-
-    const { items, nextCursor } = await listScans({
-      workspaceId,
-      ...(scanIds ? { scanIds } : {}),
-      ...(targetId ? { targetId } : {}),
-      ...(effectiveStatuses
-        ? { statuses: effectiveStatuses as Parameters<typeof listScans>[0]["statuses"] }
-        : statusFilter
-          ? { statuses: statusFilter }
-          : singleStatus
-            ? { status: singleStatus }
-            : {}),
-      ...(cursor ? { cursor } : {}),
-      limit,
-    })
-
-    const serialized = items.map(serializeScanListItem)
-    const etag = scanListEtag(serialized, nextCursor)
-    if (request.headers.get("if-none-match") === etag) {
-      return new Response(null, { status: 304, headers: { ETag: etag } })
-    }
-
-    return NextResponse.json(
-      { success: true, data: { items: serialized, nextCursor } },
-      { status: 200, headers: { ETag: etag } }
-    )
-  } catch (error) {
-    const authErr = authErrorResponse(error)
-    if (authErr) return authErr
-    logger.error("Failed to list scans", { error: String(error) })
-    return apiError("INTERNAL_ERROR", "Failed to list scans", 500)
-  }
-}
+export { GET } from "./scan-list-route"
 
 export const POST = withCookieMutation(post)

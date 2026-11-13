@@ -98,6 +98,9 @@ pub enum SyncResult {
 struct ApiEnvelope<T> {
     success: bool,
     data: Option<T>,
+    /// Present on error responses. Part of the wire envelope; the sync path
+    /// reports its own typed errors instead.
+    #[allow(dead_code)]
     error: Option<serde_json::Value>,
 }
 

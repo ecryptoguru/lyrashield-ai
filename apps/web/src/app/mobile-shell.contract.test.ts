@@ -32,6 +32,30 @@ describe("mobile form-control sizing", () => {
     expect(guard, "select not covered").toContain("select")
     expect(guard, "text input not covered").toMatch(/input:not\(\[type="checkbox"\]\)/)
   })
+
+  it("keeps the mobile sizing override outside the base layer and the known small inputs responsive", () => {
+    const source = read("./globals.css")
+    const baseStart = source.indexOf("@layer base {")
+    const baseEnd = source.indexOf("\n}", baseStart)
+    const sizingRule = source.indexOf("@media (max-width: 767px)")
+
+    expect(baseStart).toBeGreaterThanOrEqual(0)
+    expect(baseEnd).toBeGreaterThan(baseStart)
+    expect(sizingRule).toBeGreaterThan(baseEnd)
+
+    for (const relative of [
+      "../app/(dashboard)/dashboard/settings/api-keys.tsx",
+      "../app/(dashboard)/dashboard/findings/findings-client-view.tsx",
+      "../app/(dashboard)/dashboard/billing/spend-limit-form.tsx",
+      "../app/(dashboard)/dashboard/licenses/licenses-client.tsx",
+      "../app/(dashboard)/dashboard/launch-readiness/launch-readiness-client.tsx",
+      "../app/(dashboard)/dashboard/ai-assurance/ai-assurance-client.tsx",
+      "../app/(dashboard)/dashboard/admin/support/support-case-detail.tsx",
+      "../app/(dashboard)/dashboard/settings/two-factor-security.tsx",
+    ]) {
+      expect(read(relative)).toMatch(/text-base[\s\S]{0,120}md:text-(?:sm|xs)/)
+    }
+  })
 })
 
 describe("auth screens keep a route back to the marketing site", () => {

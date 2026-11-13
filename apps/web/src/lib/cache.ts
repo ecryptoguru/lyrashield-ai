@@ -72,7 +72,11 @@ export const getCachedPendingApprovals = cache(
   async (workspaceId: string, role: MemberRole): Promise<number> => {
     if (!hasPermission(role, PERMISSIONS.agent.view)) return 0
     return prisma.agentApproval.count({
-      where: { workspaceId, status: "PENDING" },
+      where: {
+        workspaceId,
+        status: "PENDING",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
     })
   }
 )

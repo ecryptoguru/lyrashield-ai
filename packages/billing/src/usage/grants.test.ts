@@ -78,7 +78,7 @@ describe("grantMonthlyPool — replay-safe per allowance cycle", () => {
         cycleStart,
       }),
     })
-    expect(executeRawMock).toHaveBeenCalledOnce()
+    expect(executeRawMock).toHaveBeenCalledTimes(2)
   })
 
   it("does not duplicate a grant already written under the new key", async () => {
@@ -110,6 +110,38 @@ describe("grantMonthlyPool — replay-safe per allowance cycle", () => {
     const result = await grantMonthlyPool(params)
 
     expect(result.created).toBe(false)
+  })
+
+  it("does not swallow a unique failure inside a caller-owned transaction", async () => {
+    const failure = Object.assign(new Error("unique"), { code: "P2002" })
+    createMock.mockRejectedValueOnce(failure)
+    const tx = {
+      $executeRaw: executeRawMock,
+      usageRecord: { findFirst: findFirstMock, create: createMock, updateMany: updateManyMock },
+    }
+    await expect(grantMonthlyPool({ ...params, tx: tx as never })).rejects.toBe(failure)
+  })
+
+  it("restores only the same account's exact retired subscription pool when returning plans", async () => {
+    findFirstMock.mockResolvedValue({ id: "previous-pool" })
+    expect((await grantMonthlyPool(params)).created).toBe(false)
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: {
+        accountId: "acct_1",
+        kind: "pool_grant",
+        cycleStart,
+        idempotencyKey: {
+          in: [
+            monthlyPoolGrantKey("acct_1", cycleStart, "PRO"),
+            legacyMonthlyPoolGrantKey("ws_1", cycleStart, "PRO"),
+          ],
+        },
+        deletedAt: { not: null },
+        OR: expect.any(Array),
+      },
+      data: { deletedAt: null },
+    })
+    expect(createMock).not.toHaveBeenCalled()
   })
 
   it("grants each cycle independently — next cycle gets a new pool", async () => {

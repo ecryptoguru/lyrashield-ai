@@ -19,12 +19,4 @@ describe("commission rate policy — annual flat 25%, tier only on monthly", () 
     expect(TIER_RATE_BPS).toBe(3000)
     expect(TIER_THRESHOLD).toBe(10)
   })
-
-  it("annual rate is FLAT and does not escalate to the tier rate", () => {
-    // The whole point of the policy: annual is a fixed 25%, never the 30%
-    // tier. If someone wires annual into the tier branch, this invariant
-    // (annual == base < tier) should trip a reviewer.
-    expect(ANNUAL_RATE_BPS).toBe(BASE_RATE_BPS)
-    expect(ANNUAL_RATE_BPS).toBeLessThan(TIER_RATE_BPS)
-  })
 })

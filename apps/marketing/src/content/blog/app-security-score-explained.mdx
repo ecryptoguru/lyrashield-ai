@@ -22,7 +22,7 @@ An app security score can summarize defined observations consistently within one
 
 A score compresses information. Compression is useful when the reader can still inspect what went in. Without scope and coverage, 92 is merely a number with a security label.
 
-The [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) keeps detected candidates, independent verification, clean retests and inconclusive results separate. Those evidence states matter more than an aggregate because they explain what supports each finding.
+The [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) keeps detected candidates, retest-confirmed results and inconclusive results separate. Those evidence states matter more than an aggregate because they explain what supports each finding.
 
 The [LyraShield AI evidence methodology](/methodology) tells readers to inspect the authorized target and mode, completed and limited coverage, evidence provenance, retest receipt and retained limitations. It explicitly does not turn scanner confidence or missing evidence into a universal verdict.
 
@@ -78,7 +78,7 @@ Before comparing any two values, ask what unit each measures. A framework tier, 
 
 A score snapshot should retain enough context for another reader to reproduce its meaning:
 
-- immutable target and source or artifact identity;
+- checksum-bound target and source or artifact identity;
 - scan mode, environment and observation time;
 - methodology and rule versions;
 - included findings and their evidence states;
@@ -89,19 +89,19 @@ A score snapshot should retain enough context for another reader to reproduce it
 
 The snapshot itself should not change when a new scan arrives. Create a new snapshot and mark the older public artifact as superseded where appropriate. That preserves what was known at each decision point.
 
-A score can drop without a code change when a new advisory applies, a scanner adds a rule, an earlier candidate gains independent verification or a broader mode reaches more code. It can rise after a validated fix and complete retest. A methodology update can also produce a different result. Show the changed input rather than presenting the movement as unexplained progress or decline.
+A score can drop without a code change when a new advisory applies, a scanner adds a rule, an earlier candidate becomes retest-confirmed or a broader mode reaches more code. It can rise after a validated fix and complete retest. A methodology update can also produce a different result. Show the changed input rather than presenting the movement as unexplained progress or decline.
 
 Failed and missing checks need an explicit policy. A scoring method should not reward a target merely because analysis could not build, authenticate, resolve a dependency or reach a language. Depending on the method, the result may be withheld, capped or published with a prominent limitation. The chosen behavior must be documented and applied consistently. Silence is the unsafe option because readers will interpret a complete-looking number as complete analysis.
 
 ## How the current LyraShield Score is bounded
 
-Current application code computes a deterministic, versioned LyraShield Score after a completed scan and stores one immutable `ScoreSnapshot` for that scan. The record includes the model version, numeric score, grade, breakdown, scan mode, computation time, expiry and links to its target and scan.
+Current application code computes a deterministic, versioned LyraShield Score after a completed scan and stores one checksum-bound `ScoreSnapshot` for that scan. The record includes the model version, numeric score, grade, breakdown, scan mode, computation time, expiry and links to its target and scan.
 
 The scoring function uses finding severity, status, verification state and a narrow active-secret condition within its published model. It is an aggregate over that method, not an accuracy claim or risk prediction. A public scorecard exposes only an allowlisted subset and can show that a newer scan supersedes it without disclosing the newer result.
 
 This authenticated score layer is separate from the public Lite Check. The passive [LyraShield Lite Check](/scan) does not produce the official LyraShield Score and is not a penetration test, certification, warranty or guarantee. Full repository review is available in the open beta; results remain scope- and evidence-bounded.
 
-Do not infer that a higher score means every finding was fixed. The current model can treat evidence states and accepted risk differently and grade caps can preserve the effect of certain open verified findings. Read the breakdown and finding records.
+Do not infer that a higher score means every finding was fixed. The current model can treat evidence states and accepted risk differently and grade caps can preserve the effect of certain open detected findings. Read the breakdown and finding records.
 
 ## Compare scores only inside a declared method
 
@@ -127,7 +127,7 @@ An aggregate also cannot express every consequence. A finding affecting a safety
 
 ## What automation cannot infer
 
-Code can apply a published formula consistently and preserve immutable snapshots. It cannot decide whether the selected scope matches the buyer's question, whether a missing control is acceptable, whether two methodologies are comparable or whether the business can tolerate the remaining risk. Any score-based decision should trace back to the finding, coverage and limitation records that produced it.
+Code can apply a published formula consistently and preserve checksum-bound snapshots. It cannot decide whether the selected scope matches the buyer's question, whether a missing control is acceptable, whether two methodologies are comparable or whether the business can tolerate the remaining risk. Any score-based decision should trace back to the finding, coverage and limitation records that produced it.
 
 ### Sources
 

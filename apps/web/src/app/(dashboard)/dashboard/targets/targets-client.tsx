@@ -1,24 +1,253 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { GitHubConnectionRecovery } from "@/components/github-connection-recovery"
+
+import { useState, useEffect, useCallback, type Dispatch, type SetStateAction } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
+import { z } from "zod"
 import { Plus, ArrowLeft } from "lucide-react"
 import { Button, Spinner, LoadMore } from "@lyrashield/ui"
-import { githubReposSchema } from "@/lib/api-schemas"
-import { apiGet, apiGetPaginated, apiPost, apiDelete } from "@/lib/api-client"
+import { installUrlSchema } from "@/lib/api-schemas"
+import { ApiError, apiGetPaginated, apiPost, apiDelete } from "@/lib/api-client"
 import { TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import {
   EMPTY_REPO_FORM,
   EMPTY_URL_FORM,
   targetsPaginatedSchema,
-  type GithubRepo,
   type RepoFormState,
   type Target,
   type UrlFormState,
 } from "./targets-model"
 import { RepoTargetForm, TargetCreatePanel, UrlTargetForm } from "./targets-form"
+import { useTargetRepositoryPicker } from "./use-target-repository-picker"
 import { TargetsEmptyState, TargetsTable } from "./targets-table"
+
+function TargetAddRouteSync({
+  router,
+  searchParams,
+}: {
+  router: ReturnType<typeof useRouter>
+  searchParams: ReturnType<typeof useSearchParams>
+}) {
+  useEffect(() => {
+    if (searchParams.get("add") !== "1") return
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("add")
+    router.replace(
+      params.size > 0 ? `/dashboard/targets?${params.toString()}` : "/dashboard/targets",
+      { scroll: false }
+    )
+  }, [router, searchParams])
+  return null
+}
+
+function TargetsPageHeader({
+  filterProjectId,
+  showForm,
+  hasTargets,
+  onClearProjectFilter,
+  onToggleForm,
+}: {
+  filterProjectId: string | null
+  showForm: boolean
+  hasTargets: boolean
+  onClearProjectFilter: () => void
+  onToggleForm: () => void
+}) {
+  return (
+    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        {filterProjectId && (
+          <button
+            type="button"
+            onClick={onClearProjectFilter}
+            className="text-muted-foreground hover:text-foreground mb-2 flex cursor-pointer items-center gap-1 text-sm transition-colors"
+          >
+            <ArrowLeft className="h-3 w-3" aria-hidden="true" />
+            All {TARGET_PLURAL.toLowerCase()}
+          </button>
+        )}
+        <h1 className="text-2xl font-bold tracking-tight">{TARGET_PLURAL}</h1>
+        <p className="text-muted-foreground mt-1 text-sm">Repositories and URLs to scan</p>
+      </div>
+      {hasTargets && (
+        <Button onClick={onToggleForm} className="shrink-0" aria-expanded={showForm}>
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          {showForm ? "Close form" : `Add ${TARGET_SINGULAR.toLowerCase()}`}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function createTargetScanHandlers(args: {
+  scanSetup: boolean
+  workspaceId: string
+  router: ReturnType<typeof useRouter>
+  repoForm: RepoFormState
+  urlForm: UrlFormState
+  fetchTargets: () => Promise<void>
+  setCreating: Dispatch<SetStateAction<boolean>>
+  setConnecting: Dispatch<SetStateAction<boolean>>
+  setError: Dispatch<SetStateAction<string | null>>
+  setShowForm: Dispatch<SetStateAction<boolean>>
+  setRepoForm: Dispatch<SetStateAction<RepoFormState>>
+  setUrlForm: Dispatch<SetStateAction<UrlFormState>>
+  setCreatedTarget: Dispatch<SetStateAction<{ id: string; name: string } | null>>
+  selectedRepoId: string
+  resetRepoSelection: () => void
+}) {
+  const { scanSetup, workspaceId, router, repoForm, urlForm } = args
+  async function save(body: Record<string, unknown>) {
+    try {
+      return await apiPost("/api/targets", body, {
+        schema: z.object({ id: z.string().min(1), name: z.string() }).passthrough(),
+      })
+    } catch (cause) {
+      if (!scanSetup || !(cause instanceof ApiError) || cause.code !== "TARGET_EXISTS") throw cause
+      const existing = z.object({ existingTargetId: z.string().min(1) }).safeParse(cause.details)
+      if (!existing.success) throw cause
+      return {
+        id: existing.data.existingTargetId,
+        name: typeof body.name === "string" ? body.name : "Selected target",
+      }
+    }
+  }
+  async function connectForScan(mode: "existing" | "install-new" = "existing") {
+    args.setConnecting(true)
+    args.setError(null)
+    try {
+      const data = await apiPost(
+        "/api/integrations/github/install",
+        { workspaceId, returnTo: "scan", mode },
+        { schema: installUrlSchema }
+      )
+      window.location.href = data.installUrl
+    } catch (cause) {
+      args.setError(cause instanceof Error ? cause.message : "Could not connect GitHub. Try again.")
+      args.setConnecting(false)
+    }
+  }
+  async function create(kind: "REPO" | "URL") {
+    args.setCreating(true)
+    args.setError(null)
+    try {
+      const body =
+        kind === "REPO"
+          ? {
+              workspaceId,
+              type: kind,
+              name: repoForm.name,
+              repoOwner: repoForm.repoOwner,
+              repoName: repoForm.repoName,
+              ...(repoForm.installationId ? { installationId: repoForm.installationId } : {}),
+              ...(repoForm.branch.trim() ? { branch: repoForm.branch.trim() } : {}),
+            }
+          : {
+              workspaceId,
+              type: urlForm.urlType,
+              name: urlForm.name,
+              url: urlForm.url,
+              apiSpecUrl: urlForm.urlType === "API" ? urlForm.apiSpecUrl || undefined : undefined,
+              ownershipAttested: urlForm.ownershipAttested,
+            }
+      const saved = await save(body)
+      args.setCreatedTarget(saved)
+      if (scanSetup)
+        return router.replace(`/dashboard/scans?new=1&target=${encodeURIComponent(saved.id)}`)
+      args.setShowForm(false)
+      args.resetRepoSelection()
+      if (kind === "REPO") args.setRepoForm(EMPTY_REPO_FORM)
+      else args.setUrlForm(EMPTY_URL_FORM)
+      await args.fetchTargets()
+      router.refresh()
+    } catch (error) {
+      args.setError(
+        error instanceof Error ? error.message : `Failed to create ${TARGET_SINGULAR.toLowerCase()}`
+      )
+    } finally {
+      args.setCreating(false)
+    }
+  }
+  return {
+    connectForScan,
+    handleCreateRepo: () => create("REPO"),
+    handleCreateUrl: () => create("URL"),
+    selectedRepoId: args.selectedRepoId,
+  }
+}
+
+function ScanSetupHeading() {
+  return (
+    <div className="mb-6 space-y-2">
+      <h1 className="text-2xl font-bold tracking-tight">Configure a scan</h1>
+      <p className="text-muted-foreground text-sm">
+        Add the app, API, or repository you want to review. Next, confirm the scan scope and profile
+        before starting.
+      </p>
+    </div>
+  )
+}
+
+function CreatedTargetNotice({ target }: { target: { id: string; name: string } }) {
+  return (
+    <div
+      role="status"
+      className="mb-5 flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p className="text-sm">
+        <span className="font-medium">{target.name}</span> is ready for scan setup.
+      </p>
+      <Link
+        href={`/dashboard/scans?new=1&target=${encodeURIComponent(target.id)}`}
+        className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium hover:bg-primary/90"
+      >
+        Configure scan
+      </Link>
+    </div>
+  )
+}
+
+function GithubScanConnection({
+  connecting,
+  onConnect,
+  githubStatus,
+}: {
+  connecting: boolean
+  onConnect: (mode?: "existing" | "install-new") => void
+  githubStatus: string | null
+}) {
+  return (
+    <div className="mb-4 space-y-2">
+      <p className="text-muted-foreground text-sm">
+        Connect GitHub to choose an accessible repository. You can also enter a public repository
+        below.
+      </p>
+      <GitHubConnectionRecovery status={githubStatus} />
+      <Button
+        type="button"
+        variant="outline"
+        disabled={connecting}
+        aria-busy={connecting}
+        onClick={() => onConnect()}
+      >
+        {connecting ? "Connecting…" : "Connect GitHub"}
+      </Button>
+      {githubStatus !== "workspace_already_connected" && (
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={connecting}
+          onClick={() => onConnect("install-new")}
+        >
+          Install on another account
+        </Button>
+      )}
+    </div>
+  )
+}
 
 export function TargetsClient({
   workspaceId,
@@ -27,6 +256,7 @@ export function TargetsClient({
   initialNextCursor,
   githubConnected = false,
   githubAccountLogin = null,
+  scanSetup = false,
 }: {
   workspaceId: string
   initialProjectId?: string
@@ -34,6 +264,7 @@ export function TargetsClient({
   initialNextCursor?: string | null
   githubConnected?: boolean
   githubAccountLogin?: string | null
+  scanSetup?: boolean
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -42,65 +273,38 @@ export function TargetsClient({
   const [targets, setTargets] = useState<Target[]>(initialData ?? [])
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor ?? null)
   const [loading, setLoading] = useState(!initialData)
-  const [showForm, setShowForm] = useState(false)
-  const [formType, setFormType] = useState<"REPO" | "URL">("REPO")
+  const [showForm, setShowForm] = useState(scanSetup || searchParams.get("add") === "1")
+  const [formType, setFormType] = useState<"REPO" | "URL">(
+    scanSetup &&
+      (searchParams.get("source") === "url" ||
+        (!githubConnected && searchParams.get("source") !== "repo"))
+      ? "URL"
+      : "REPO"
+  )
+  const [connecting, setConnecting] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [createdTarget, setCreatedTarget] = useState<{ id: string; name: string } | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [filterProjectId, setFilterProjectId] = useState<string | null>(initialProjectId ?? null)
 
   const [repoForm, setRepoForm] = useState<RepoFormState>(EMPTY_REPO_FORM)
   const [urlForm, setUrlForm] = useState<UrlFormState>(EMPTY_URL_FORM)
 
-  const [githubRepos, setGithubRepos] = useState<GithubRepo[]>([])
-  const [reposLoading, setReposLoading] = useState(false)
-  const [repoMode, setRepoMode] = useState<"picker" | "manual">("picker")
-  const [selectedRepoId, setSelectedRepoId] = useState<string>("")
-
-  useEffect(() => {
-    if (
-      !githubConnected ||
-      formType !== "REPO" ||
-      !showForm ||
-      githubRepos.length > 0 ||
-      reposLoading
-    )
-      return
-    let cancelled = false
-    void (async () => {
-      try {
-        setReposLoading(true)
-        const repos = await apiGet(`/api/integrations/github/repos?workspaceId=${workspaceId}`, {
-          schema: githubReposSchema,
-        })
-        if (cancelled) return
-        setGithubRepos(repos)
-      } catch {
-        if (cancelled) return
-        setRepoMode("manual")
-      } finally {
-        if (cancelled) return
-        setReposLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [githubConnected, formType, showForm, githubRepos.length, reposLoading, workspaceId])
-
-  function handleSelectRepo(repoId: string) {
-    setSelectedRepoId(repoId)
-    const repo = githubRepos.find((r) => String(r.id) === repoId)
-    if (repo) {
-      setRepoForm({
-        name: repo.fullName,
-        repoOwner: repo.owner,
-        repoName: repo.name,
-        branch: repo.defaultBranch,
-        installationId: repo.installationId,
-      })
-    }
-  }
+  const {
+    githubRepos,
+    reposNextPage,
+    reposError,
+    reposSearch,
+    setReposSearch,
+    reposLoading,
+    repoMode,
+    setRepoMode,
+    selectedRepoId,
+    setSelectedRepoId,
+    handleSelectRepo,
+    loadMoreRepos,
+  } = useTargetRepositoryPicker({ workspaceId, githubConnected, formType, showForm, setRepoForm })
 
   const fetchTargets = useCallback(async () => {
     setLoading(true)
@@ -146,6 +350,7 @@ export function TargetsClient({
         `/api/targets/${encodeURIComponent(target.id)}?workspaceId=${encodeURIComponent(workspaceId)}`
       )
       setTargets((prev) => prev.filter((t) => t.id !== target.id))
+      setCreatedTarget((current) => (current?.id === target.id ? null : current))
     } catch (err) {
       setDeleteError(
         err instanceof Error ? err.message : `Failed to delete ${TARGET_SINGULAR.toLowerCase()}`
@@ -153,52 +358,26 @@ export function TargetsClient({
     }
   }
 
-  async function handleCreateRepo() {
-    setCreating(true)
-    setError(null)
-    try {
-      await apiPost("/api/targets", {
-        workspaceId,
-        type: "REPO",
-        name: repoForm.name,
-        repoOwner: repoForm.repoOwner,
-        repoName: repoForm.repoName,
-        ...(repoForm.installationId ? { installationId: repoForm.installationId } : {}),
-        ...(repoForm.branch.trim() ? { branch: repoForm.branch.trim() } : {}),
-      })
-      setShowForm(false)
-      setRepoForm(EMPTY_REPO_FORM)
-      await fetchTargets()
-      router.refresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : `Failed to create ${TARGET_SINGULAR.toLowerCase()}`)
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  async function handleCreateUrl() {
-    setCreating(true)
-    setError(null)
-    try {
-      await apiPost("/api/targets", {
-        workspaceId,
-        type: urlForm.urlType,
-        name: urlForm.name,
-        url: urlForm.url,
-        apiSpecUrl: urlForm.urlType === "API" ? urlForm.apiSpecUrl || undefined : undefined,
-        ownershipAttested: urlForm.ownershipAttested,
-      })
-      setShowForm(false)
-      setUrlForm(EMPTY_URL_FORM)
-      await fetchTargets()
-      router.refresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : `Failed to create ${TARGET_SINGULAR.toLowerCase()}`)
-    } finally {
-      setCreating(false)
-    }
-  }
+  const { connectForScan, handleCreateRepo, handleCreateUrl } = createTargetScanHandlers({
+    scanSetup,
+    workspaceId,
+    router,
+    repoForm,
+    urlForm,
+    fetchTargets,
+    setCreating,
+    setConnecting,
+    setError,
+    setShowForm,
+    setRepoForm,
+    setUrlForm,
+    setCreatedTarget,
+    selectedRepoId,
+    resetRepoSelection: () => {
+      setSelectedRepoId("")
+      setReposSearch("")
+    },
+  })
 
   const loadMore = useCallback(
     async (cursor: string) => {
@@ -209,7 +388,7 @@ export function TargetsClient({
     [workspaceId, filterProjectId]
   )
 
-  if (loading) {
+  if (loading && targets.length === 0 && !createdTarget) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
         <Spinner className="h-6 w-6" />
@@ -218,12 +397,15 @@ export function TargetsClient({
     )
   }
 
-  if (fetchError) {
+  if (fetchError && targets.length === 0 && !initialData && !createdTarget) {
     return <DashboardErrorCard message={fetchError} onRetry={() => fetchTargets()} className="" />
   }
 
   return (
-    <div className="min-w-0 max-w-full">
+    <div className="min-w-0 max-w-full" aria-busy={loading}>
+      {fetchError && (
+        <DashboardErrorCard message={fetchError} onRetry={() => void fetchTargets()} />
+      )}
       {deletedNotice && (
         <p className="bg-primary/10 text-primary mb-4 rounded-lg px-4 py-3 text-sm" role="status">
           {deletedNotice} was deleted. Its scans, findings, verdicts and reports are retained.
@@ -234,32 +416,35 @@ export function TargetsClient({
           {deleteError}
         </p>
       )}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          {filterProjectId && (
-            <button
-              type="button"
-              onClick={() => {
-                setFilterProjectId(null)
-                router.push("/dashboard/targets")
-              }}
-              className="text-muted-foreground hover:text-foreground mb-2 flex cursor-pointer items-center gap-1 text-sm transition-colors"
-            >
-              <ArrowLeft className="h-3 w-3" aria-hidden="true" />
-              All {TARGET_PLURAL.toLowerCase()}
-            </button>
-          )}
-          <h1 className="text-2xl font-bold tracking-tight">{TARGET_PLURAL}</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Repositories and URLs to scan</p>
-        </div>
-        <Button onClick={() => setShowForm(!showForm)} className="shrink-0">
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          New {TARGET_SINGULAR}
-        </Button>
-      </div>
+      {scanSetup ? (
+        <ScanSetupHeading />
+      ) : (
+        <>
+          {" "}
+          <TargetAddRouteSync router={router} searchParams={searchParams} />
+          <TargetsPageHeader
+            filterProjectId={filterProjectId}
+            showForm={showForm}
+            hasTargets={targets.length > 0}
+            onClearProjectFilter={() => {
+              setFilterProjectId(null)
+              router.push("/dashboard/targets")
+            }}
+            onToggleForm={() => setShowForm(!showForm)}
+          />
+        </>
+      )}
+      {createdTarget && !scanSetup && <CreatedTargetNotice target={createdTarget} />}
 
       {showForm && (
         <TargetCreatePanel formType={formType} onFormTypeChange={setFormType} error={error}>
+          {scanSetup && formType === "REPO" && !githubConnected && (
+            <GithubScanConnection
+              connecting={connecting}
+              onConnect={(mode) => void connectForScan(mode)}
+              githubStatus={searchParams.get("github")}
+            />
+          )}
           {formType === "REPO" ? (
             <RepoTargetForm
               picker={{
@@ -271,24 +456,33 @@ export function TargetsClient({
                 onModeChange: setRepoMode,
                 selectedRepoId,
                 onSelectRepo: handleSelectRepo,
+                search: reposSearch,
+                onSearch: setReposSearch,
+                hasMore: reposNextPage !== null,
+                onLoadMore: () => void loadMoreRepos(),
+                error: reposError,
               }}
+              submitLabel={scanSetup ? "Continue to scan setup" : undefined}
               repoForm={repoForm}
               onRepoFormChange={(patch) => setRepoForm({ ...repoForm, ...patch })}
               creating={creating}
               onSubmit={handleCreateRepo}
               onCancel={() => {
-                setShowForm(false)
+                if (scanSetup) router.push("/dashboard/scans")
+                else setShowForm(false)
                 setError(null)
               }}
             />
           ) : (
             <UrlTargetForm
+              submitLabel={scanSetup ? "Continue to scan setup" : undefined}
               urlForm={urlForm}
               onUrlFormChange={(patch) => setUrlForm({ ...urlForm, ...patch })}
               creating={creating}
               onSubmit={handleCreateUrl}
               onCancel={() => {
-                setShowForm(false)
+                if (scanSetup) router.push("/dashboard/scans")
+                else setShowForm(false)
                 setError(null)
               }}
             />
@@ -296,11 +490,11 @@ export function TargetsClient({
         </TargetCreatePanel>
       )}
 
-      {targets.length === 0 ? (
+      {!scanSetup && targets.length === 0 && !showForm && !fetchError ? (
         <TargetsEmptyState onAdd={() => setShowForm(true)} />
-      ) : (
+      ) : !scanSetup && targets.length > 0 ? (
         <TargetsTable targets={targets} onDelete={(t) => void handleDeleteTarget(t)} />
-      )}
+      ) : null}
 
       <LoadMore
         cursor={nextCursor}

@@ -361,8 +361,10 @@ describe("status --operation --watch", () => {
 })
 
 describe("cancel", () => {
-  it("cancels a scan via POST and exits 0", async () => {
-    client.request.mockResolvedValueOnce({ id: "s-123", status: "CANCELLED" })
+  it("requests cancellation via POST and reports the fetched current status", async () => {
+    client.request
+      .mockResolvedValueOnce({ id: "s-123" })
+      .mockResolvedValueOnce(scanSnapshot("RUNNING"))
     const output = makeOutput()
     const code = await handleCancel(["s-123", "--idempotency-key", "k-9"], output)
     expect(code).toBe(0)
@@ -374,7 +376,66 @@ describe("cancel", () => {
         headers: { "Idempotency-Key": "k-9" },
       })
     )
+    expect(client.request).toHaveBeenNthCalledWith(
+      2,
+      "GET",
+      "/scans/s-123?workspaceId=ws-current",
+      expect.any(Object)
+    )
+    expect((output.result as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toMatchObject({
+      cancellationRequested: true,
+      scanStatus: "RUNNING",
+    })
+    expect((output.result as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).not.toHaveProperty(
+      "terminalStatus"
+    )
     expect(output.notice).toHaveBeenCalledWith(expect.stringContaining("status s-123"))
+  })
+
+  it("does not label a successful cancellation request as CANCELLED when status is absent", async () => {
+    client.request
+      .mockResolvedValueOnce({ id: "s-123" })
+      .mockResolvedValueOnce(scanSnapshot("RUNNING"))
+    const output = makeOutput()
+
+    const code = await handleCancel(["s-123"], output)
+
+    expect(code).toBe(0)
+    expect(client.request).toHaveBeenCalledTimes(2)
+    expect(client.request).toHaveBeenNthCalledWith(
+      2,
+      "GET",
+      "/scans/s-123?workspaceId=ws-current",
+      expect.any(Object)
+    )
+    expect((output.result as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toMatchObject({
+      id: "s-123",
+      cancellationRequested: true,
+      scanStatus: "RUNNING",
+    })
+    expect((output.result as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).not.toHaveProperty(
+      "terminalStatus",
+      "CANCELLED"
+    )
+    expect(output.notice).toHaveBeenCalledWith(expect.stringContaining("currently RUNNING"))
+  })
+
+  it("does not claim CANCELLED when the follow-up status read fails", async () => {
+    client.request
+      .mockResolvedValueOnce({ id: "s-123" })
+      .mockRejectedValueOnce(new Error("offline"))
+    const output = makeOutput()
+
+    const code = await handleCancel(["s-123"], output)
+
+    expect(code).toBe(0)
+    expect((output.result as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toMatchObject({
+      cancellationRequested: true,
+    })
+    expect((output.result as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).not.toHaveProperty(
+      "terminalStatus"
+    )
+    expect(output.notice).toHaveBeenCalledWith(expect.stringContaining("could not be verified"))
   })
 
   it("requires a scan id", async () => {

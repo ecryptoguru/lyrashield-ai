@@ -205,23 +205,13 @@ interface NavState {
   platformAdminHref?: string | null
 }
 
-function resolveNavItems(state: NavState = {}): NavItem[] {
-  const pending = state.pendingApprovals ?? 0
-  const items = [...LIFECYCLE_NAV_ITEMS]
-  if (pending > 0) items.push(activityItem(pending))
-  if (state.canViewEvidenceVault) items.push(EVIDENCE_VAULT_BASE)
-  if (state.canManageBilling) items.push(BILLING_BASE)
-  items.push(...WORKSPACE_NAV_ITEMS)
-  return items
-}
-
 /**
  * Runtime flat list with no pending approvals. Used by components and tests
  * that cannot access the live pending-approval state. It intentionally omits
  * the conditional Activity item because it is only visible when pending
  * approvals exist.
  */
-export const NAV_ITEMS: NavItem[] = resolveNavItems({ pendingApprovals: 0 })
+export const NAV_ITEMS: NavItem[] = resolveNav().items
 
 /**
  * All navigation destinations, for page-title lookup. Includes Activity

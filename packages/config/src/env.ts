@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { APPROVED_PLATFORM_ADMIN_EMAILS, normalizePlatformAdminEmails } from "./platform-admin"
 import { parseAuthAssessmentAllowlist } from "./auth-assessment"
+import { authTestMailConfigAllowed } from "./auth-test-mail"
 
 /**
  * Literal-loopback http check for bearer-grant URLs: the host must be exactly
@@ -23,6 +24,74 @@ function isLiteralLoopbackHttpUrl(raw: string): boolean {
   } catch {
     return false
   }
+}
+
+export function validateAiResultCacheConfig(input: {
+  mode: "off" | "observe" | "enforce"
+  redisUrl?: string
+  keySecret?: string
+  providerFingerprint?: string
+  queueRedisUrl?: string
+  rateLimitRestUrl?: string
+}): Array<{ path: string; message: string }> {
+  const issues: Array<{ path: string; message: string }> = []
+  const redisUrl = input.redisUrl?.trim() ?? ""
+  let validRedisUrl = false
+  let cacheHost = ""
+  if (redisUrl) {
+    try {
+      const parsed = new URL(redisUrl)
+      validRedisUrl = parsed.protocol === "rediss:" && Boolean(parsed.hostname && parsed.password)
+      cacheHost = parsed.hostname.toLowerCase()
+    } catch {
+      validRedisUrl = false
+    }
+    if (!validRedisUrl) {
+      issues.push({
+        path: "LYRASHIELD_AI_CACHE_REDIS_URL",
+        message: "must be a credentialed TLS Redis URL when configured",
+      })
+    }
+  }
+  if (validRedisUrl && cacheHost) {
+    for (const [url, source] of [
+      [input.queueRedisUrl, "BullMQ"],
+      [input.rateLimitRestUrl, "rate-limit Redis"],
+    ] as const) {
+      if (!url?.trim()) continue
+      try {
+        if (new URL(url).hostname.toLowerCase() === cacheHost) {
+          issues.push({
+            path: "LYRASHIELD_AI_CACHE_REDIS_URL",
+            message: `must use a dedicated Redis host distinct from ${source}`,
+          })
+        }
+      } catch {
+        // The owning environment schema reports malformed queue/rate-limit URLs.
+      }
+    }
+  }
+  if (input.mode !== "off") {
+    if (!redisUrl || !validRedisUrl) {
+      issues.push({
+        path: "LYRASHIELD_AI_CACHE_REDIS_URL",
+        message: "is required as a credentialed TLS Redis URL when exact result reuse is enabled",
+      })
+    }
+    if (Buffer.byteLength(input.keySecret ?? "", "utf8") < 32) {
+      issues.push({
+        path: "LYRASHIELD_AI_CACHE_KEY_SECRET",
+        message: "must contain at least 32 bytes when exact result reuse is enabled",
+      })
+    }
+    if (!/^[a-fA-F0-9]{64}$/.test(input.providerFingerprint ?? "")) {
+      issues.push({
+        path: "LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT",
+        message: "must be a SHA-256 fingerprint when exact result reuse is enabled",
+      })
+    }
+  }
+  return issues
 }
 
 const envSchema = z
@@ -112,11 +181,17 @@ const envSchema = z
 
     // App
     NEXT_PUBLIC_APP_URL: z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),
+    // Build-owned public revision tag; not a runtime credential.
+    NEXT_PUBLIC_SENTRY_RELEASE: z.string().max(200).optional().or(z.literal("")),
+    // Server-owned plain-text domain proof for the OpenAI Apps challenge route.
+    OPENAI_APPS_DOMAIN_VERIFICATION_TOKEN: z.string().max(4096).optional().or(z.literal("")),
     NEXT_PUBLIC_MARKETING_URL: z.string().url().optional().or(z.literal("")),
     // Product analytics (PostHog) — mirrors marketing privacy config
     NEXT_PUBLIC_POSTHOG_KEY: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional().or(z.literal("")),
     // Cloudflare Turnstile secret (server-side). Public site key lives in apps/marketing/.env.example.
+    // Stage action enforcement independently from the browser widget rollout.
+    TURNSTILE_ENFORCE_ACTION: z.enum(["0", "1"]).default("0"),
     TURNSTILE_SECRET_KEY: z.string().optional().or(z.literal("")),
     TRUSTED_PROXY_IP_HEADER: z
       .enum(["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"])
@@ -131,15 +206,35 @@ const envSchema = z
     LLM_API_KEY: z.string().optional().or(z.literal("")),
     LLM_API_BASE: z.string().optional().or(z.literal("")),
     LLM_API_VERSION: z.string().optional().or(z.literal("")),
+    // Static endpoint policy only; unset dedupe inherits the main engine policy.
+    LLM_API_MODE: z.enum(["auto", "responses", "chat_completions"]).optional(),
+    DEDUPE_LLM_API_MODE: z.enum(["auto", "responses", "chat_completions"]).optional(),
+    // Reader-first deployment controls. Neither scan profiles nor chat may enable writers.
+    LYRASHIELD_RUN_RECORD_V1_1: z.enum(["0", "1"]).optional().default("0"),
+    LYRASHIELD_PENDING_HTTP_EVIDENCE: z.enum(["0", "1"]).optional().default("0"),
     LYRASHIELD_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().optional(),
     LYRASHIELD_MAX_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
     // GPT-6 explicit cache breakpoints. The engine ignores this for unsupported models.
     LYRASHIELD_PROMPT_CACHE_EXPLICIT: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_PROMPT_CACHE: z.enum(["0", "1"]).optional().default("1"),
+    LYRASHIELD_PROMPT_CACHE_POLICY: z.enum(["stable", "hybrid", "off"]).optional(),
     // GPT-6 prompt-cache routing. The LyraShield worker enables it by default
     // for the admitted GPT-6 deployments; set "0" to turn it off after a
     // provider smoke scan shows the deployment does not honor the routing key.
     LYRASHIELD_PROMPT_CACHE_ROUTING: z.enum(["0", "1"]).optional().default("1"),
+    // Exact triage-result reuse is an optional application cache. It uses a
+    // dedicated TLS Redis endpoint and remains off unless an operator enables it.
+    LYRASHIELD_AI_RESULT_CACHE_MODE: z
+      .enum(["off", "observe", "enforce"])
+      .optional()
+      .default("off"),
+    LYRASHIELD_AI_CACHE_REDIS_URL: z.string().optional().or(z.literal("")),
+    LYRASHIELD_AI_CACHE_KEY_SECRET: z.string().optional().or(z.literal("")),
+    LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT: z
+      .string()
+      .regex(/^[a-fA-F0-9]{64}$/)
+      .optional()
+      .or(z.literal("")),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_RUNTIME_BACKEND: z.enum(["docker"]).optional().or(z.literal("")),
@@ -264,6 +359,8 @@ const envSchema = z
     LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: z.enum(["0", "1"]).optional().default("1"),
     BREVO_API_KEY: z.string().optional().or(z.literal("")),
     EMAIL_FROM: z.string().optional().or(z.literal("")),
+    LYRASHIELD_TEST_AUTH_MAIL_DIR: z.string().optional().or(z.literal("")),
+    LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR: z.string().optional().or(z.literal("")),
 
     // Notifications — Slack & Discord webhooks
     SLACK_WEBHOOK_URL: z.string().optional().or(z.literal("")),
@@ -370,6 +467,8 @@ const envSchema = z
         "LAUNCH_REPORT_SIGNING_PRIVATE_KEY must be a PEM-formatted key starting with '-----BEGIN'"
       ),
     LAUNCH_REPORT_SIGNING_PUBLIC_KEY: z.string().optional().or(z.literal("")),
+    // Optional public-key allowlist for packet signature rotation/revocation.
+    RELEASE_PACKET_VERIFICATION_KEYS_JSON: z.string().max(262144).optional().or(z.literal("")),
     // Key Vault secret names holding the launch-report signing key pair in
     // production (mirrors the license-signing secret-name pattern).
     LAUNCH_REPORT_SIGNING_PRIVATE_KEY_SECRET_NAME: z
@@ -554,6 +653,13 @@ const envSchema = z
     }
   )
   .refine(
+    (val) => val.LYRASHIELD_PENDING_HTTP_EVIDENCE !== "1" || val.LYRASHIELD_RUN_RECORD_V1_1 === "1",
+    {
+      path: ["LYRASHIELD_PENDING_HTTP_EVIDENCE"],
+      message: "LYRASHIELD_PENDING_HTTP_EVIDENCE requires LYRASHIELD_RUN_RECORD_V1_1=1",
+    }
+  )
+  .refine(
     // Web search is fail-closed: enabling it without an API key would fail at
     // engine runtime and produce a confusing scan error. Build-time builds may
     // not have the key, so the check is skipped during the Next.js build phase.
@@ -643,6 +749,28 @@ const envSchema = z
     }
   )
   .superRefine((val, ctx) => {
+    if (
+      !authTestMailConfigAllowed({
+        directory: val.LYRASHIELD_TEST_AUTH_MAIL_DIR,
+        ownedDirectory: val.LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR,
+        nodeEnv: val.NODE_ENV,
+        authUrl: val.BETTER_AUTH_URL,
+        appUrl: val.NEXT_PUBLIC_APP_URL,
+        databaseUrl: val.DATABASE_URL,
+        databaseSystemUrl: val.DATABASE_SYSTEM_URL,
+        brevoApiKey: val.BREVO_API_KEY,
+        disposable: process.env.LYRASHIELD_TEST_DB_DISPOSABLE,
+      })
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["LYRASHIELD_TEST_AUTH_MAIL_DIR"],
+        message:
+          "Reset mail capture requires a disposable local development/test app without Brevo",
+      })
+    }
+  })
+  .superRefine((val, ctx) => {
     // Enabling the authenticated beta without an explicit allowlist is a
     // production misconfiguration — the allowlist is the second required gate,
     // so an enabled flag with nothing allowlisted must fail at boot rather
@@ -657,6 +785,18 @@ const envSchema = z
         message:
           "LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST must name at least one valid workspaceId or workspaceId:targetId entry when the authenticated assessment beta is enabled",
       })
+    }
+  })
+  .superRefine((val, ctx) => {
+    for (const issue of validateAiResultCacheConfig({
+      mode: val.LYRASHIELD_AI_RESULT_CACHE_MODE,
+      redisUrl: val.LYRASHIELD_AI_CACHE_REDIS_URL,
+      keySecret: val.LYRASHIELD_AI_CACHE_KEY_SECRET,
+      providerFingerprint: val.LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT,
+      queueRedisUrl: val.REDIS_URL,
+      rateLimitRestUrl: val.UPSTASH_REDIS_REST_URL,
+    })) {
+      ctx.addIssue({ code: "custom", path: [issue.path], message: issue.message })
     }
   })
   .superRefine((val, ctx) => {

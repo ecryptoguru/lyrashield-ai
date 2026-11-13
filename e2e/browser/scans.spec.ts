@@ -21,6 +21,79 @@ async function composerRoutes(page: Page) {
   )
 }
 
+type ScanToolWindow = Window & {
+  scanTools: Record<string, { execute(input: Record<string, unknown>): Promise<{ ok: boolean }> }>
+}
+
+test("a matching prepared engine limit binds the immediate durable request", async ({ page }) => {
+  await page.addInitScript(() => {
+    const tools = ((window as unknown as ScanToolWindow).scanTools = {})
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool(tool: { name: string }) {
+          Object.assign(tools, { [tool.name]: tool })
+        },
+      },
+    })
+  })
+  await composerRoutes(page)
+  const bodies: Record<string, unknown>[] = []
+  await page.route("**/api/scans", async (route) => {
+    bodies.push(route.request().postDataJSON())
+    await route.fulfill({ json: { success: true, data: { id: "scan" } } })
+  })
+  await page.goto("polling.html?polling=scope")
+  await page.waitForFunction(
+    () => (window as unknown as ScanToolWindow).scanTools.request_security_scan
+  )
+  const results = await page.evaluate(async () => {
+    const tools = (window as unknown as ScanToolWindow).scanTools
+    const input = { targetName: "Example repository", reviewType: "RELEASE_CHECK" }
+    return [
+      await tools.prepare_security_scan!.execute({ ...input, engineBudgetCeilingUsd: 1 }),
+      await tools.request_security_scan!.execute({ ...input, requestId: "bound-1" }),
+      await tools.request_security_scan!.execute({
+        ...input,
+        engineBudgetCeilingUsd: 2,
+        requestId: "raised",
+      }),
+    ]
+  })
+  expect(results.map((result) => result.ok)).toEqual([true, true, false])
+  expect(bodies.map((body) => body.engineBudgetCeilingUsd)).toEqual([1])
+  const dialog = page.getByRole("dialog", { name: "Start a scan" })
+  const request = (requestId: string, reviewType = "RELEASE_CHECK") =>
+    page.evaluate(
+      ({ requestId, reviewType }) =>
+        (window as unknown as ScanToolWindow).scanTools.request_security_scan!.execute({
+          targetName: "Example repository",
+          reviewType,
+          requestId,
+        }),
+      { requestId, reviewType }
+    )
+  expect((await request("other-review", "CODE_REVIEW")).ok).toBe(true)
+  await dialog.getByLabel("Engine spending limit (USD)").fill("0")
+  expect((await request("invalid")).ok).toBe(false)
+  // Simulate a surrounding session switch while the same target and review remain open.
+  await page
+    .getByRole("button", { name: "Switch principal", includeHidden: true })
+    .evaluate((button: HTMLButtonElement) => button.click())
+  await expect(dialog.getByLabel("Engine spending limit (USD)")).toHaveValue("")
+  expect((await request("new-principal")).ok).toBe(true)
+  await dialog.getByLabel("Engine spending limit (USD)").fill("0.5")
+  await page.keyboard.press("Escape")
+  await expect(dialog).toHaveCount(0)
+  expect((await request("standalone")).ok).toBe(true)
+  expect(bodies.map((body) => body.engineBudgetCeilingUsd)).toEqual([
+    1,
+    undefined,
+    undefined,
+    undefined,
+  ])
+})
+
 for (const width of [390, 768, 1440]) {
   test(`scan composer keeps keyboard selection and returns focus at ${width}px`, async ({
     page,
@@ -51,6 +124,23 @@ for (const width of [390, 768, 1440]) {
     expect(await selected.getAttribute("id")).not.toBe(oldId)
     await page.keyboard.press("ArrowUp")
     expect(await selected.getAttribute("id")).toBe(oldId)
+    const advanced = dialog.getByRole("button", { name: /Review details and spending limit/ })
+    await advanced.focus()
+    await page.keyboard.press("Space")
+    await page.keyboard.press("Tab")
+    const ceiling = dialog.getByLabel("Engine spending limit (USD)")
+    await expect(ceiling).toBeFocused()
+    await ceiling.fill("0")
+    await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeDisabled()
+    await expect(ceiling).toHaveAttribute("aria-invalid", "true")
+    await ceiling.fill("0.005")
+    await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeEnabled()
+    await expect(ceiling).toHaveValue("0.005")
+    const requested = page.waitForRequest(
+      (req) => new URL(req.url()).searchParams.get("engineBudgetCeilingUsd") === "1"
+    )
+    await ceiling.fill("1")
+    await requested
     await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeEnabled()
     expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
       true
@@ -93,6 +183,8 @@ test("recoverable start errors keep revisions and retry the same submission once
   await dialog.getByRole("radio", { name: /^Scan changes:/ }).click()
   await dialog.getByLabel(/^Base revision/).fill("release-branch")
   await dialog.getByLabel(/^Head revision/).fill("feature-branch")
+  await dialog.getByRole("button", { name: /Review details and spending limit/ }).click()
+  await dialog.getByLabel("Engine spending limit (USD)").fill("1")
   const submit = dialog.getByRole("button", { name: /^Start scan$/i })
   await expect(submit).toBeEnabled()
   await submit.click()
@@ -104,7 +196,42 @@ test("recoverable start errors keep revisions and retry the same submission once
   await submit.focus()
   await page.keyboard.press("Enter")
   await expect.poll(() => requests.length).toBe(2)
+  expect(requests[0]?.body).toMatchObject({ engineBudgetCeilingUsd: 1 })
   expect(requests[0]?.key).toBeTruthy()
+  expect(requests[1]).toEqual(requests[0])
+})
+
+test("reloading an uncertain capped request restores the operator limit and reuses the same request", async ({
+  page,
+}) => {
+  await composerRoutes(page)
+  const requests: { key?: string; body: unknown }[] = []
+  await page.route("**/api/scans", async (route) => {
+    requests.push({
+      key: route.request().headers()["idempotency-key"],
+      body: route.request().postDataJSON(),
+    })
+    await route.fulfill({
+      status: 503,
+      json: { success: false, error: { code: "WORKER_UNAVAILABLE", message: "Please retry." } },
+    })
+  })
+  await page.goto("polling.html?polling=create")
+  const open = page.getByRole("button", { name: /^New scan$/i })
+  const dialog = page.getByRole("dialog")
+  await open.click()
+  await dialog.getByRole("button", { name: /Review details and spending limit/ }).click()
+  const input = dialog.getByLabel("Engine spending limit (USD)")
+  await input.fill("1")
+  await dialog.getByRole("button", { name: /^Start scan$/i }).click()
+  await expect(dialog.getByRole("alert")).toBeVisible()
+  await page.reload()
+  await open.click()
+  await expect(input).toHaveValue("1")
+  await dialog.getByRole("button", { name: /^Start scan$/i }).click()
+  await expect.poll(() => requests.length).toBe(2)
+  expect(requests[0]?.key).toBeTruthy()
+  expect(requests[0]?.body).toMatchObject({ engineBudgetCeilingUsd: 1 })
   expect(requests[1]).toEqual(requests[0])
 })
 

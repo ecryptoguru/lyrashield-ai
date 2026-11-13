@@ -364,3 +364,39 @@ describe("fix-proposal-service", () => {
     })
   })
 })
+
+describe("delegated target scope in proposal lists", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+    mockPrisma.fixProposal.findMany.mockResolvedValue([])
+  })
+
+  it.each([{ targetIds: [] }, { targetIds: ["target-1"] }])(
+    "bounds finding filters and cursor with $targetIds",
+    async ({ targetIds }) => {
+      const result = await listFixProposals({
+        workspaceId: "ws-1",
+        targetIds,
+        findingId: "finding-2",
+        cursor: "proposal-1",
+      })
+      expect(result).toEqual({ items: [], nextCursor: null })
+      expect(mockPrisma.fixProposal.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            deletedAt: null,
+            finding: {
+              workspaceId: "ws-1",
+              deletedAt: null,
+              targetId: { in: targetIds },
+              id: "finding-2",
+            },
+          },
+          cursor: { id: "proposal-1" },
+          skip: 1,
+        })
+      )
+    }
+  )
+})

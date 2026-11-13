@@ -34,6 +34,31 @@ worker_image_from_config() {
   printf '%s\n' "$image"
 }
 
+# Match the live worker's committed DNS pins; independent DNS can leave the firewall allowlist.
+worker_pinned_host_args() {
+  pins=${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}
+  [ -r "$pins" ] && [ -s "$pins" ] || {
+    echo "Worker egress pins are unavailable" >&2
+    return 1
+  }
+  while read -r pinned_host pinned_address pinned_port extra || [ -n "$pinned_host" ]; do
+    case "$pinned_host" in
+      ''|*[!A-Za-z0-9.-]*) echo "Invalid host in worker egress pins" >&2; return 1 ;;
+    esac
+    case "$pinned_address" in
+      ''|*[!0-9.]*) echo "Invalid IPv4 address in worker egress pins" >&2; return 1 ;;
+    esac
+    case "$pinned_port" in
+      ''|*[!0-9]*) echo "Invalid port in worker egress pins" >&2; return 1 ;;
+    esac
+    [ -z "$extra" ] && [ "$pinned_port" -ge 1 ] && [ "$pinned_port" -le 65535 ] || {
+      echo "Invalid worker egress pin entry" >&2
+      return 1
+    }
+    printf '%s\n' "--add-host ${pinned_host}:${pinned_address}"
+  done < "$pins"
+}
+
 # Runs a one-shot worker-image container with the full worker environment: the
 # environment file plus the same --env set the live worker gets. The docker
 # socket and the shared root stay unmounted; the container only reaches
@@ -42,7 +67,8 @@ worker_oneshot() (
   code=$1
   shift
   image=$(worker_image_from_config)
-  env_args=$(lyrashield_worker_env_args "$config" "$environment_file")
+  env_args=$(lyrashield_worker_env_args "$config" "$environment_file") || return 1
+  pin_args=$(worker_pinned_host_args) || return 1
   probe_dir=$(mktemp -d)
   probe_name="lyrashield-maintenance-$(basename "$probe_dir")"
   cleanup_probe() {
@@ -75,14 +101,51 @@ worker_oneshot() (
     --cidfile "$probe_dir/container.id" --network bridge --no-healthcheck \
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --env-file "$environment_file" \
-    $env_args \
+    $pin_args $env_args \
     --env TMPDIR=/tmp \
     -w /app/apps/worker "$image" \
     node --import tsx --input-type=module -e "$code" "$@"
 )
 
+worker_candidate_oneshot() (
+  code=$1
+  shift
+  env_args=$(lyrashield_worker_env_args "$config" "$environment_file") || return 1
+  pin_args=$(worker_pinned_host_args) || return 1
+  probe_dir=$(mktemp -d)
+  probe_name="lyrashield-candidate-check-$(basename "$probe_dir")"
+  cleanup_probe() {
+    status=$?
+    trap - EXIT HUP INT TERM
+    if [ -s "$probe_dir/container.id" ]; then
+      probe_id=$(cat "$probe_dir/container.id")
+      case "$probe_id" in
+        *[!0-9a-f]*|'') status=1 ;;
+        *)
+          if [ "${#probe_id}" -eq 64 ]; then
+            timeout --kill-after=5s 10s docker rm -f "$probe_id" >/dev/null 2>&1 || status=1
+          else status=1; fi ;;
+      esac
+    fi
+    rm -f "$probe_dir/container.id"
+    rmdir "$probe_dir" || status=1
+    exit "$status"
+  }
+  trap cleanup_probe EXIT
+  trap 'exit 1' HUP INT TERM
+  # Intentional splitting: the environment helper emits whitespace-free args.
+  # shellcheck disable=SC2086
+  timeout --kill-after=10s 120s docker run --name "$probe_name" \
+    --cidfile "$probe_dir/container.id" --network bridge --no-healthcheck \
+    --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+    --env-file "$environment_file" $pin_args $env_args --env TMPDIR=/tmp \
+    -w /app/apps/worker "$target" node --import tsx --input-type=module -e "$code" "$@"
+)
+
 queue_count='const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scanQueue.getJobCounts("wait","active","delayed","prioritized"),webhookQueue.getJobCounts("wait","active","delayed","prioritized")]); console.log(JSON.stringify({nonterminal,scan,webhook})); } finally { const closed=await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); for (const queue of [scanQueue,webhookQueue]) { const connection=queue.opts?.connection; if (typeof connection?.disconnect === "function") connection.disconnect(false); } const failed=closed.find(result=>result.status==="rejected"); if (failed) throw failed.reason; }'
 queue_expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
+recovery_queue_count='const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,tracks,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),prisma.$queryRaw`SELECT count(*)::integer AS count FROM "WebhookEventTrack" WHERE status NOT IN (${"succeeded"},${"dead_letter"},${"reviewed"})`,scanQueue.getJobCounts("wait","active","delayed","prioritized","paused","waiting-children"),webhookQueue.getJobCounts("wait","active","delayed","prioritized","paused","waiting-children")]); console.log(JSON.stringify({nonterminal,tracks:tracks[0].count,scan,webhook})); } finally { const closed=await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); for (const queue of [scanQueue,webhookQueue]) { const connection=queue.opts?.connection; if (typeof connection?.disconnect === "function") connection.disconnect(false); } const failed=closed.find(result=>result.status==="rejected"); if (failed) throw failed.reason; }'
+recovery_queue_expected='{"nonterminal":0,"tracks":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0,"paused":0,"waiting-children":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0,"paused":0,"waiting-children":0}}'
 
 assert_empty_queues() {
   if ! preflight=$(worker_oneshot "$queue_count"); then
@@ -93,6 +156,26 @@ assert_empty_queues() {
     echo "Worker promotion requires empty scan and webhook queues" >&2
     exit 1
   }
+}
+
+assert_recovery_empty_queues() {
+  if ! preflight=$(worker_oneshot "$recovery_queue_count"); then
+    echo "Held webhook recovery requires terminal tracks and fully drained queues" >&2
+    return 1
+  fi
+  [ "$preflight" = "$recovery_queue_expected" ] || {
+    echo "Held webhook recovery requires terminal tracks and fully drained queues" >&2
+    return 1
+  }
+}
+
+assert_recovery_schema() {
+  [ "$webhook_recovery" -eq 1 ] || return 0
+  result=$(worker_candidate_oneshot 'const billing=await import("@lyrashield/billing"); const db=await import("@lyrashield/db"); const {assertFullyMigratedWebhookSchema,assertRuntimeRoleLeastPrivilege}=await import("file:///opt/lyrashield-worker-host/webhook-cutover-schema.mjs"); const system=db.getSystemPrisma(); try { await assertRuntimeRoleLeastPrivilege(db.prisma,process.env.DATABASE_URL); await assertFullyMigratedWebhookSchema(system,billing.WEBHOOK_TRACK_CLAIM_PROTOCOL); console.log("WEBHOOK_RECOVERY_SCHEMA_VERIFIED"); } finally { await Promise.allSettled([db.prisma.$disconnect(),system.$disconnect()]); }') || {
+    echo "Recovery candidate could not verify the exact migrated schema" >&2
+    return 1
+  }
+  [ "$result" = WEBHOOK_RECOVERY_SCHEMA_VERIFIED ]
 }
 
 # Host[:port] of a URL with the scheme, credentials and path stripped. Values
@@ -159,14 +242,72 @@ if [ "${1:-}" = "--preflight" ]; then
 fi
 
 webhook_cutover=0
-if [ "${1:-}" = "--webhook-claims-cutover" ]; then
-  webhook_cutover=1
-  shift
-fi
+v26_cutover=0
+webhook_recovery=0
+paired_release_held=0
+cold_release=0
+cold_operation=promote
+prior_worker_ref=
+paired_sandbox=
+case "${1:-}" in
+  --cold-prepare|--cold-open-admission|--cold-contain)
+    cold_operation=${1#--cold-}
+    cold_release=1
+    paired_release_held=1
+    shift
+    prior_worker_ref=${1:?exact previous worker reference required}
+    shift
+    ;;
+  --cold-release-stopped)
+    cold_release=1
+    paired_release_held=1
+    shift
+    prior_worker_ref=${1:?exact previous worker digest reference is required}
+    shift
+    ;;
+  --paired-release-stopped)
+    paired_release_held=1
+    shift
+    prior_worker_ref=${1:?exact previous worker digest reference is required}
+    shift
+    ;;
+  --paired-release-held)
+    paired_release_held=1
+    shift
+    ;;
+  --v26-cutover)
+    v26_cutover=1
+    shift
+    ;;
+  --webhook-claims-cutover)
+    webhook_cutover=1
+    shift
+    ;;
+  --webhook-cutover-recovery)
+    webhook_cutover=1
+    webhook_recovery=1
+    shift
+    ;;
+esac
+
+maintenance_cutover=0
+if [ "$webhook_cutover" -eq 1 ] || [ "$v26_cutover" -eq 1 ]; then maintenance_cutover=1; fi
 
 target=${1:?worker image digest reference is required}
 expected_app=${2:?product revision is required}
 expected_engine=${3:?engine revision is required}
+if [ -n "$prior_worker_ref" ]; then
+  paired_sandbox=${4:?qualified sandbox image is required}
+  case "$paired_sandbox" in ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:*) ;; *) exit 1 ;; esac
+  sandbox_digest=${paired_sandbox##*@sha256:}
+  [ "${#sandbox_digest}" -eq 64 ] || exit 1
+  case "$sandbox_digest" in *[!a-f0-9]*) exit 1 ;; esac
+fi
+# Capture the requested vault before worker-env.sh sources the old config.
+credential_vault=${LYRASHIELD_WORKER_GITHUB_CREDENTIAL_VAULT:-}
+case "$credential_vault" in
+  ''|*[!A-Za-z0-9-]*) echo "A valid worker GitHub credential vault is required" >&2; exit 1 ;;
+esac
 timer=lyrashield-worker-egress-refresh.timer
 service=lyrashield-worker.service
 promotion_state_dir=${LYRASHIELD_WORKER_PROMOTION_STATE_DIR:-/var/lib/lyrashield}
@@ -202,7 +343,7 @@ fi
 old_image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$config")
 [ -n "$old_image" ]
 backup="${config}.rollback-${expected_app}"
-if [ "$webhook_cutover" -eq 1 ]; then
+if [ "$maintenance_cutover" -eq 1 ]; then
   # Each stopped image keeps its own forensic config; a rerun must not replace
   # the original legacy snapshot with a compatible candidate's configuration.
   backup="${config}.cutover-prior-${expected_app}-${old_image##*@sha256:}"
@@ -227,8 +368,199 @@ redis_eval() {
   worker_oneshot "$@"
 }
 
+wait_cold_queues_drained() {
+  # Admission is already stopped. Existing jobs finish naturally; never cancel,
+  # delete keys, requeue or restart an ambiguous paid delivery to obtain emptiness.
+  drain_deadline=$(( $(date +%s) + 600 ))
+  while :; do
+    observed=$(worker_oneshot "$recovery_queue_count") || return 1
+    [ "$observed" != "$recovery_queue_expected" ] || return 0
+    [ "$(date +%s)" -lt "$drain_deadline" ] || {
+      echo 'Cold release drain deadline exceeded; admission remains held' >&2
+      return 1
+    }
+    sleep 5
+  done
+}
+
+assert_cold_paid_authority() {
+  authority_runner=$1
+  authority_pin=$2
+  authority=$($authority_runner 'const {prisma,getSystemPrisma}=await import("@lyrashield/db"); const system=getSystemPrisma();const {assertRecoveryDatabase,RECOVERY_UNKNOWN_SQL}=await import("file:///opt/lyrashield-worker-host/worker-recovery-probe.mjs");try {const sql="SELECT current_database() AS database, extract(epoch from pg_postmaster_start_time())::text AS epoch";const [runtimeIdentity,systemIdentity]=await Promise.all([prisma.$queryRawUnsafe(sql),system.$queryRawUnsafe(sql)]);if(JSON.stringify(runtimeIdentity)!==JSON.stringify(systemIdentity))throw new Error("Cold DB authorities disagree");await assertRecoveryDatabase({expected:process.argv[1],query:async query=>({rows:await (query===RECOVERY_UNKNOWN_SQL?system:prisma).$queryRawUnsafe(query)})});console.log("COLD_PAID_AUTHORITY_VERIFIED")}finally{await Promise.all([prisma.$disconnect(),system.$disconnect()])}' "$authority_pin")
+  [ "$authority" = COLD_PAID_AUTHORITY_VERIFIED ]
+}
+
+record_cold_barrier() {
+  /usr/bin/python3 - "/var/lib/lyrashield/cold-release-$LYRASHIELD_PAIRED_RELEASE_OWNER/context.json" /var/lib/lyrashield/worker-cold-start/receipt.json "$LYRASHIELD_PAIRED_RELEASE_OWNER" "$target" "$expected_app" "$expected_engine" <<'PYBIND'
+import hashlib,json,os,stat,sys
+context_path,receipt_path,owner,image,product,engine=sys.argv[1:]
+with open(context_path) as source: context=json.load(source)
+if context['identity']['owner']!=owner or context['identity']['image']!=image or context['identity']['product']!=product or context['identity']['engine']!=engine: raise SystemExit(1)
+fd=os.open(receipt_path,os.O_RDONLY|os.O_NOFOLLOW)
+with os.fdopen(fd,'rb') as source:
+ metadata=os.fstat(source.fileno())
+ if metadata.st_uid!=0 or stat.S_IMODE(metadata.st_mode)!=0o600 or metadata.st_size>65536: raise SystemExit(1)
+ context['barrierSha256']=hashlib.sha256(source.read()).hexdigest()
+temporary=context_path+'.next'
+fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+with os.fdopen(fd,'w') as output:
+ json.dump(context,output);output.flush();os.fsync(output.fileno())
+os.replace(temporary,context_path)
+fd=os.open(os.path.dirname(context_path),os.O_RDONLY|os.O_DIRECTORY);os.fsync(fd);os.close(fd)
+PYBIND
+}
+
+# Dormant paired release path: the protected caller supplies the reviewed module
+# payload and an exact external owner. The persistent latch is never ours to clear.
+assert_paired_release_hold() {
+  [ "$paired_release_held" -eq 1 ] || return 0
+  if [ "$cold_release" -eq 1 ]; then
+    # Source/image/native qualification belongs to the protected same-run
+    # caller. The host independently checks the actual completed cold barrier.
+    /usr/bin/python3 /opt/lyrashield-worker-host/cold-release-host.py assert-barrier \
+      "$prior_worker_ref" "${LYRASHIELD_COLD_OLD_SANDBOX_IMAGE:?}" "$LYRASHIELD_PAIRED_RELEASE_OWNER" "$target" "$expected_app" "$expected_engine" "$paired_sandbox" || return 1
+  fi
+  : "${LYRASHIELD_PAIRED_RELEASE_OWNER:?}" "${LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64:?}"
+  # shellcheck disable=SC2016
+  verified=$(redis_eval '
+const [module,owner,product,engine,digest,readyCode,readyBody,scansCode,scansBody]=process.argv.slice(1);
+const bytes=Buffer.from(module,"base64");
+const {createHash}=await import("node:crypto");
+if(bytes.length>8192 || bytes.toString("base64")!==module || createHash("sha256").update(bytes).digest("hex")!=="cd027329d8a0436030580f2190a92c78a5ab8a87fdd0fb36fcc8f0ace9568177") throw new Error("Unreviewed paired hold module");
+const {ownedHold:assertPairedReleaseHold,assertHeldReadiness}=await import("data:text/javascript;base64,"+module);
+const {default:Redis}=await import("ioredis");
+const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1});
+try {
+  await assertPairedReleaseHold(redis,"assert",owner,product,engine,digest);
+  if(readyCode) assertHeldReadiness(readyCode,readyBody,scansCode,scansBody);
+  console.log("MATCH");
+} finally { await redis.quit(); }' \
+    "$LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64" "$LYRASHIELD_PAIRED_RELEASE_OWNER" \
+    "$expected_app" "$expected_engine" "${target##*@}" "${1:-}" "${2:-}" "${3:-}" "${4:-}")
+  [ "$verified" = MATCH ] || { echo "Paired release hold verification failed" >&2; return 1; }
+}
+
+# All cold operations use the same authenticated persistent hold and source tuple.
+# The runner supplied module is pinned above; no caller boolean qualifies a host.
+cold_owned_hold() {
+  operation=$1
+  redis_eval '
+const [module,operation,owner,product,engine,digest]=process.argv.slice(1);
+const bytes=Buffer.from(module,"base64");const {createHash}=await import("node:crypto");
+if(bytes.length>8192 || createHash("sha256").update(bytes).digest("hex")!=="cd027329d8a0436030580f2190a92c78a5ab8a87fdd0fb36fcc8f0ace9568177")throw new Error("Unreviewed hold module");
+const {ownedHold}=await import("data:text/javascript;base64,"+module);
+const {default:Redis}=await import("ioredis");const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1});
+try{await ownedHold(redis,operation,owner,product,engine,digest);console.log("COLD_HOLD_VERIFIED")}finally{await redis.quit()}' \
+    "$LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64" "$operation" "$LYRASHIELD_PAIRED_RELEASE_OWNER" "$expected_app" "$expected_engine" "${target##*@}"
+}
+if [ "$cold_release" -eq 1 ] && [ "$cold_operation" = prepare ]; then
+  : "${LYRASHIELD_COLD_OLD_SANDBOX_IMAGE:?}"
+  [ "$(docker image inspect "$(worker_image_from_config)" --format '{{.Id}}')" = "$(docker image inspect "$prior_worker_ref" --format '{{.Id}}')" ]
+  refresh_worker_secrets
+  assert_worker_environment_fresh
+  if [ "$(sed -n 's/^LYRASHIELD_COLD_SINGLE_WORKER=//p' "$config")" = 1 ] || [ -n "$(sed -n 's/^LYRASHIELD_COLD_DATABASE_EPOCH_SHA256=//p' "$config")" ]; then
+    observed_epoch=$(worker_oneshot 'const {captureColdDatabaseEpoch}=await import("./src/operations/capture-cold-database-epoch.ts");console.log(await captureColdDatabaseEpoch());')
+    original_epoch=$(lyrashield_preserve_cold_epoch "$config" "$observed_epoch")
+  fi
+  [ "$(cold_owned_hold claim)" = COLD_HOLD_VERIFIED ]
+  wait_cold_queues_drained
+  if [ -n "${original_epoch:-}" ]; then assert_cold_paid_authority worker_oneshot "$original_epoch"; fi
+  /usr/bin/python3 "$host_assets_dir/cold-start-barrier.py" --worker-image "$prior_worker_ref" \
+    --sandbox-image "$LYRASHIELD_COLD_OLD_SANDBOX_IMAGE" --network lyrashield-sandbox --confirm COLD_SINGLE_WORKER
+  record_cold_barrier
+  assert_paired_release_hold
+  echo 'COLD_PREPARED_HELD'
+  exit 0
+fi
+if [ "$cold_release" -eq 1 ] && [ "$cold_operation" = contain ]; then
+  # A Redis error must not leave the candidate consuming while cleanup rolls
+  # traffic back. Always attempt its stop; success requires independent readback
+  # of BOTH the exact persistent hold and absence of the native worker.
+  cold_owned_hold claim >/dev/null 2>&1 || true
+  systemctl stop "$timer" "$service" || true
+  [ "$(systemctl show "$service" --property=ActiveState --value)" = inactive ]
+  [ "$(systemctl show "$service" --property=MainPID --value)" = 0 ]
+  remaining_worker=$(docker ps -a --filter "name=^/$container$" --format '{{.State}}')
+  case "$remaining_worker" in ''|exited|dead) ;; *) exit 1 ;; esac
+  [ "$(cold_owned_hold assert)" = COLD_HOLD_VERIFIED ]
+  echo 'COLD_CONTAINED_HELD'
+  exit 0
+fi
+# Validate ownership before changing timers, host assets, config or the worker.
+assert_paired_release_hold
+if [ "$cold_release" -eq 1 ] && [ "$cold_operation" = open-admission ]; then
+  [ "$(worker_image_from_config)" = "$target" ]
+  [ "$(docker inspect "$container" --format '{{.Image}}')" = "$(docker image inspect "$target" --format '{{.Id}}')" ]
+  [ "$(docker inspect "$container" --format '{{.State.Health.Status}}')" = healthy ]
+  assert_empty_queues
+  [ "$(worker_oneshot 'const {assertColdDatabaseEpoch}=await import("./src/cold-database-epoch.ts");await assertColdDatabaseEpoch();console.log("COLD_EPOCH_VERIFIED")')" = COLD_EPOCH_VERIFIED ]
+  # Native/source/image/DB/fleet gates have completed in the protected pipeline.
+  # Record that pre-open qualification durably before releasing the owned latch.
+  # The subsequent unpaid URL canary is post-release health, not qualification.
+  /usr/bin/python3 - "$promotion_state_dir/cold-release-$LYRASHIELD_PAIRED_RELEASE_OWNER/pre-open-qualified.json" "$LYRASHIELD_PAIRED_RELEASE_OWNER" "$expected_app" "$expected_engine" "$target" <<'PYMARKER'
+import json,os,sys
+path,owner,product,engine,image=sys.argv[1:]
+fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+with os.fdopen(fd,'w') as output:
+ json.dump(dict(owner=owner,productRevision=product,engineRevision=engine,workerImage=image,state='pre-open-qualified'),output);output.flush();os.fsync(output.fileno())
+directory=os.open(os.path.dirname(path),os.O_RDONLY|os.O_DIRECTORY)
+os.fsync(directory);os.close(directory)
+PYMARKER
+  [ "$(cold_owned_hold release)" = COLD_HOLD_VERIFIED ]
+  echo 'COLD_PRE_OPEN_QUALIFIED'
+  exit 0
+fi
+
 assert_cutover_receipt() {
+  if [ "$v26_cutover" -eq 1 ]; then
+    receipt_file=${LYRASHIELD_V26_RECEIPT_FILE:-/var/lib/lyrashield/v26-cutover.json}
+    [ ! -L "$receipt_file" ] && [ "$(stat -c '%u:%a' "$receipt_file")" = 0:600 ] || return 1
+    : "${LYRASHIELD_V26_REQUEST_BASE64:?}" "${LYRASHIELD_V26_IDENTITY_MODULE_BASE64:?}"
+    saved_config=$config
+    capability_config=$(mktemp "${config}.v26-capability.XXXXXX")
+    sed "s|^LYRASHIELD_WORKER_IMAGE=.*|LYRASHIELD_WORKER_IMAGE=$target|" "$config" > "$capability_config"
+    config=$capability_config
+    verified_status=0
+    verified=$(worker_candidate_oneshot 'const {assertV26WorkerIdentity}=await import("data:text/javascript;base64,"+process.argv[1]); const {SCAN_ACCOUNTING_PROTOCOL}=await import("@lyrashield/db"); const receipt=JSON.parse(process.argv[2]); const request=JSON.parse(Buffer.from(process.argv[3],"base64").toString()); const stop=assertV26WorkerIdentity({receipt,request,image:process.argv[4],environment:process.env,protocol:SCAN_ACCOUNTING_PROTOCOL}); if(process.argv[5]&&Object.entries(JSON.parse(process.argv[5])).some(([key,value])=>receipt.baseline.worker[key]!==value))throw new Error("v26 candidate live environment mismatch"); const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { if(await redis.get("lyrashield:scan-admission:stopped")!==stop)throw new Error("v26 owned stop changed"); console.log("MATCH"); }finally{await redis.quit();}' "$LYRASHIELD_V26_IDENTITY_MODULE_BASE64" "$(cat "$receipt_file")" "$LYRASHIELD_V26_REQUEST_BASE64" "$target" "${1:-}") || verified_status=$?
+    config=$saved_config
+    rm -f "$capability_config"
+    capability_config=
+    [ "$verified_status" = 0 ] || return 1
+    [ "$verified" = MATCH ] || return 1
+    return 0
+  fi
   receipt_file=${LYRASHIELD_WEBHOOK_CUTOVER_RECEIPT_FILE:-/var/lib/lyrashield/webhook-claims-cutover.json}
+  if [ "$webhook_recovery" -eq 1 ]; then
+    : "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT:?}" \
+      "${LYRASHIELD_ADMISSION_STOP_OWNER:?}"
+    case "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" in ''|*[!0-9]*) return 1 ;; esac
+    case "$LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA" in ''|*[!a-f0-9]*) return 1 ;; esac
+    [ "${#LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA}" -eq 40 ] || return 1
+    [ "$LYRASHIELD_ADMISSION_STOP_OWNER" = "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER" ] || return 1
+    case "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" in ''|*[!0-9]*) return 1 ;; esac
+    case "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" -gt 0 ] || return 1
+    case "$LYRASHIELD_ADMISSION_STOP_OWNER" in *[!0-9:]*) return 1 ;; esac
+    case "$LYRASHIELD_ADMISSION_STOP_OWNER" in *:*) ;; *) return 1 ;; esac
+    [ "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" != "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" ] || return 1
+    [ "$expected_app" = "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA" ] || return 1
+    case "$receipt_file" in /*) ;; *) return 1 ;; esac
+    [ -f "$receipt_file" ] && [ ! -L "$receipt_file" ] &&
+      [ "$(stat -c '%u:%a' "$receipt_file")" = '0:600' ] || {
+      echo "Webhook recovery requires a root-owned 0600 durable receipt" >&2; return 1;
+    }
+    # The recovery invocation is separate from the immutable owner. Read and
+    # authenticate the receipt on the VM; never copy its stop value into CI.
+    # shellcheck disable=SC2016
+    receipt_verified=$(redis_eval 'const {default:Redis}=await import("ioredis"); const {createHash}=await import("node:crypto"); const [owner,ownerRunId,ownerSource,recoveryRunId,recoverySource,recoveryAttempt,candidateSource,currentImage,durable,live]=process.argv.slice(1); const receipt=JSON.parse(durable); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); const ownerMatch=/^([0-9]+):([1-9][0-9]*)$/.exec(receipt.owner??""); const stop=JSON.parse(receipt.admissionStopValue??"null"); const attempts=receipt.attempts; const lastAttempt=receipt.lastAttempt; if(Object.entries({databaseUrlSha256:hash(process.env.DATABASE_URL),databaseSystemUrlSha256:hash(process.env.DATABASE_SYSTEM_URL),redisUrlSha256:hash(process.env.REDIS_URL)}).some(([key,value])=>receipt[key]!==value) || (live && Object.entries(JSON.parse(live)).some(([key,value])=>receipt[key]!==value))) throw new Error("Webhook cutover connection identity changed"); if(!ownerMatch || receipt.runId!==ownerRunId || ownerMatch[1]!==ownerRunId || receipt.owner!==owner || receipt.productRevision!==ownerSource || !["claimed","writers-stopped"].includes(receipt.phase) || stop?.operator!=="github-actions" || stop.reason!=="webhook-claims-cutover" || stop.owner!==owner || stop.runId!==ownerRunId || stop.productRevision!==ownerSource || !Array.isArray(attempts) || attempts.length===0 || !Number.isSafeInteger(lastAttempt) || !attempts.every((value,index)=>Number.isSafeInteger(value)&&value>0&&value<=lastAttempt&&(index===0||value>attempts[index-1])) || new Set(attempts).size!==attempts.length || attempts[0]!==Number(ownerMatch[2]) || attempts.at(-1)!==lastAttempt || recoveryRunId===ownerRunId || !/^[0-9]+$/.test(recoveryRunId) || !/^[a-f0-9]{40}$/.test(recoverySource) || recoverySource!==candidateSource || !/^[1-9][0-9]*$/.test(recoveryAttempt)) throw new Error("Webhook recovery identity mismatch"); const candidates=receipt.recoveryCandidates??[]; if(!Array.isArray(candidates)||candidates.length>8||candidates.some(candidate=>!candidate||!/^\d+$/.test(candidate.recoveryRunId??"")||!Number.isSafeInteger(candidate.recoveryAttempt)||!/^([a-f0-9]{40})$/.test(candidate.sourceRevision??"")||!/^([a-f0-9]{40})$/.test(candidate.engineRevision??"")||!/^.+@sha256:[a-f0-9]{64}$/.test(candidate.workerImage??"")||candidate.protocol!=="durable-claims/2")) throw new Error("Webhook recovery candidate history invalid"); if(![receipt.previousWorkerImage,receipt.candidateWorkerImage,receipt.previousCandidateWorkerImage,...candidates.map(candidate=>candidate.workerImage)].filter(Boolean).includes(currentImage)) throw new Error("Configured worker image is not recorded in the held receipt"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { if(await redis.get("lyrashield:scan-admission:stopped")!==receipt.admissionStopValue) throw new Error("Original webhook admission stop changed"); console.log("MATCH"); } finally { await redis.quit(); }' "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER" "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" "$LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA" "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA" "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" "$expected_app" "$old_image" "$(cat "$receipt_file")" "${1:-}")
+    [ "$receipt_verified" = MATCH ]
+    return
+  fi
   [ -n "${LYRASHIELD_ADMISSION_STOP_RECEIPT:-}" ] && [ -n "${LYRASHIELD_ADMISSION_STOP_OWNER:-}" ] && [ -n "${LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID:-}" ] || {
     echo "Webhook cutover requires the current run's owned admission receipt" >&2; return 1;
   }
@@ -240,7 +572,7 @@ assert_cutover_receipt() {
   # Hash the full selected connection values before touching Redis. A password
   # rotation also requires a new controlled maintenance proof.
   # shellcheck disable=SC2016
-  receipt_verified=$(redis_eval 'const {default:Redis}=await import("ioredis"); const {createHash}=await import("node:crypto"); const [raw,owner,product,currentImage,durable,runId,engine,live]=process.argv.slice(1); const receipt=JSON.parse(raw); const saved=JSON.parse(durable); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); const hashes={databaseUrlSha256:hash(process.env.DATABASE_URL),databaseSystemUrlSha256:hash(process.env.DATABASE_SYSTEM_URL),redisUrlSha256:hash(process.env.REDIS_URL)}; if(Object.entries(hashes).some(([key,value])=>saved[key]!==value) || (live && Object.entries(hashes).some(([key,value])=>JSON.parse(live)[key]!==value))) throw new Error("Webhook cutover connection identity changed"); if (!/^[0-9]+$/.test(runId)||!owner.startsWith(`${runId}:`)||!/^[0-9]+:[0-9]+$/.test(owner)||String(receipt.runId)!==runId||String(saved.runId)!==runId||receipt.operator!=="github-actions"||receipt.reason!=="webhook-claims-cutover"||receipt.owner!==owner||receipt.productRevision!==product||saved.owner!==owner||saved.productRevision!==product||saved.admissionStopValue!==raw||![saved.previousWorkerImage,saved.candidateWorkerImage,saved.previousCandidateWorkerImage].filter(Boolean).includes(currentImage)) throw new Error("Webhook cutover receipt identity mismatch"); if(currentImage!==saved.previousWorkerImage) { const billing=await import("@lyrashield/billing"); if(billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/1" || saved.candidateProductRevision!==product || saved.candidateEngineRevision!==engine || saved.candidateWebhookTrackClaimProtocol!=="durable-claims/1" || process.env.LYRASHIELD_PRODUCT_REVISION!==product || process.env.LYRASHIELD_ENGINE_REVISION!==engine) throw new Error("Recorded cutover candidate identity mismatch"); } const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { if (await redis.get("lyrashield:scan-admission:stopped")!==raw) throw new Error("Webhook cutover admission receipt mismatch"); console.log("MATCH"); } finally { await redis.quit(); }' "$LYRASHIELD_ADMISSION_STOP_RECEIPT" "$LYRASHIELD_ADMISSION_STOP_OWNER" "$expected_app" "$old_image" "$(cat "$receipt_file")" "$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID" "$expected_engine" "${1:-}")
+  receipt_verified=$(redis_eval 'const {default:Redis}=await import("ioredis"); const {createHash}=await import("node:crypto"); const [raw,owner,product,currentImage,durable,runId,engine,live]=process.argv.slice(1); const receipt=JSON.parse(raw); const saved=JSON.parse(durable); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); const hashes={databaseUrlSha256:hash(process.env.DATABASE_URL),databaseSystemUrlSha256:hash(process.env.DATABASE_SYSTEM_URL),redisUrlSha256:hash(process.env.REDIS_URL)}; if(Object.entries(hashes).some(([key,value])=>saved[key]!==value) || (live && Object.entries(hashes).some(([key,value])=>JSON.parse(live)[key]!==value))) throw new Error("Webhook cutover connection identity changed"); if (!/^[0-9]+$/.test(runId)||!owner.startsWith(`${runId}:`)||!/^[0-9]+:[0-9]+$/.test(owner)||String(receipt.runId)!==runId||String(saved.runId)!==runId||receipt.operator!=="github-actions"||receipt.reason!=="webhook-claims-cutover"||receipt.owner!==owner||receipt.productRevision!==product||saved.owner!==owner||saved.productRevision!==product||saved.admissionStopValue!==raw||![saved.previousWorkerImage,saved.candidateWorkerImage,saved.previousCandidateWorkerImage].filter(Boolean).includes(currentImage)) throw new Error("Webhook cutover receipt identity mismatch"); if(currentImage!==saved.previousWorkerImage) { const billing=await import("@lyrashield/billing"); if(billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/2" || saved.candidateProductRevision!==product || saved.candidateEngineRevision!==engine || saved.candidateWebhookTrackClaimProtocol!=="durable-claims/2" || process.env.LYRASHIELD_PRODUCT_REVISION!==product || process.env.LYRASHIELD_ENGINE_REVISION!==engine) throw new Error("Recorded cutover candidate identity mismatch"); } const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { if (await redis.get("lyrashield:scan-admission:stopped")!==raw) throw new Error("Webhook cutover admission receipt mismatch"); console.log("MATCH"); } finally { await redis.quit(); }' "$LYRASHIELD_ADMISSION_STOP_RECEIPT" "$LYRASHIELD_ADMISSION_STOP_OWNER" "$expected_app" "$old_image" "$(cat "$receipt_file")" "$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID" "$expected_engine" "${1:-}")
   [ "$receipt_verified" = MATCH ]
 }
 
@@ -260,6 +592,18 @@ assert_legacy_worker_stopped() {
   [ -z "$remaining" ] || {
     echo "Webhook cutover requires the old worker container to be absent" >&2; return 1;
   }
+}
+
+assert_recovery_worker_stopped() {
+  state=$(systemctl is-active "$service" 2>/dev/null || true)
+  case "$state" in inactive|failed) ;; *) echo "Held webhook recovery requires an inactive worker service" >&2; return 1 ;; esac
+  [ "$(systemctl is-enabled "$service" 2>/dev/null || true)" = disabled ] || {
+    echo "Held webhook recovery requires the old worker service disabled" >&2; return 1;
+  }
+  remaining=$(docker ps -a --filter 'name=^/lyrashield-worker$' --format '{{.Names}}') || return 1
+  [ -z "$remaining" ] || { echo "Held webhook recovery requires no old worker container" >&2; return 1; }
+  [ "$(systemctl is-active lyrashield-worker-egress-refresh.service 2>/dev/null || true)" = inactive ] || return 1
+  assert_cutover_timer_stopped
 }
 
 resume_admission() {
@@ -294,6 +638,10 @@ wait_healthy() {
 # pointer to a journal the rollback is about to rotate away. The unit log holds
 # no secrets.
 capture_worker_restart_diagnostics() {
+  if [ "$webhook_recovery" -eq 1 ]; then
+    echo "Held webhook recovery candidate failed worker startup; original admission stop remains in place." >&2
+    return
+  fi
   systemctl status --no-pager "$service" || true
   journalctl -u "$service" -n 50 --no-pager || true
 }
@@ -352,14 +700,54 @@ cleanup_host_assets() {
   fi
 }
 
+# A failed held transition never restarts a prior consumer. Disabling the units
+# prevents boot/timer recovery from silently reopening an unsafe pairing.
+contain_paired_worker() {
+  actions_ok=1
+  systemctl disable --now "$timer" || actions_ok=0
+  systemctl disable --now "$service" || actions_ok=0
+  systemctl stop "$timer" || actions_ok=0
+  systemctl stop "$service" || actions_ok=0
+  for unit in "$service" "$timer"; do
+    active=$(systemctl is-active "$unit" 2>/dev/null) || { [ "$active" = inactive ] || return 1; }
+    enabled=$(systemctl is-enabled "$unit" 2>/dev/null) || { [ "$enabled" = disabled ] || [ "$enabled" = masked ] || return 1; }
+    [ "$active" = inactive ] || return 1
+    [ "$enabled" = disabled ] || [ "$enabled" = masked ] || return 1
+  done
+  remaining=$(docker ps -a --filter 'name=^/lyrashield-worker$' --format '{{.Names}}') || return 1
+  [ -z "$remaining" ] && [ "$actions_ok" -eq 1 ]
+}
+
 rollback() {
   status=$?
   trap - EXIT HUP INT TERM
-  if [ "$promotion_complete" -ne 1 ] && [ "$webhook_cutover" -eq 1 ]; then
+  [ "$promotion_complete" -eq 1 ] || [ "$status" -ne 0 ] || status=1
+  if [ "$promotion_complete" -ne 1 ] && [ "$maintenance_cutover" -eq 1 ]; then
     # Schema cutover is forward-only. Never restore or restart legacy writers.
     systemctl disable --now "$timer" || true
     systemctl disable --now "$service" || true
     echo "Worker promotion failed during: ${promotion_step} (exit ${status}); webhook maintenance held, no legacy rollback" >&2
+    cleanup_host_assets
+    exit "$status"
+  fi
+  if [ "$promotion_complete" -ne 1 ] && [ "$paired_release_held" -eq 1 ]; then
+    if ! contain_paired_worker; then
+      echo "CONTAINMENT FAILED: paired release worker/timer stop or disable could not be verified; manual recovery required; admission untouched" >&2
+      cleanup_host_assets
+      exit "$status"
+    fi
+    restored=1
+    # Cold rollback holds without restoring a legacy launcher or erasing the pin.
+    if [ "$cold_release" -eq 0 ]; then
+      if [ "$host_assets_changed" -eq 1 ]; then restore_host_assets || restored=0; fi
+      if [ "$config_changed" -eq 1 ]; then cp -p "$backup" "$config" || restored=0; fi
+    fi
+    if ! contain_paired_worker; then
+      echo "CONTAINMENT FAILED: restored paired release units are not verified inactive and disabled; manual recovery required; admission untouched" >&2
+    else
+      echo "Worker paired release failed during: ${promotion_step}; worker and timer verified inactive and disabled; admission untouched" >&2
+    fi
+    [ "$restored" -eq 1 ] || echo "Prior worker files were not fully restored; manual recovery required" >&2
     cleanup_host_assets
     exit "$status"
   fi
@@ -383,7 +771,19 @@ rollback() {
   cleanup_host_assets
   exit "$status"
 }
-trap rollback EXIT HUP INT TERM
+if [ -n "$prior_worker_ref" ]; then
+  if [ "$cold_release" -eq 1 ]; then
+    [ "$(docker image inspect "$old_image" --format '{{.Id}}')" = "$(docker image inspect "$prior_worker_ref" --format '{{.Id}}')" ]
+  else
+    [ "$old_image" = "$prior_worker_ref" ]
+  fi
+  [ "$(systemctl is-active "$service" 2>/dev/null || true)" = inactive ]
+  assert_recovery_worker_stopped
+fi
+trap rollback EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Keep DNS refresh from racing the bounded replacement window. The timer is
 # restored after success or rollback.
@@ -398,10 +798,22 @@ systemctl is-active --quiet lyrashield-worker-egress-refresh.service && {
   exit 1
 }
 promotion_step=checking-current-worker
-if [ "$webhook_cutover" -eq 1 ]; then
+if [ "$maintenance_cutover" -eq 1 ]; then
   systemctl disable --now "$timer"
   assert_cutover_timer_stopped
-  assert_legacy_worker_stopped
+  if [ "$webhook_recovery" -eq 1 ]; then
+    assert_recovery_worker_stopped
+  else
+    assert_legacy_worker_stopped
+  fi
+elif [ "$paired_release_held" -eq 1 ] && [ -n "${prior_worker_ref:-}" ]; then
+  if [ "$cold_release" -eq 1 ]; then
+    [ "$(docker image inspect "$old_image" --format '{{.Id}}')" = "$(docker image inspect "$prior_worker_ref" --format '{{.Id}}')" ]
+  else
+    [ "$old_image" = "$prior_worker_ref" ]
+  fi
+  [ "$(systemctl is-active "$service" 2>/dev/null || true)" = inactive ]
+  assert_recovery_worker_stopped
 elif ! worker_is_healthy; then
   if worker_environment_is_fresh; then
     echo "Current worker is unhealthy with a fresh environment" >&2
@@ -410,18 +822,21 @@ elif ! worker_is_healthy; then
   echo "Current worker is unhealthy with a stale environment; continuing with refreshed one-shot checks" >&2
 fi
 
-# Refresh the Key Vault environment file before the admission claim and the
-# queue check so both evaluate the rotated endpoints. The live worker is not
-# restarted here: it keeps draining its old environment while the admission
-# stop and the empty-queue proof run against the new endpoint through
-# one-shot containers. The single restart later in this script is what cuts
-# the worker over.
-refresh_worker_secrets
+# Normal promotions refresh Key Vault values before read-only checks. Held
+# recovery preserves the original cutover's connection identity and must not
+# sync or rotate those values.
+if [ "$webhook_recovery" -eq 0 ] && [ "$v26_cutover" -eq 0 ] && [ -z "$prior_worker_ref" ]; then
+  refresh_worker_secrets
+fi
 
 # JavaScript template literal is passed verbatim to the container.
 # shellcheck disable=SC2016
 promotion_step=claiming-admission-stop
-if [ "$webhook_cutover" -eq 1 ]; then
+if [ "$paired_release_held" -eq 1 ]; then
+  assert_paired_release_hold
+elif [ "$v26_cutover" -eq 1 ]; then
+  : "${LYRASHIELD_V26_REQUEST_BASE64:?}"
+elif [ "$maintenance_cutover" -eq 1 ]; then
   assert_cutover_receipt
 else
   # shellcheck disable=SC2016
@@ -441,7 +856,11 @@ else
 fi
 
 promotion_step=checking-queues
-assert_empty_queues
+if [ "$webhook_recovery" -eq 1 ]; then
+  assert_recovery_empty_queues
+else
+  assert_empty_queues
+fi
 
 # Keep the running worker image for rollback while reclaiming superseded release
 # images before Docker needs space for both compressed and extracted target layers.
@@ -497,6 +916,18 @@ app_label=$(docker image inspect "$target" --format '{{index .Config.Labels "org
 engine_label=$(docker image inspect "$target" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')
 [ "$app_label" = "$expected_app" ]
 [ "$engine_label" = "$expected_engine" ]
+assert_paired_release_hold
+if [ "$v26_cutover" -eq 1 ] || [ -f /var/lib/lyrashield/v26-cutover.json ]; then
+  [ "$(docker image inspect "$target" --format '{{index .Config.Labels "io.lyrashield.accounting.protocol"}}')" = reservations/2 ] || exit 1
+  protocol=$(worker_candidate_oneshot 'const {SCAN_ACCOUNTING_PROTOCOL}=await import("@lyrashield/db");console.log(SCAN_ACCOUNTING_PROTOCOL)')
+  [ "$protocol" = reservations/2 ] || exit 1
+  # An ordinary release may restore only an actually compatible prior worker.
+  if [ "$v26_cutover" -eq 0 ]; then
+    [ "$(docker image inspect "$old_image" --format '{{index .Config.Labels "io.lyrashield.accounting.protocol"}}')" = reservations/2 ] || exit 1
+    old_protocol=$(worker_oneshot 'const {SCAN_ACCOUNTING_PROTOCOL}=await import("@lyrashield/db");console.log(SCAN_ACCOUNTING_PROTOCOL)')
+    [ "$old_protocol" = reservations/2 ] || exit 1
+  fi
+fi
 if [ "$webhook_cutover" -eq 1 ]; then
   promotion_step=checking-webhook-claim-capability
   # The exported protocol belongs to the digest-pinned candidate, never the old image.
@@ -511,9 +942,18 @@ if [ "$webhook_cutover" -eq 1 ]; then
   config=$old_config
   rm -f "$capability_config"
   capability_config=
-  [ "$capability" = durable-claims/1 ] || { echo "Candidate lacks durable webhook claim protocol" >&2; exit 1; }
+  [ "$capability" = durable-claims/2 ] || { echo "Candidate lacks durable webhook claim protocol" >&2; exit 1; }
   assert_cutover_receipt
-  assert_legacy_worker_stopped
+  if [ "$webhook_recovery" -eq 1 ]; then
+    assert_recovery_worker_stopped
+  else
+    assert_legacy_worker_stopped
+  fi
+fi
+
+if [ "$v26_cutover" -eq 1 ]; then
+  assert_cutover_receipt
+  assert_recovery_worker_stopped
 fi
 
 # Host scripts and units are release assets bound to the same reviewed image
@@ -542,6 +982,11 @@ do
     exit 1
   fi
 done
+if [ "$cold_release" -eq 1 ]; then
+  for asset in cold-start-barrier.py recover-worker.sh worker-recovery-probe.mjs lyrashield-worker-recover.service; do
+    [ -f "$asset_stage/$asset" ] && [ ! -L "$asset_stage/$asset" ] || exit 1
+  done
+fi
 
 host_backup=$(mktemp -d "$promotion_state_dir/worker-host-backup.XXXXXX")
 cp -p "$host_libexec_dir/lyrashield-run-worker" "$host_backup/run-worker.sh"
@@ -576,16 +1021,45 @@ install -m 0644 "$asset_stage/lyrashield-worker-secrets.service" "$systemd_dir/l
 install -m 0644 "$asset_stage/lyrashield-worker-egress.service" "$systemd_dir/lyrashield-worker-egress.service"
 install -m 0644 "$asset_stage/lyrashield-worker-egress-refresh.service" "$systemd_dir/lyrashield-worker-egress-refresh.service"
 install -m 0644 "$asset_stage/lyrashield-worker-egress-refresh.timer" "$systemd_dir/lyrashield-worker-egress-refresh.timer"
+if [ "$cold_release" -eq 1 ]; then
+  install -m 0755 "$asset_stage/cold-start-barrier.py" "$host_assets_dir/cold-start-barrier.py"
+  install -m 0755 "$asset_stage/recover-worker.sh" "$host_libexec_dir/lyrashield-recover-worker"
+  install -m 0644 "$asset_stage/worker-recovery-probe.mjs" "$host_assets_dir/worker-recovery-probe.mjs"
+  install -m 0644 "$asset_stage/lyrashield-worker-recover.service" "$systemd_dir/lyrashield-worker-recover.service"
+fi
 systemctl daemon-reload
 
 if [ "$webhook_cutover" -eq 1 ]; then
   promotion_step=recording-webhook-candidate
   assert_cutover_receipt
-  assert_empty_queues
-  assert_legacy_worker_stopped
-  # Keep the previously configured compatible candidate through the atomic
-  # config swap. A same-source rebuild can have a different immutable digest.
-  updated_receipt=$(worker_oneshot 'const [raw,current,target,product,engine]=process.argv.slice(1); const saved=JSON.parse(raw); const previousCandidateWorkerImage=current!==saved.previousWorkerImage?current:undefined; console.log(JSON.stringify({...saved,candidateWorkerImage:target,candidateProductRevision:product,candidateEngineRevision:engine,candidateWebhookTrackClaimProtocol:"durable-claims/1",previousCandidateWorkerImage}));' "$(cat "$receipt_file")" "$old_image" "$target" "$expected_app" "$expected_engine")
+  if [ "$webhook_recovery" -eq 1 ]; then
+    assert_recovery_empty_queues
+    assert_recovery_worker_stopped
+    assert_recovery_schema
+  else
+    assert_empty_queues
+    assert_legacy_worker_stopped
+  fi
+  if [ "$webhook_recovery" -eq 1 ]; then
+    promotion_step=recording-recovery-worker-candidate
+    updated_receipt=$(worker_candidate_oneshot '
+const billing=await import("@lyrashield/billing");
+const {assertHeldWebhookCutoverReceipt,appendWebhookRecoveryCandidate}=await import("file:///opt/lyrashield-worker-host/webhook-cutover-recovery.mjs");
+const {createHash}=await import("node:crypto");
+const [raw,ownerRun,ownerSource,owner,recoveryRun,attempt,source,engine,target]=process.argv.slice(1);
+const receipt=JSON.parse(raw);
+assertHeldWebhookCutoverReceipt(receipt,{ownerRunId:ownerRun,ownerSourceSha:ownerSource,owner});
+const stop=JSON.parse(receipt.admissionStopValue);
+if(stop.owner!==owner||stop.runId!==ownerRun||stop.productRevision!==ownerSource||recoveryRun===ownerRun||billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/2") throw new Error("Held recovery owner or protocol mismatch");
+const hash=value=>createHash("sha256").update(value??"").digest("hex");
+if(receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL)||receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL)||receipt.redisUrlSha256!==hash(process.env.REDIS_URL)) throw new Error("Held recovery connection identity changed");
+const candidate={recoveryRunId:recoveryRun,recoveryAttempt:Number(attempt),sourceRevision:source,engineRevision:engine,workerImage:target,protocol:billing.WEBHOOK_TRACK_CLAIM_PROTOCOL};
+console.log(JSON.stringify(appendWebhookRecoveryCandidate(receipt,candidate)));' "$(cat "$receipt_file")" "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" "$LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA" "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER" "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" "$expected_app" "$expected_engine" "$target")
+  else
+    # Keep the previously configured compatible candidate through the atomic
+    # config swap. A same-source rebuild can have a different immutable digest.
+    updated_receipt=$(worker_oneshot 'const [raw,current,target,product,engine]=process.argv.slice(1); const saved=JSON.parse(raw); const previousCandidateWorkerImage=current!==saved.previousWorkerImage?current:undefined; console.log(JSON.stringify({...saved,candidateWorkerImage:target,candidateProductRevision:product,candidateEngineRevision:engine,candidateWebhookTrackClaimProtocol:"durable-claims/2",previousCandidateWorkerImage}));' "$(cat "$receipt_file")" "$old_image" "$target" "$expected_app" "$expected_engine")
+  fi
   receipt_temporary=$(mktemp "${receipt_file}.XXXXXX")
   printf '%s\n' "$updated_receipt" > "$receipt_temporary"
   chmod 0600 "$receipt_temporary"
@@ -595,16 +1069,44 @@ if [ "$webhook_cutover" -eq 1 ]; then
   sync -f "$(dirname "$receipt_file")"
 fi
 
-if [ "$webhook_cutover" -eq 0 ] || [ ! -e "$backup" ]; then
+if [ "$maintenance_cutover" -eq 0 ] || [ ! -e "$backup" ]; then
   cp -p "$config" "$backup"
 fi
+cold_epoch=
+if [ "$cold_release" -eq 1 ]; then
+  promotion_step=capturing-cold-database-epoch
+  assert_paired_release_hold
+  observed_epoch=$(worker_candidate_oneshot 'const {captureColdDatabaseEpoch}=await import("./src/operations/capture-cold-database-epoch.ts");console.log(await captureColdDatabaseEpoch());')
+  cold_epoch=$(lyrashield_preserve_cold_epoch "$config" "$observed_epoch")
+  case "$cold_epoch" in ''|*[!a-f0-9]*) exit 1 ;; esac
+  [ "${#cold_epoch}" -eq 64 ] || exit 1
+  assert_cold_paid_authority worker_candidate_oneshot "$cold_epoch"
+fi
 temporary=$(mktemp "${config}.XXXXXX")
-awk -v image="$target" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } { print } END { if (!found) exit 1 }' "$config" > "$temporary"
+cold_publication=''
+cold_publish_run=''
+cold_publish_attempt=''
+if [ "$cold_release" -eq 1 ]; then
+  cold_publication=$(/usr/bin/python3 -c 'import json;print(json.load(open("/etc/lyrashield/cold-sandbox/expected.json"))["workflowRevision"])')
+  cold_publish_run=$(/usr/bin/python3 -c 'import json;print(json.load(open("/etc/lyrashield/cold-sandbox/expected.json"))["runId"])')
+  cold_publish_attempt=$(/usr/bin/python3 -c 'import json;print(json.load(open("/etc/lyrashield/cold-sandbox/expected.json"))["runAttempt"])')
+fi
+awk -v image="$target" -v vault="$credential_vault" -v sandbox="$paired_sandbox" -v cold="$cold_release" -v epoch="$cold_epoch" -v engine="$expected_engine" -v owner="${LYRASHIELD_PAIRED_RELEASE_OWNER:-}" -v publication="$cold_publication" -v publish_run="$cold_publish_run" -v publish_attempt="$cold_publish_attempt" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } /^LYRASHIELD_SANDBOX_IMAGE=/ && sandbox != "" { print "LYRASHIELD_SANDBOX_IMAGE=" sandbox; sandbox_count++; next } /^LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=/ { next } cold == 1 && /^LYRASHIELD_COLD_(SINGLE_WORKER|DATABASE_EPOCH_SHA256|RELEASE_OWNER)=/ { next } cold == 1 && /^LYRASHIELD_SANDBOX_(PUBLICATION_RECORD_PATH|SBOM_COVERAGE_)/ { next } { print } END { if (!found || (sandbox != "" && sandbox_count != 1)) exit 1; print "LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=" vault; if (cold == 1) { print "LYRASHIELD_COLD_SINGLE_WORKER=1"; print "LYRASHIELD_COLD_RELEASE_OWNER=" owner; print "LYRASHIELD_COLD_DATABASE_EPOCH_SHA256=" epoch; if (publication == "" || publish_run == "" || publish_attempt == "") exit 1; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/etc/lyrashield/cold-sandbox/verification.json"; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/etc/lyrashield/cold-sandbox/expected.json"; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine"; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main"; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=" engine; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=" publication; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=" publish_run; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=" publish_attempt } }' "$config" > "$temporary"
 chmod 0600 "$temporary"
 chown root:root "$temporary"
 mv "$temporary" "$config"
 config_changed=1
+if [ "$cold_release" -eq 1 ]; then
+  sync -f "$config"
+  sync -f "$(dirname "$config")"
+  # The old launcher is now replaced and stopped. Flush any legacy create
+  # accepted after preparation before the first guarded native owner can start.
+  /usr/bin/python3 "$host_assets_dir/cold-start-barrier.py" --worker-image "$prior_worker_ref" \
+    --sandbox-image "$LYRASHIELD_COLD_OLD_SANDBOX_IMAGE" --network lyrashield-sandbox --confirm COLD_SINGLE_WORKER
+  record_cold_barrier
+fi
 
+assert_paired_release_hold
 promotion_step=restarting-worker
 systemctl reset-failed "$service" || true
 # Capture the unit state and journal tail on a restart failure before the EXIT
@@ -623,8 +1125,9 @@ wait_healthy
 [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$expected_app" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$expected_engine" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
+assert_paired_release_hold
 
-if [ "$webhook_cutover" -eq 1 ]; then
+if [ "$maintenance_cutover" -eq 1 ]; then
   promotion_step=checking-held-cutover
   # The pipeline alone releases this receipt after compatible app/scanner health.
   # Readback uses the pre-promotion image retained by the maintenance receipt.
@@ -640,7 +1143,11 @@ if [ "$webhook_cutover" -eq 1 ]; then
   promotion_complete=1
   trap - EXIT HUP INT TERM
   cleanup_host_assets
-  echo "Worker webhook cutover passed for ${target##*@}; scan admission held"
+  if [ "$v26_cutover" -eq 1 ]; then
+    echo "Worker v26 cutover passed for ${target##*@}; scan admission held"
+  else
+    echo "Worker webhook cutover passed for ${target##*@}; scan admission held"
+  fi
   exit 0
 fi
 
@@ -656,6 +1163,43 @@ systemctl is-active --quiet "$timer"
 systemctl is-enabled --quiet "$timer"
 echo "Worker service state: active enabled"
 echo "Worker egress refresh timer state: active enabled"
+if [ "$paired_release_held" -eq 1 ]; then
+  promotion_step=checking-held-scan-readiness
+  assert_paired_release_hold
+  ready_response=$(curl --silent --show-error --max-time 10 --max-filesize 16384 --write-out '\n%{http_code}' https://app.lyrashieldai.com/api/ready)
+  scans_response=$(curl --silent --show-error --max-time 10 --max-filesize 16384 --write-out '\n%{http_code}' https://app.lyrashieldai.com/api/ready/scans)
+  assert_paired_release_hold "$(printf '%s\n' "$ready_response" | tail -n 1)" "$(printf '%s\n' "$ready_response" | sed '$d')" "$(printf '%s\n' "$scans_response" | tail -n 1)" "$(printf '%s\n' "$scans_response" | sed '$d')"
+  worker_is_healthy
+  [ "$(docker inspect "$container" --format '{{.Config.Image}}')" = "$target" ]
+  [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$expected_app" ]
+  [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$expected_engine" ]
+  [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
+  if [ -n "$prior_worker_ref" ]; then
+    [ "$(docker exec "$container" printenv LYRASHIELD_RUN_RECORD_V1_1)" = 0 ]
+    [ "$(docker exec "$container" printenv LYRASHIELD_PENDING_HTTP_EVIDENCE)" = 0 ]
+    [ "$(sed -n 's/^LYRASHIELD_SANDBOX_IMAGE=//p' "$config")" = "$paired_sandbox" ]
+    [ "$(docker exec "$container" printenv LYRASHIELD_IMAGE)" = "$paired_sandbox" ]
+    sandbox_refs=$(docker image inspect "$paired_sandbox" --format '{{range .RepoDigests}}{{println .}}{{end}}')
+    printf '%s\n' "$sandbox_refs" | grep -Fxq "$paired_sandbox"
+    # Never export or print the selector's value.
+    docker exec "$container" sh -c 'test -z "${LYRASHIELD_EVIDENCE_WRITER_CANARY:-}"'
+    running_id=$(docker inspect "$container" --format '{{.Image}}')
+    [ -n "$running_id" ] && [ "$running_id" = "$(docker image inspect "$target" --format '{{.Id}}')" ] || exit 1
+  fi
+  assert_paired_release_hold
+  if [ "$cold_release" -eq 1 ]; then
+    [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_CONCURRENCY)" = 1 ] || exit 1
+  fi
+  promotion_complete=1
+  trap - EXIT HUP INT TERM
+  cleanup_host_assets
+  if [ "$cold_release" -eq 1 ]; then
+    echo "Cold single-worker candidate passed for ${target##*@}; scan admission HELD for independent live acceptance"
+  else
+    echo "Worker paired release promotion passed for ${target##*@}; scan admission HELD"
+  fi
+  exit 0
+fi
 promotion_step=resuming-admission
 if [ "$admission_stop_owned" -eq 1 ]; then
   resume_admission

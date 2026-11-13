@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises"
 import process from "node:process"
 import {
   LyraShieldError,
@@ -11,11 +12,11 @@ import { describeCliFailure } from "./failure.js"
 import type { Output } from "./output.js"
 
 /** Watched work ended without success — scan terminal ≠ COMPLETED, or an operation FAILED/CONFLICT. */
-export const EXIT_TERMINAL_UNSUCCESSFUL = 7
+const EXIT_TERMINAL_UNSUCCESSFUL = 7
 /** The wait deadline elapsed before a terminal state. */
-export const EXIT_WAIT_TIMEOUT = 8
+const EXIT_WAIT_TIMEOUT = 8
 /** SIGINT while waiting — the server-side work keeps running. */
-export const EXIT_SIGINT = 130
+const EXIT_SIGINT = 130
 
 const DEFAULT_WAIT_TIMEOUT_MS = 30 * 60 * 1000
 const DEFAULT_POLL_INTERVAL_MS = 5000
@@ -65,7 +66,7 @@ export function parseWaitFlags(parsed: Record<string, unknown>, output: Output):
   return { wait, timeoutMs, pollIntervalMs }
 }
 
-export interface WaitControl {
+interface WaitControl {
   signal: AbortSignal
   interrupted: () => boolean
   dispose: () => void
@@ -190,24 +191,6 @@ function extractInternalScanId(resultLocation: string | null): string | null {
   return /^[A-Za-z0-9_-]{1,128}$/.test(trimmed) ? trimmed : null
 }
 
-function sleepMs(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException("Aborted", "AbortError"))
-      return
-    }
-    const onAbort = () => {
-      clearTimeout(timer)
-      reject(new DOMException("Aborted", "AbortError"))
-    }
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort)
-      resolve()
-    }, ms)
-    signal.addEventListener("abort", onAbort, { once: true })
-  })
-}
-
 /**
  * Wait on a durable agent operation to COMPLETED/FAILED/CONFLICT, then — when
  * the operation produced an internal scan id — continue waiting on that scan
@@ -291,7 +274,7 @@ export async function runOperationWait(
         )
         return EXIT_WAIT_TIMEOUT
       }
-      await sleepMs(Math.min(pollIntervalMs, remaining), control.signal)
+      await sleep(Math.min(pollIntervalMs, remaining), undefined, { signal: control.signal })
     }
   } catch (err) {
     if (
@@ -313,5 +296,3 @@ export async function runOperationWait(
     control.dispose()
   }
 }
-
-export type { ScanSnapshot }

@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { assertNamedTestsPassed } from "./.github/scripts/assert-named-vitest-tests.mjs"
 
 /**
- * Run all test suites independently and report every result.
- * This runner runs independent suites in parallel and exits non-zero if any fail.
+ * Run each requested suite independently, in order, and report every result.
+ * Exits non-zero if any suite fails.
  */
 
 const isCi = process.env.CI === "true"
@@ -15,7 +15,14 @@ const coreReportPath = isCi
   : null
 const coreCommand = ["vitest", "run", "--exclude", "**/dist/**"]
 if (coreReportPath) {
-  coreCommand.push("--reporter=json", `--outputFile=${coreReportPath}`)
+  // Keep Vitest's native diagnostics: JSON can replace timeout details with
+  // STACK_TRACE_ERROR. The JSON report still powers the named-test guard.
+  coreCommand.push(
+    "--maxWorkers=2",
+    "--reporter=default",
+    "--reporter=json",
+    `--outputFile=${coreReportPath}`
+  )
 }
 if (process.env.LYRASHIELD_TEST_COVERAGE === "1") {
   coreCommand.push("--coverage")
@@ -29,7 +36,26 @@ const allSuites = [
   },
   // Node 22+ expands the glob natively; no shell needed.
   { name: "motion", command: ["node", "--test", "apps/marketing-motion/tests/*.test.mjs"] },
-  { name: "ops", command: ["node", "--test", ".github/scripts/tests/*.test.mjs"] },
+  {
+    name: "ops",
+    command: [
+      "node",
+      "--test",
+      ...(process.env.LYRASHIELD_OPS_RUNTIME_ALREADY_VERIFIED === "1"
+        ? readdirSync(".github/scripts/tests")
+            .filter(
+              (file) =>
+                file.endsWith(".test.mjs") &&
+                !["webhook-catalog.runtime.test.mjs", "webhook-queue.runtime.test.mjs"].includes(
+                  file
+                )
+            )
+            .sort()
+            .map((file) => `.github/scripts/tests/${file}`)
+        : [".github/scripts/tests/*.test.mjs"]),
+      "ops/monitoring/*.test.mjs",
+    ],
+  },
 ]
 
 const requestedSuites = [
@@ -52,22 +78,35 @@ if (suites.length === 0) throw new Error("At least one test suite is required")
 function run(name, command) {
   return new Promise((resolve) => {
     console.log(`\n==> Starting ${name} tests: ${command.join(" ")}\n`)
+    const startedAt = performance.now()
     const child = spawn(command[0], command.slice(1), { stdio: "inherit" })
+    let settled = false
+    const finish = (code, message) => {
+      if (settled) return
+      settled = true
+      const durationSeconds = (performance.now() - startedAt) / 1000
+      console.log(`\n==> ${message} after ${durationSeconds.toFixed(2)}s\n`)
+      resolve({ name, code, durationSeconds })
+    }
     // A missing/renamed binary makes spawn emit "error" and "close" never
     // fires — without this handler the Promise would never settle and CI
     // would hang to the job timeout instead of failing fast.
     child.on("error", (error) => {
-      console.error(`\n==> ${name} tests could not start: ${error.message}\n`)
-      resolve({ name, code: 127 })
+      finish(127, `${name} tests could not start: ${error.message}`)
     })
-    child.on("close", (code) => {
-      console.log(`\n==> ${name} tests exited with code ${code ?? 1}\n`)
-      resolve({ name, code: code ?? 1 })
+    child.on("close", (code, signal) => {
+      finish(code ?? 1, `${name} tests exited with code ${code ?? `signal ${signal}`}`)
     })
   })
 }
 
-const results = await Promise.all(suites.map((suite) => run(suite.name, suite.command)))
+// Keep heavy suites sequential within each runner to bound import, service
+// and build contention. Independent CI jobs may select separate suites; each
+// invocation still reports its requested results and fails on any error.
+const results = []
+for (const suite of suites) {
+  results.push(await run(suite.name, suite.command))
+}
 const coreResult = results.find((r) => r.name === "core")
 
 if (coreReportPath && coreResult && coreResult.code !== 0) {
@@ -102,6 +141,8 @@ if (coreReportPath && coreResult?.code === 0) {
       "returns an entry whose only matching word is in the topic column",
       "retrieves the expected public source in the top five for at least 90% of 60 questions",
       "executes atomic cleanup, count, TTL, and one warmed EVALSHA per operation",
+      "denies a changed input under the same idempotency key without altering the ledger",
+      "returns one live approval for concurrent identical requests, then replaces it after expiry",
     ])
   } catch (error) {
     console.error("\n==> core environment-gated test guard failed:", error)

@@ -1,6 +1,6 @@
 # LyraShield Cross-Repository Review and Hardening Implementation Plan
 
-> **Execution status:** The founder authorized implementation and local Docker testing on 30 September. Source corrections and local verification are in progress on isolated branches. Merge, production release, signed Desktop release, package publication, and paid provider acceptance remain separate gates. Checked criteria have current evidence; unchecked baseline, operational and release criteria remain explicitly unresolved. See the execution ledger for evidence and limits.
+> **Historical execution snapshot (2026-09-30):** The founder authorized implementation and local Docker testing on 30 September. Source corrections and local verification were in progress on isolated branches at that time. Merge, production and signed Desktop releases, package publication and paid provider acceptance remained separate gates. Keep the dated evidence below as historical; current release status and open gates are owned by [PRD §8–9](../../../PRD.md#8-current-production-evidence) and [codebase §11](../../../codebase.md#11-production-topology-and-accepted-evidence).
 
 **Date:** 30 September 2026
 

@@ -85,7 +85,7 @@ export async function releaseReserveForAffiliate(
     const claimed: { commissionId: string; amount: Prisma.Decimal }[] = []
     for (const item of releaseItems) {
       const result = await tx.commission.updateMany({
-        where: { id: item.commissionId, reserveReleasedAt: null },
+        where: { id: item.commissionId, status: "PAID", reserveReleasedAt: null },
         data: { reserveReleasedAt: now, reserveReleasedAmount: item.amount },
       })
       if (result.count === 1) claimed.push(item)
@@ -99,16 +99,15 @@ export async function releaseReserveForAffiliate(
       return { released: claimed.length, totalAmount: claimedTotal, payoutId: null }
     }
 
-    const payoutId = `${affiliateId}:reserve-release:${now.toISOString()}`
+    const idempotencyKey = crypto.randomUUID()
     const payout = await tx.payout.create({
       data: {
-        id: payoutId,
         affiliateId,
         amount: claimedTotal,
         currency: finalCurrency,
         status: "PENDING",
         isReserveRelease: true,
-        idempotencyKey: `reserve-release:${affiliateId}`,
+        idempotencyKey,
         provider: null,
       },
     })

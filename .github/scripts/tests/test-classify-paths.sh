@@ -51,6 +51,9 @@ assert_eq "docs-only: app" "false" "$(get_field "$out" "app")"
 assert_eq "docs-only: shared" "false" "$(get_field "$out" "shared")"
 assert_eq "docs-only: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 assert_eq "docs-only: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
+assert_eq "docs-only: pinned worker contract" "false" "$(get_field "$out" "engine-worker-contract")"
+assert_eq "docs-only: database services" "false" "$(get_field "$out" "database-tests")"
+assert_eq "docs-only: DB service startup" "false" "$(get_field "$out" "database-services")"
 
 # --- Test 2: app changes trigger full CI ---
 out=$(run_classify $'apps/web/src/app/page.tsx\napps/worker/src/jobs/run-scan.job.ts')
@@ -60,6 +63,9 @@ assert_eq "app: marketing" "false" "$(get_field "$out" "marketing")"
 assert_eq "app: shared" "false" "$(get_field "$out" "shared")"
 assert_eq "app: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 assert_eq "app: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "app: pinned worker contract" "true" "$(get_field "$out" "engine-worker-contract")"
+assert_eq "app: database services" "true" "$(get_field "$out" "database-tests")"
+assert_eq "app: DB service startup" "true" "$(get_field "$out" "database-services")"
 
 # --- Test 3: marketing changes trigger marketing deploy ---
 out=$(run_classify $'apps/marketing/src/pages/index.astro\napps/marketing-motion/src/scene.ts')
@@ -68,6 +74,12 @@ assert_eq "marketing: marketing" "true" "$(get_field "$out" "marketing")"
 assert_eq "marketing: app" "false" "$(get_field "$out" "app")"
 assert_eq "marketing: marketing deploy" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "marketing: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
+assert_eq "marketing: pinned worker contract" "false" "$(get_field "$out" "engine-worker-contract")"
+assert_eq "marketing: database services" "false" "$(get_field "$out" "database-tests")"
+assert_eq "marketing: DB service startup" "false" "$(get_field "$out" "database-services")"
+
+out=$(run_classify $'README.md\napps/marketing/src/content/guide.mdx\napps/marketing/package.json')
+assert_eq "docs and marketing only: pinned worker contract" "false" "$(get_field "$out" "engine-worker-contract")"
 
 # --- Test 4: shared package changes trigger full CI ---
 out=$(run_classify $'packages/db/src/scan-service.ts\npackages/auth/src/auth.ts')
@@ -76,6 +88,9 @@ assert_eq "shared: shared" "true" "$(get_field "$out" "shared")"
 assert_eq "shared: app" "false" "$(get_field "$out" "app")"
 assert_eq "shared: marketing deploy" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "shared: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "shared: pinned worker contract" "true" "$(get_field "$out" "engine-worker-contract")"
+assert_eq "shared: database services" "true" "$(get_field "$out" "database-tests")"
+assert_eq "shared: DB service startup" "true" "$(get_field "$out" "database-services")"
 
 # --- Test 5: mixed docs + app → NOT docs-only ---
 out=$(run_classify $'AGENTS.md\napps/web/src/app/page.tsx')
@@ -88,6 +103,7 @@ assert_eq "github: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "github: shared" "true" "$(get_field "$out" "shared")"
 assert_eq "github: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 assert_eq "github: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
+assert_eq "github: pinned worker contract" "true" "$(get_field "$out" "engine-worker-contract")"
 
 out=$(run_classify $'.github/workflows/deploy-azure.yml')
 assert_eq "Azure workflow: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
@@ -107,10 +123,61 @@ assert_eq "Release classifier: Azure deploy" "false" "$(get_field "$out" "azure-
 for path in .github/scripts/promote-worker-vm.sh .github/scripts/verify-engine-revision.sh .github/scripts/verify-engine-worker-contract.sh; do
   out=$(run_classify "$path")
   assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+  assert_eq "$path: pinned worker contract" "true" "$(get_field "$out" "engine-worker-contract")"
+done
+
+# Worker dependencies, engine pins/parity, image inputs and root package state
+# all retain the contract gate. Unknown paths also remain fail-closed.
+for path in \
+  apps/worker/src/worker.ts \
+  packages/integrations/src/queue.ts \
+  .github/workflows/release-tauri.yml \
+  .github/workflows/verify-webhook-worker-image.yml \
+  .github/scripts/check-engine-revision-parity.sh \
+  pnpm-lock.yaml \
+  pnpm-workspace.yaml \
+  package.json \
+  Dockerfile; do
+  out=$(run_classify "$path")
+  assert_eq "$path: pinned worker contract" "true" "$(get_field "$out" "engine-worker-contract")"
 done
 
 out=$(run_classify $'.github/scripts/tests/test-promote-worker-vm.sh')
 assert_eq "Deployment test only: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
+
+# --- Test 6c: every script and workflow the Azure rollout executes routes to Azure deploy ---
+# Exact-path coverage for the runtime reusable workflow, the rollout/preflight
+# helpers, the webhook-claims cutover scripts (host wrapper and VM payload), the
+# Key Vault secret-set library, the worker provenance record, the migration
+# database identity check and the webhook cutover verifier.
+for path in \
+  .github/workflows/deploy-azure-runtime.yml \
+  .github/scripts/deploy-azure-preflight.sh \
+  .github/scripts/deploy-azure-rollout.sh \
+  .github/scripts/webhook-claims-maintenance.sh \
+  .github/scripts/webhook-claims-vm.sh \
+  .github/scripts/azure_secret_set.sh \
+  .github/scripts/validate-worker-provenance.sh \
+  .github/scripts/migration-database-identity.mjs \
+  .github/scripts/verify-webhook-cutover.mjs \
+  .github/scripts/verify-webhook-cutover-preflight.mjs \
+  .github/scripts/validate-webhook-deploy-dispatch.sh; do
+  out=$(run_classify "$path")
+  assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+  assert_eq "$path: tooling" "true" "$(get_field "$out" "tooling-only")"
+done
+
+# Paired negatives: documentation and test/tooling neighbours with lookalike
+# names must not route a production deployment on their own.
+for path in \
+  .github/scripts/tests/test-azure-secret-set.sh \
+  .github/scripts/tests/webhook-cutover.test.mjs \
+  .github/scripts/tests/migration-database-identity.test.mjs \
+  .github/scripts/README.md \
+  docs/webhook-claims-maintenance.md; do
+  out=$(run_classify "$path")
+  assert_eq "$path: Azure deploy negative" "false" "$(get_field "$out" "azure-deploy")"
+done
 
 # --- Test 7: an uncovered path falls back to shared (fail-closed, v13 P1-7) ---
 # ops/, e2e/, root tooling, and new root configs must not silently skip deploys.
@@ -146,7 +213,7 @@ assert_eq "agent-config: docs-only" "true" "$(get_field "$out" "docs-only")"
 
 # --- Test 8: root config files are docs-only ---
 out=$(run_classify $'.nvmrc\nLICENSE\n.gitignore')
-assert_eq "root-config: docs-only" "true" "$(get_field "$out" "docs-only")"
+assert_eq "root-config: docs-only" "false" "$(get_field "$out" "docs-only")"
 
 # --- Test 9: empty input → docs-only=true (vacuous truth, matches workflow) ---
 out=$(run_classify "")
@@ -179,18 +246,26 @@ assert_eq "desktop: app" "false" "$(get_field "$out" "app")"
 assert_eq "desktop: shared" "false" "$(get_field "$out" "shared")"
 assert_eq "desktop: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 assert_eq "desktop: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
+assert_eq "desktop: database services" "false" "$(get_field "$out" "database-tests")"
+assert_eq "desktop: DB service startup" "false" "$(get_field "$out" "database-services")"
 
 # --- Test 14: an uncovered path is fail-closed for both deployments ---
 out=$(run_classify $'infra/new-runtime-input.txt')
 assert_eq "unknown: shared fallback" "true" "$(get_field "$out" "shared")"
 assert_eq "unknown: marketing deploy fail-closed" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "unknown: Azure deploy fail-closed" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "unknown: pinned worker contract fail-closed" "true" "$(get_field "$out" "engine-worker-contract")"
+assert_eq "unknown: database services fail-closed" "true" "$(get_field "$out" "database-tests")"
+assert_eq "unknown: DB service startup fail-closed" "true" "$(get_field "$out" "database-services")"
 
 # --- Test 15: an unknown path remains fail-closed in a mixed change set ---
 out=$(run_classify $'apps/web/src/app/page.tsx\ninfra/new-runtime-input.txt')
 assert_eq "mixed unknown: shared fallback" "true" "$(get_field "$out" "shared")"
 assert_eq "mixed unknown: marketing deploy fail-closed" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "mixed unknown: Azure deploy fail-closed" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "mixed unknown: pinned worker contract fail-closed" "true" "$(get_field "$out" "engine-worker-contract")"
+assert_eq "mixed unknown: database services fail-closed" "true" "$(get_field "$out" "database-tests")"
+assert_eq "mixed unknown: DB service startup fail-closed" "true" "$(get_field "$out" "database-services")"
 
 for path in apps/marketing/src/content/compare/snyk.md apps/web/README.md; do
   out=$(run_classify "$path")
@@ -205,17 +280,86 @@ assert_eq "browser harness: marketing deploy" "false" "$(get_field "$out" "marke
 assert_eq "browser harness: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 # Tooling-only keeps legacy shared/release routing, but narrows validation.
-for path in .github/scripts/promote-worker-vm.sh .github/workflows/ci.yml ops/deployment/azure-vm-run-command.sh run-all-tests.mjs; do
+for path in .github/scripts/promote-worker-vm.sh .github/scripts/classify-main-change-gap.sh .github/workflows/ci.yml ops/deployment/azure-vm-run-command.sh run-all-tests.mjs lint/serial-comma-baseline.json; do
   out=$(run_classify "$path")
   assert_eq "$path: tooling-only" "true" "$(get_field "$out" "tooling-only")"
   assert_eq "$path: shared retained" "true" "$(get_field "$out" "shared")"
+  assert_eq "$path: database services skipped" "false" "$(get_field "$out" "database-tests")"
+  assert_eq "$path: DB startup skipped" "false" "$(get_field "$out" "database-services")"
 done
+
+# Copy-ratchet baselines affect the existing lint gate but are not production
+# inputs. Keep them on focused tooling validation without routing deployments.
+out=$(run_classify $'lint/serial-comma-baseline.json')
+assert_eq "serial-comma baseline: docs-only" "false" "$(get_field "$out" "docs-only")"
+assert_eq "serial-comma baseline: tooling-only" "true" "$(get_field "$out" "tooling-only")"
+assert_eq "serial-comma baseline: shared" "true" "$(get_field "$out" "shared")"
+assert_eq "serial-comma baseline: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
+assert_eq "serial-comma baseline: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
+
+# Runtime workflow and rollout tooling changes must schedule an Azure release,
+# even when the files do not live under apps/ or packages/.
+for path in \
+  .github/workflows/deploy-azure-runtime.yml \
+  .github/scripts/deploy-azure-preflight.sh \
+  .github/scripts/deploy-azure-rollout.sh \
+  .github/scripts/webhook-claims-maintenance.sh \
+  .github/scripts/webhook-claims-vm.sh \
+  .github/scripts/azure_secret_set.sh \
+  .github/scripts/validate-worker-provenance.sh \
+  .github/scripts/migration-database-identity.mjs \
+  .github/scripts/verify-webhook-cutover.mjs \
+  .github/scripts/verify-webhook-cutover-preflight.mjs \
+  .github/scripts/validate-webhook-deploy-dispatch.sh; do
+  out=$(run_classify "$path")
+  assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+done
+
 for paths in $'run-all-tests.mjs\napps/web/src/app/page.tsx' $'.github/workflows/ci.yml\ninfra/new.txt' $'.github/workflows/ci.yml\npnpm-lock.yaml' $'.github/workflows/ci.yml\nvitest.config.ts' $'.github/workflows/ci.yml\nops/worker/run-worker.sh' README.md; do
   out=$(run_classify "$paths")
   assert_eq "$paths: broad validation retained" "false" "$(get_field "$out" "tooling-only")"
 done
 out=$(run_classify $'.github/scripts/promote-worker-vm.sh\nREADME.md')
 assert_eq "tooling plus root docs" "true" "$(get_field "$out" "tooling-only")"
+assert_eq "tooling plus root docs: database services skipped" "false" "$(get_field "$out" "database-tests")"
+assert_eq "tooling plus root docs: DB startup skipped" "false" "$(get_field "$out" "database-services")"
+
+# These tooling helpers have live database/Redis compatibility fixtures. Keep
+# that narrow runtime proof while skipping the full product DB suite.
+for path in \
+  .github/scripts/verify-webhook-cutover.mjs \
+  .github/scripts/webhook-claims-vm.sh \
+  .github/scripts/tests/webhook-catalog.runtime.test.mjs \
+  .github/scripts/tests/webhook-queue.runtime.test.mjs; do
+  out=$(run_classify "$path")
+  assert_eq "$path: full product DB suite skipped" "false" "$(get_field "$out" "database-tests")"
+  assert_eq "$path: live DB/Redis fixture retained" "true" "$(get_field "$out" "database-services")"
+done
+
+# Product runtime dependencies remain conservative even when they are not
+# under apps/web. Root dependency/config and worker transitive inputs need DB.
+for path in \
+  apps/worker/package.json \
+  packages/integrations/src/queue.ts \
+  package.json \
+  pnpm-lock.yaml \
+  pnpm-workspace.yaml \
+  tsconfig.json \
+  .github/workflows/verify-webhook-worker-image.yml \
+  .github/scripts/check-engine-revision-parity.sh; do
+  out=$(run_classify "$path")
+  assert_eq "$path: database services required" "true" "$(get_field "$out" "database-tests")"
+done
+
+# Missing production provenance forces every path-selected validation and route.
+out=$(printf '' | bash "$CLASSIFY" --force-all)
+for field in app marketing desktop shared marketing-deploy azure-deploy; do
+  assert_eq "force-all: $field" "true" "$(get_field "$out" "$field")"
+done
+assert_eq "force-all: docs-only" "false" "$(get_field "$out" "docs-only")"
+assert_eq "force-all: tooling-only" "false" "$(get_field "$out" "tooling-only")"
+assert_eq "force-all: database services" "true" "$(get_field "$out" "database-tests")"
+assert_eq "force-all: DB service startup" "true" "$(get_field "$out" "database-services")"
 
 echo "Results: $pass passed, $fail failed"
 if [[ "$fail" -gt 0 ]]; then

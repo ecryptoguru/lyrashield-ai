@@ -118,7 +118,10 @@ export async function softDeleteTarget(
       where: {
         workspaceId,
         targetId,
-        status: { in: ACTIVE_SCAN_STATUSES },
+        OR: [
+          { status: { in: ACTIVE_SCAN_STATUSES } },
+          { accountingVersion: 2, accountingSettledAt: null },
+        ],
         deletedAt: null,
       },
     })

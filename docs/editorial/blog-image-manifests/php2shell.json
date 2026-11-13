@@ -1,0 +1,86 @@
+[
+  {
+    "slug": "php2shell-still-flagged-after-updating",
+    "imageId": "php2shell-backports",
+    "cluster": "web-execution",
+    "concept": "Verify the installed vendor patch independently from its version label",
+    "prompt": "Original generated text-free landscape editorial illustration: Verify the installed vendor patch independently from its version label. Graphite and glass architecture, restrained teal and amber, no logos, people or text.",
+    "alt": "A repaired teal server core inspected beneath an unchanged amber package marker",
+    "sourceHash": "sha256:553d08638c86513999bf84a232068bcc460ad4b685443e003f736234506ae17d",
+    "cropNotes": "Center crop for hero and social variants; retain the main runtime or control subject. Raw original retained outside repository.",
+    "usageCount": 1,
+    "approved": true
+  },
+  {
+    "slug": "php2shell-investigate-earlier-compromise",
+    "imageId": "php2shell-investigation",
+    "cluster": "web-execution",
+    "concept": "Investigate historical evidence separately from current patch status",
+    "prompt": "Original generated text-free landscape editorial illustration: Investigate historical evidence separately from current patch status. Graphite and glass architecture, restrained teal and amber, no logos, people or text.",
+    "alt": "Preserved historical evidence tiles examined beside a repaired teal server",
+    "sourceHash": "sha256:0fa95790091e5bed1de13b85355eca27e73aa0139323ed99e4405b0e2186a8e3",
+    "cropNotes": "Center crop for hero and social variants; retain the main runtime or control subject. Raw original retained outside repository.",
+    "usageCount": 1,
+    "approved": true
+  },
+  {
+    "slug": "php2shell-explained",
+    "imageId": "php2shell-overview",
+    "cluster": "web-execution",
+    "concept": "Runtime memory corruption in two distinct chambers",
+    "prompt": "Original generated text-free landscape editorial illustration: Runtime memory corruption in two distinct chambers. Graphite and glass architecture, restrained teal and amber, no logos, people or text.",
+    "alt": "Two fractured glass memory chambers inside a graphite server runtime with amber fault signals",
+    "sourceHash": "sha256:648c8dea3b5b0eea739399f91b4b3f8fa94f7d8887d4b6df4165ae0dc0455fc9",
+    "cropNotes": "Center crop for hero and social variants; retain the main runtime or control subject. Raw original retained outside repository.",
+    "usageCount": 1,
+    "approved": true
+  },
+  {
+    "slug": "check-php-version-php2shell",
+    "imageId": "php2shell-version",
+    "cluster": "web-execution",
+    "concept": "Identify the serving web runtime separately from the terminal",
+    "prompt": "Original generated text-free landscape editorial illustration: Identify the serving web runtime separately from the terminal. Graphite and glass architecture, restrained teal and amber, no logos, people or text.",
+    "alt": "A terminal connected to a separate web-worker chamber under a magnifying glass",
+    "sourceHash": "sha256:4e48f1805df70ef8a3998c1f3406598b6a7ae35af8550863256d9069f700d9fe",
+    "cropNotes": "Center crop for hero and social variants; retain the main runtime or control subject. Raw original retained outside repository.",
+    "usageCount": 1,
+    "approved": true
+  },
+  {
+    "slug": "patch-php2shell-docker-fpm-apache",
+    "imageId": "php2shell-patching",
+    "cluster": "web-execution",
+    "concept": "Replace old serving workers in an orderly patched rollout",
+    "prompt": "Original generated text-free landscape editorial illustration: Replace old serving workers in an orderly patched rollout. Graphite and glass architecture, restrained teal and amber, no logos, people or text.",
+    "alt": "An amber server cartridge being replaced beside three teal worker instances",
+    "sourceHash": "sha256:88fedca531d81816ec11e4863fec64386f273849c98ea1bd60a12a840e5b6d53",
+    "cropNotes": "Center crop for hero and social variants; retain the main runtime or control subject. Raw original retained outside repository.",
+    "usageCount": 1,
+    "approved": true
+  },
+  {
+    "slug": "php2shell-wordpress-hosting",
+    "imageId": "php2shell-wordpress",
+    "cluster": "web-execution",
+    "concept": "Website depends on an underlying hosting and PHP runtime",
+    "prompt": "Original generated text-free landscape editorial illustration: Website depends on an underlying hosting and PHP runtime. Graphite and glass architecture, restrained teal and amber, no logos, people or text.",
+    "alt": "Website and application layers above a hosting server with an amber runtime chamber",
+    "sourceHash": "sha256:4532694dbf00a1b841876dc593cc70b4aaaba1907fe76c9e279c04d17b6cf2f0",
+    "cropNotes": "Center crop for hero and social variants; retain the main runtime or control subject. Raw original retained outside repository.",
+    "usageCount": 1,
+    "approved": true
+  },
+  {
+    "slug": "cve-2026-115560-session-upload-progress",
+    "imageId": "php2shell-session",
+    "cluster": "web-execution",
+    "concept": "Review session-state transitions and startup upload-progress control",
+    "prompt": "Original generated text-free landscape editorial illustration: Review session-state transitions and startup upload-progress control. Graphite and glass architecture, restrained teal and amber, no logos, people or text.",
+    "alt": "Two session-state vessels connected through a controlled upload-progress aperture",
+    "sourceHash": "sha256:bdb5e3758f7e0e95689a3141f4dc561b9a996c074a17082967675c2f6e3d4626",
+    "cropNotes": "Center crop for hero and social variants; retain the main runtime or control subject. Raw original retained outside repository.",
+    "usageCount": 1,
+    "approved": true
+  }
+]

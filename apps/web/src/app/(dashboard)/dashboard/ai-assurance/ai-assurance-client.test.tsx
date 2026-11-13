@@ -46,6 +46,7 @@ describe("AiAssuranceClient", () => {
     )
 
     expect(html).toContain("AI assurance control evidence")
+    expect(html).toContain('aria-label="Generate report for AI assurance"')
     for (let index = 1; index <= 7; index++) expect(html).toContain(`Control ${index}`)
     expect(html).toContain("Customer-declared")
     expect(html).toContain("not verification, certification or data-lineage proof")
@@ -102,7 +103,7 @@ describe("AiAssuranceClient", () => {
     expect(html).not.toContain("encryptionKeyRef")
   })
 
-  it("shows a fallback when no target is selected", () => {
+  it("offers target setup when no target is selected", () => {
     const html = renderToString(
       <AiAssuranceClient
         workspaceId="ws-1"
@@ -116,7 +117,9 @@ describe("AiAssuranceClient", () => {
       />
     )
 
-    expect(html).toContain("No targets available")
+    expect(html).toContain("Choose a target for AI assurance")
+    expect(html).toContain('href="/dashboard/targets?add=1"')
+    expect(html).toContain("Manage targets")
   })
 
   it("does not render mutation controls for a view-only member", () => {

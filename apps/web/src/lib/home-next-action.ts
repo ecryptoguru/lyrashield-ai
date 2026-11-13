@@ -38,6 +38,8 @@ interface HomeDecisionInput {
     GateReadinessTarget,
     "targetId" | "targetName" | "state" | "applicable" | "blockingFindings" | "reasons"
   >[]
+  /** More target pages remain outside this bounded read. */
+  hasMoreGateTargets?: boolean
   /** A queued/running scan; the decision leads with its progress. */
   activeScan?: { id: string; targetName: string | null } | null
 }
@@ -86,13 +88,16 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
   if (input.targets.total === 0) {
     const action: HomeNextAction = {
       eyebrow: "Get started",
-      title: "Add your first target",
+      title: "Start your first scan",
       description:
-        "Point LyraShield at a repository, app URL or API. Targets are where every scan starts.",
-      href: "/dashboard/targets",
-      cta: "Add a target",
+        "Choose your repository, app URL or API, then confirm the scan scope and profile.",
+      href: "/dashboard/scans?new=1",
+      cta: "Start your first scan",
     }
-    return { action, primaryAction: { href: "/dashboard/targets", label: "Add a target" } }
+    return {
+      action,
+      primaryAction: { href: "/dashboard/scans?new=1", label: "Start your first scan" },
+    }
   }
 
   if (!input.lastEvaluatedAssessment) {
@@ -155,6 +160,17 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
         cta: "Review blockers",
       }
       return { action, primaryAction: { href: blockerHref, label: "Review blockers" } }
+    }
+    if (input.hasMoreGateTargets) {
+      const action: HomeNextAction = {
+        eyebrow: "Next step",
+        title: "Review remaining targets",
+        description:
+          "More targets have not been checked on this page. Review the remaining target pages before a workspace launch decision.",
+        href: "/dashboard/launch-readiness",
+        cta: "Open Launch Readiness",
+      }
+      return { action, primaryAction: { href: action.href, label: action.cta } }
     }
     // A verdict blocked ONLY by a missing enforced release identity does not
     // need another scan: the assessment itself is usable and is shown with the

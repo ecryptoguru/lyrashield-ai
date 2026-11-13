@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { LyraShieldError, NotModified } from "./errors"
+import { sleep } from "./sleep"
 
 export const VERSION = "0.1.0"
 
@@ -51,24 +52,6 @@ function callerAbortError(): LyraShieldError {
     status: 0,
     code: "REQUEST_ABORTED",
     message: "Request aborted by the caller",
-  })
-}
-
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(callerAbortError())
-      return
-    }
-    const onAbort = () => {
-      clearTimeout(timer)
-      reject(callerAbortError())
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort)
-      resolve()
-    }, ms)
-    signal?.addEventListener("abort", onAbort, { once: true })
   })
 }
 
@@ -217,7 +200,7 @@ export class LyraShieldClient {
           const delay = Math.min(baseDelay + jitter, MAX_RETRY_DELAY_MS)
           clearTimeout(timeout)
           await res.body?.cancel()
-          await sleep(delay, callerSignal)
+          await sleep(delay, callerSignal, callerAbortError)
           continue
         }
 

@@ -15,16 +15,15 @@
     "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
-    "@better-auth/oauth-provider": "1.7.1",
+    "@better-auth/oauth-provider": "1.7.17",
     "@lyrashield/config": "workspace:*",
     "@lyrashield/db": "workspace:*",
     "@lyrashield/logger": "workspace:*",
-    "@lyrashield/types": "workspace:*",
-    "better-auth": "1.7.1"
+    "better-auth": "1.7.17"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "next": "^16.3.3",
+    "next": "^16.4.1",
     "typescript": "catalog:"
   }
 }

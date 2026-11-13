@@ -8,34 +8,33 @@ import { describe, expect, it } from "vitest"
  * load restores them). Pages loaded beyond the first server-rendered page and
  * the scroll position survive navigation through a session-scoped snapshot.
  * The drawer keeps its pushState/popstate and focus-restoration contract.
+ *
+ * The list's restore/save/Back-Forward effects moved out of the client
+ * component into findings-list-effects.ts, so the snapshot assertions read the
+ * module that now owns them. The URL assertions still read the client, which
+ * still builds the query string. `setRestoreReady(true)` is asserted on the
+ * client because that is where it also flips when a new request supersedes a
+ * pending restore; the effects module only holds the post-restore call.
  */
 describe("findings list context preservation contract", () => {
   const client = readFileSync(new URL("./findings-client.tsx", import.meta.url), "utf8")
-  const context = readFileSync(new URL("./findings-list-context.ts", import.meta.url), "utf8")
+  const urlState = readFileSync(
+    new URL("../../../../lib/finding-list-params.ts", import.meta.url),
+    "utf8"
+  )
+  const effects = readFileSync(new URL("./findings-list-effects.ts", import.meta.url), "utf8")
   const drawer = readFileSync(new URL("./use-finding-drawer.ts", import.meta.url), "utf8")
 
   it("keeps filter/sort/target/query in the URL", () => {
-    expect(client).toContain('params.set("filter", updates.filter)')
-    expect(client).toContain('params.set("target", updates.target)')
+    expect(client).toContain("updateFindingListUrl(updates)")
+    expect(urlState).toContain('params.set("status", selection.status)')
+    expect(urlState).toContain('params.set("target", updates.target)')
     expect(drawer).toContain('url.searchParams.set("finding", finding.id)')
   })
 
-  it("revalidates saved pages and restores scroll after mount, not during hydration", () => {
-    expect(client).toContain("loadFindingsListContext(")
-    expect(client).toContain("window.scrollTo(0, stored.scrollY)")
-    expect(client).toContain("setRestoreReady(true)")
-  })
-
   it("persists the snapshot only after restoration and on pagehide", () => {
-    expect(client).toContain("!restoreReady")
-    expect(client).toContain('window.addEventListener("pagehide", save)')
-  })
-
-  it("bounds and guards the persisted snapshot", () => {
-    expect(context).toContain("MAX_PERSISTED_ROWS = 500")
-    expect(context).toContain("count + page.items.length > MAX_PERSISTED_ROWS")
-    expect(context).toContain("catch {")
-    expect(context).toContain("sessionStorage.setItem")
+    expect(effects).toContain("!restoreReady")
+    expect(effects).toContain('window.addEventListener("pagehide", save)')
   })
 
   it("keeps drawer focus restoration and never touches filter state on drawer close", () => {

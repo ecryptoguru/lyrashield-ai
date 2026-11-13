@@ -1,36 +1,27 @@
 ---
 import Base from "@layouts/Base.astro"
 import ProductShot from "@components/ProductShot.astro"
-import { buildDateFor } from "../lib/build-date"
+import { EVIDENCE_STATES, SHIPPED_EVIDENCE_STATES } from "../lib/evidence-states"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/methodology", origin).toString()
 const title = "AI app security evidence methodology | LyraShield AI"
-const buildDate = buildDateFor("src/pages/methodology.astro")
 const description =
-  "How LyraShield AI records authorized scan scope, coverage, finding evidence, independent verification, retest outcomes and every known limitation."
-const evidenceStates = [
-  {
-    name: "Detected candidate",
-    meaning: "A scanner found a signal worth reviewing. Confidence can help prioritize it, but does not prove exploitability.",
-  },
-  {
-    name: "Independently verified",
-    meaning: "A separate verification receipt supports the finding. Engine confidence alone never creates this state.",
-  },
-  {
-    name: "Retest-confirmed",
-    meaning: "A server-owned deterministic retest found the relevant condition absent after a fix, with complete applicable coverage.",
-  },
-  {
-    name: "Inconclusive",
-    meaning: "The available retest evidence cannot establish that the condition is gone. The uncertainty remains visible.",
-  },
-]
+  "How LyraShield AI records authorized scan scope, coverage, finding evidence states, retest outcomes and every known limitation."
+// One editorial review date drives the visible "Last reviewed" text, the
+// <time datetime> attribute, the page JSON-LD dateModified and the sitemap
+// lastmod (parsed in astro.config.mjs). Change this constant only.
+const reviewed = "2026-10-24"
+const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+})
 const faq = [
   {
     q: "What is an evidence state?",
-    a: "An evidence state describes how much support a finding has. Detected, independently verified, retest-confirmed and inconclusive are separate states, not interchangeable labels.",
+    a: "An evidence state describes how much support a finding has. Detected, retest-confirmed and inconclusive are the three shipped states. They are not interchangeable labels. A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today.",
   },
   {
     q: "Does a clean or high score prove an app is secure?",
@@ -52,14 +43,14 @@ const jsonLd = [
     name: "LyraShield AI security evidence methodology",
     description,
     url: canonical,
-    ...(buildDate ? { dateModified: buildDate } : {}),
+    dateModified: reviewed,
     reviewedBy: { "@id": `${origin}/#organization` },
     isPartOf: { "@id": `${origin}/#website` },
     about: [
       "application security testing",
       "scan coverage",
       "security evidence",
-      "independent verification",
+      "evidence states",
       "security retesting",
     ],
   },
@@ -85,10 +76,10 @@ const jsonLd = [
     "@type": "DefinedTermSet",
     name: "LyraShield AI Evidence States",
     description:
-      "The four evidence states LyraShield AI assigns to security findings, from initial detection to retest-confirmed resolution.",
-    hasDefinedTerm: evidenceStates.map((state) => ({
+      "The three shipped evidence states LyraShield AI assigns to security findings: DETECTED, VALIDATED and INCONCLUSIVE.",
+    hasDefinedTerm: SHIPPED_EVIDENCE_STATES.map((state) => ({
       "@type": "DefinedTerm",
-      name: state.name,
+      name: state.code,
       description: state.meaning,
     })),
   },
@@ -103,72 +94,69 @@ const jsonLd = [
 >
   <section class="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:py-24">
     <header class="max-w-3xl" data-reveal-group>
-      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase" data-reveal="fade">Methodology</p>
+
       <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>
         A security result should say what it knows—and what it does not.
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
-        An evidence state records how strongly a security finding is supported. LyraShield uses
-        four. Detected candidate means a scanner saw a signal. Independently verified means a
-        separate receipt supports it. Retest-confirmed means a server-owned retest found the
-        condition absent after a fix. Inconclusive means the evidence cannot establish the
-        condition is gone. These are never blended into a single score.
+        Every finding keeps its scope, coverage and evidence state. A scanner signal is
+        detected; a complete deterministic retest can confirm a fix. Missing proof stays inconclusive.
       </p>
-      <div class="mt-6 rounded-xl border border-border bg-bg-raised p-5 text-sm leading-7 text-text-muted" data-reveal="fade">
-        <p class="font-semibold text-text">TL;DR</p>
-        <p class="mt-2">
-          Every finding carries one of four evidence states: <strong>detected candidate</strong> (a scanner signal that needs review), <strong>independently verified</strong> (a separate receipt supports it), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent) or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A score or clean result never overrides these facts.
-        </p>
-      </div>
-      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-07-29">July 29, 2026</time> · Maintained by LyraShield Security + Engineering</p>
+      <p class="mt-4 text-sm leading-7 text-text-muted">
+        Independently verified is reserved for a future separate verification step; no finding is in it today.
+        A score or clean result never overrides the retained evidence.
+      </p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime={reviewed}>{reviewedLabel}</time> · Maintained by LyraShield Security + Engineering</p>
     </header>
 
     <section aria-labelledby="record-heading" class="mt-16 border-y border-border py-12">
       <h2 id="record-heading" class="text-2xl font-semibold text-text" data-reveal>What every new scan record preserves</h2>
       <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
-        <div data-reveal><dt class="font-semibold text-text">Scope</dt><dd class="mt-2 leading-7 text-text-muted">The authorized target, available source, scan mode and immutable result-manifest checksum.</dd></div>
+        <div data-reveal><dt class="font-semibold text-text">Scope</dt><dd class="mt-2 leading-7 text-text-muted">The authorized target, available source, scan mode and the result-manifest checksum recorded with it.</dd></div>
         <div data-reveal><dt class="font-semibold text-text">Coverage</dt><dd class="mt-2 leading-7 text-text-muted">Which checks completed, were limited, were skipped or did not apply, including retained limitations.</dd></div>
-        <div data-reveal><dt class="font-semibold text-text">Provenance</dt><dd class="mt-2 leading-7 text-text-muted">Which scanner produced a candidate and whether an independent verification receipt exists.</dd></div>
+        <div data-reveal><dt class="font-semibold text-text">Provenance</dt><dd class="mt-2 leading-7 text-text-muted">Which scanner produced a candidate and, where the state applies, the coverage receipt behind it.</dd></div>
         <div data-reveal><dt class="font-semibold text-text">Outcome</dt><dd class="mt-2 leading-7 text-text-muted">The server-owned retest result and the evidence boundary behind validated or inconclusive status.</dd></div>
       </dl>
 
       <ProductShot
         class="mt-10"
-        src="/product/console-trust-runs.webp"
-        alt="The Scans list in the LyraShield console. Five completed scans are listed — release checks, a code review and a deep security review — each showing the engine status, the start and end timestamps and a retained finding count."
-        width={1400}
-        height={883}
-        chrome="app.lyrashieldai.com/scans"
+        src="/product/current-scan-dark.webp"
+        lightSrc="/product/current-scan-light.webp"
+        alt="A completed, sealed scan record in the current dashboard, with retained findings, a zero-count reserved verification column, coverage state and an assurance-report action. The private target name is redacted."
+        width={1600}
+        height={640}
+        chrome="app.lyrashieldai.com/dashboard/scans"
       >
-        <b>Records accumulate; they are not overwritten.</b> Each run keeps what ran, when it started
-        and ended and two counts held separately: what the engine reported and what was retained
-        after review. Target and repository names are blurred.
+        <b>A completed scan keeps its scope and evidence state.</b> This demo-workspace capture
+        shows duration, retained findings and coverage separately. The reserved verification count is zero.
+        Completion is not a guarantee of security. The private target name is redacted.
       </ProductShot>
     </section>
 
     <section aria-labelledby="states-heading" class="py-16">
       <h2 id="states-heading" class="text-2xl font-semibold text-text" data-reveal>Evidence states are not interchangeable</h2>
       <div class="mt-8 divide-y divide-border border-y border-border" data-reveal-group>
-        {evidenceStates.map((state, index) => (
+        {EVIDENCE_STATES.map((state, index) => (
           <article class="grid gap-3 py-7 md:grid-cols-[3rem_13rem_1fr] md:gap-6" data-reveal>
             <span class="font-mono text-xs text-text-muted" aria-hidden="true" data-countup={index + 1}>0{index + 1}</span>
-            <h3 class="font-semibold text-text">{state.name}</h3>
+            <h3 class="font-semibold text-text">{state.label}</h3>
             <p class="leading-7 text-text-muted">{state.meaning}</p>
           </article>
         ))}
       </div>
 
       <ProductShot
-        class="mt-10"
-        src="/product/console-issues.webp"
-        alt="The Findings view in the LyraShield console. Findings are listed with a severity, an evidence state, an open status and a CWE and CVSS reference. A side drawer for the selected finding shows tabs for what to do, technical detail and history, a plain-language explanation and a button to create a fix proposal."
-        width={1400}
-        height={883}
-        chrome="app.lyrashieldai.com/findings"
+        class="mt-10 mx-auto max-w-[48rem]"
+        src="/product/current-findings-dark.webp"
+        lightSrc="/product/current-findings-light.webp"
+        alt="The current finding detail panel separates severity from status and evidence state. Actions lead to retained evidence or a fix proposal. Private finding details are redacted."
+        width={960}
+        height={834}
+        chrome="app.lyrashieldai.com/dashboard/findings"
       >
-        <b>The states, carried on real findings.</b> Severity and evidence state are separate columns —{" "}
-        <i>detected</i> and <i>inconclusive</i> both appear here — and the drawer opens on what to do
-        next rather than raw scanner output. A fix proposal is something you create and review;
+        <b>Severity and evidence state remain distinct.</b> This captured finding is critical,
+        open and inconclusive. The detail panel leads to retained evidence and a fix proposal.
+        A fix proposal is something you create and review;
         nothing auto-merges. Finding titles, file paths and target names are blurred.
       </ProductShot>
     </section>
@@ -198,19 +186,73 @@ const jsonLd = [
       </dl>
     </section>
 
+    <section aria-labelledby="coverage-heading" class="border-t border-border py-16" data-reveal-group>
+      <h2 id="coverage-heading" class="text-2xl font-semibold text-text" data-reveal>Coverage states</h2>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>
+        Coverage records what happened to each check, which is a separate question from what a
+        finding is. A verdict is only as strong as the coverage behind it.
+      </p>
+      <div
+        class="mt-8 overflow-x-auto rounded-xl border border-border bg-bg-raised focus-visible:ring-2 focus-visible:ring-accent"
+        tabindex="0"
+        role="region"
+        aria-label="Coverage states"
+      >
+        <table class="w-full min-w-140 border-collapse text-left text-sm">
+          <caption class="sr-only">Coverage states and what each one means for a verdict</caption>
+          <thead class="bg-bg-raised text-text">
+            <tr>
+              <th scope="col" class="px-4 py-3 font-semibold">Coverage state</th>
+              <th scope="col" class="px-4 py-3 font-semibold">What it means</th>
+              <th scope="col" class="px-4 py-3 font-semibold">Effect on the verdict</th>
+            </tr>
+          </thead>
+          <tbody class="text-text-muted">
+            <tr class="border-t border-border">
+              <th scope="row" class="px-4 py-3 font-medium text-text">Completed</th>
+              <td class="px-4 py-3">The check ran against the authorized scope and returned a result.</td>
+              <td class="px-4 py-3">Counts toward the verdict.</td>
+            </tr>
+            <tr class="border-t border-border">
+              <th scope="row" class="px-4 py-3 font-medium text-text">Limited</th>
+              <td class="px-4 py-3">The check ran but could not see everything in its scope.</td>
+              <td class="px-4 py-3">Counts, with the limitation retained on the record.</td>
+            </tr>
+            <tr class="border-t border-border">
+              <th scope="row" class="px-4 py-3 font-medium text-text">Skipped</th>
+              <td class="px-4 py-3">The check did not run, for example because a prerequisite was absent.</td>
+              <td class="px-4 py-3">Surfaces as insufficient evidence rather than a pass.</td>
+            </tr>
+            <tr class="border-t border-border">
+              <th scope="row" class="px-4 py-3 font-medium text-text">Not applicable</th>
+              <td class="px-4 py-3">The control does not apply to the scanned target type.</td>
+              <td class="px-4 py-3">Excluded from the denominator and stated as such.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-labelledby="php-coverage-heading" class="border-t border-border py-16" data-reveal-group>
+      <h2 id="php-coverage-heading" class="text-2xl font-semibold text-text" data-reveal>PHP source evidence and runtime proof</h2>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>Standard and Deep repository source support detects PHP projects before adding Composer inventory, runtime declaration checks and bounded PHP code analysis. In a monorepo, each PHP service needs its own usable runtime identity; missing identity and incomplete discovery stay visible as coverage limits. These source capabilities require separate release and customer acceptance evidence.</p>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>A Dockerfile tag, a Composer platform setting or a public version header cannot establish what is running. Updating a Composer package cannot patch PHP itself. Runtime findings remain inconclusive after a source-only retest because LyraShield has no trusted deployed-runtime verifier; operators need deployment and worker replacement evidence plus independent runtime readback.</p>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>The free <a href="/tools/php2shell-checker" class="font-medium text-accent underline underline-offset-4">PHP2Shell checker</a> reviews your reported version and conditions locally in your browser, including a separate 23 October session upload progress notice. It uploads no inputs and sends no exploit or target requests. Its result does not verify a deployment or rule out compromise.</p>
+    </section>
+
     <section aria-labelledby="limits-heading" class="rounded-2xl border border-border bg-bg-raised p-7 sm:p-9" data-reveal="scale">
       <h2 id="limits-heading" class="text-2xl font-semibold text-text">What this methodology does not claim</h2>
       <ul class="mt-6 grid gap-4 text-text-muted sm:grid-cols-2">
         <li>It does not prove an application has no vulnerabilities.</li>
         <li>It does not imply every Vibe Security 50 control can be established by one scan.</li>
         <li>It does not replace an authorized penetration test or specialist point tool.</li>
-        <li>A Fix PR requires a server-generated patch and scoped authorization: explicit browser approval or an eligible credential's verified permission.</li>
+        <li>A Fix PR opens only after a human approves, with a server-generated patch and scoped authorization: explicit browser approval or an eligible credential's verified permission.</li>
       </ul>
     </section>
 
     <section aria-labelledby="interpret-heading" class="py-16" data-reveal-group>
       <h2 id="interpret-heading" class="text-2xl font-semibold text-text" data-reveal>How should you interpret a LyraShield AI result?</h2>
-      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected candidates from independently verified findings, then read the retest receipt and retained limitations. A LyraShield score or confidence value never replaces the underlying scope, coverage, evidence-state and retest facts.</p>
+      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected findings from retest-confirmed ones, then read the retest receipt and retained limitations. A LyraShield score or confidence value never replaces the underlying scope, coverage, evidence-state and retest facts.</p>
       <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>For a broader catalog of web application verification requirements, consult the <a href="https://owasp.org/asvs" rel="noreferrer" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">OWASP Application Security Verification Standard</a>. This reference does not imply certification or full ASVS coverage.</p>
       <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>LyraShield AI does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework) or "adversarial robustness proven." Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate that LyraShield has not yet obtained.</p>
     </section>

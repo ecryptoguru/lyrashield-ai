@@ -27,9 +27,10 @@ const {
   currentPath = "",
 } = Astro.props
 
+const breadcrumbTitle = title.replace(/\s*\|\s*LyraShield AI$/, "")
+
 // Derived from the registry rather than hand-listed: a hard-coded list silently
-// drops every newly shipped agent, which is how 11 shipped guides ended up
-// unreachable from the sidebar. `listPreferredAgents` is the same source the
+// drops newly shipped agents. `listPreferredAgents` is the same source the
 // integrations index and the dashboard use, so the three stay in sync.
 // The "(Agent Plugin)" suffix is display detail for a card, not a nav label.
 const agentNavLinks: NavLink[] = listPreferredAgents()
@@ -53,7 +54,7 @@ const guideNavLinks: NavLink[] = [
 const resolvedPath = currentPath || Astro.url.pathname
 
 // A caller-supplied list stays one flat group; the derived default splits into
-// guides and the 26 per-agent guides so the agent list stays scannable.
+// guides and the per-agent guides so the agent list stays scannable.
 const navGroups: { heading: string; links: NavLink[] }[] =
   navLinks.length > 0
     ? [{ heading: "Integrations", links: navLinks }]
@@ -74,32 +75,66 @@ const navGroups: { heading: string; links: NavLink[] }[] =
 >
   <div class="docs-shell">
     <aside class="docs-sidebar" aria-label="Docs navigation">
-      <nav>
-        {navGroups.map((group) => (
-          <>
-            <p class="docs-sidebar__heading">{group.heading}</p>
-            <ul class="docs-sidebar__list">
-              {group.links.map((link) => (
-                <li>
-                  <a
-                    href={link.href}
-                    class:list={[
-                      "docs-sidebar__link",
-                      { "docs-sidebar__link--active": resolvedPath === link.href },
-                    ]}
-                    aria-current={resolvedPath === link.href ? "page" : undefined}
-                  >
-                    {link.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </>
-        ))}
-      </nav>
+      <details class="docs-sidebar__browse" open>
+        <summary class="docs-sidebar__summary">
+          <span>Browse documentation</span>
+        </summary>
+        <nav>
+          <a class="docs-sidebar__current" href={resolvedPath}>Current guide: {breadcrumbTitle}</a>
+          {/* Search across the sidebar (Spec item 6.4). Filters the rendered
+              links only; it reads no value the visitor did not type here. */}
+          <label class="docs-sidebar__search">
+            <span class="sr-only">Find a guide or integration</span>
+            <input
+              type="search"
+              id="docs-search-input"
+              data-docs-search disabled
+              placeholder="Filter guide and client names" aria-describedby="docs-search-scope"
+              autocomplete="off"
+            />
+          </label>
+          <p id="docs-search-scope" class="docs-sidebar__empty">Filters guide and client names, not article text.</p>
+          {navGroups.map((group, index) => (
+            <details class="docs-sidebar__group" data-docs-section open={index === 0}>
+              <summary class="docs-sidebar__group-title">{group.heading}</summary>
+              <ul class="docs-sidebar__list" data-docs-group>
+                {group.links.map((link) => (
+                  <li data-docs-link={link.label.toLowerCase()}>
+                    <a
+                      href={link.href}
+                      class:list={[
+                        "docs-sidebar__link",
+                        { "docs-sidebar__link--active": resolvedPath === link.href },
+                      ]}
+                      aria-current={resolvedPath === link.href ? "page" : undefined}
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ))}
+          <button type="button" data-docs-close hidden class="docs-sidebar__close">Back to this guide</button>
+          <p class="docs-sidebar__empty" data-docs-empty hidden role="status">No guide or client name matches. Try another name or clear the filter.</p>
+        </nav>
+      </details>
     </aside>
 
     <div class="docs-main">
+      <p class="sr-only" data-code-copy-status role="status" aria-live="polite" aria-atomic="true"></p>
+      {/* Visible breadcrumb (Spec item 6.7): Docs > current page. The layout
+          already carried BreadcrumbList metadata for some callers; this makes
+          the trail visible on every docs page. */}
+      <nav aria-label="Breadcrumb" class="mb-4">
+        <ol class="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+          <li><a href="/" class="hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Home</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/docs/integrations" class="hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Docs</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-text">{breadcrumbTitle}</li>
+        </ol>
+      </nav>
       {updatedDate && (
         <p class="docs-updated">
           Updated <time datetime={updatedDate}>{updatedDate}</time>
@@ -109,6 +144,31 @@ const navGroups: { heading: string; links: NavLink[] }[] =
     </div>
   </div>
 </Base>
+
+<script>
+  // Sidebar search (Spec item 6.4). Filters the rendered nav links only.
+  const docsSearch = document.querySelector<HTMLInputElement>("[data-docs-search]")
+  if (docsSearch) {
+    docsSearch.disabled = false
+    const links = Array.from(document.querySelectorAll<HTMLElement>("[data-docs-link]"))
+    const empty = document.querySelector<HTMLElement>("[data-docs-empty]")
+    const apply = () => {
+      const term = docsSearch.value.trim().toLowerCase()
+      let visible = 0
+      for (const link of links) {
+        const match = term.length === 0 || (link.dataset.docsLink ?? "").includes(term)
+        link.hidden = !match
+        if (match) visible += 1
+      }
+      document.querySelectorAll<HTMLDetailsElement>("[data-docs-section]").forEach((section, index) => {
+        section.hidden = !Array.from(section.querySelectorAll<HTMLElement>("[data-docs-link]")).some((link) => !link.hidden)
+        section.open = Boolean(term) || index === 0 || !window.matchMedia("(max-width: 768px)").matches
+      })
+      if (empty) empty.hidden = visible > 0
+    }
+    docsSearch.addEventListener("input", apply)
+  }
+</script>
 
 <script>
   // Add a copy control to every docs code block. Purely progressive: if this
@@ -130,17 +190,30 @@ const navGroups: { heading: string; links: NavLink[] }[] =
 
       let resetTimer: number | undefined
       button.addEventListener("click", async () => {
+        const status = document.querySelector<HTMLElement>("[data-code-copy-status]")
+        if (status) status.textContent = ""
         try {
           await navigator.clipboard.writeText(code.innerText)
           button.textContent = "Copied"
           button.dataset.copied = "true"
+          button.setAttribute("aria-label", "Copied code to clipboard")
+          if (status) status.textContent = "Code copied to clipboard."
         } catch {
           // Clipboard can be blocked by permissions or an insecure origin.
-          button.textContent = "Press Ctrl+C"
+          const range = document.createRange()
+          range.selectNodeContents(code)
+          const selection = window.getSelection()
+          selection?.removeAllRanges()
+          selection?.addRange(range)
+          const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "Command+C" : "Ctrl+C"
+          button.textContent = "Code selected"
+          button.setAttribute("aria-label", "Code selected for manual copying")
+          if (status) status.textContent = `Clipboard unavailable. Code selected; press ${shortcut} to copy, or use your device’s Copy command.`
         }
         window.clearTimeout(resetTimer)
         resetTimer = window.setTimeout(() => {
           button.textContent = "Copy"
+          button.setAttribute("aria-label", "Copy code to clipboard")
           delete button.dataset.copied
         }, COPIED_FEEDBACK_MS)
       })
@@ -151,9 +224,48 @@ const navGroups: { heading: string; links: NavLink[] }[] =
 
   addCopyButtons()
   document.addEventListener("astro:after-swap", addCopyButtons)
+
+  // The server-rendered disclosure stays open for desktop and no-script users.
+  // Collapse it on narrow viewports before the page's load event, and keep it
+  // aligned when a reader rotates or resizes the browser.
+  const docsBrowseMedia = window.matchMedia("(max-width: 768px)")
+  function syncDocsBrowseDisclosure() {
+    const browse = document.querySelector<HTMLDetailsElement>(".docs-sidebar__browse")
+    if (browse) browse.open = !docsBrowseMedia.matches
+    document.querySelectorAll<HTMLDetailsElement>("[data-docs-section]").forEach((section, index) => {
+      section.open = Boolean(document.querySelector<HTMLInputElement>("[data-docs-search]")?.value.trim()) || index === 0 || !docsBrowseMedia.matches
+    })
+  }
+
+  const closeDocs = document.querySelector<HTMLButtonElement>("[data-docs-close]")
+  if (closeDocs) closeDocs.hidden = false
+  closeDocs?.addEventListener("click", () => {
+    const browse = document.querySelector<HTMLDetailsElement>(".docs-sidebar__browse")
+    if (browse) {
+      browse.open = false
+      browse.querySelector<HTMLElement>("summary")?.focus()
+    }
+  })
+  syncDocsBrowseDisclosure()
+  docsBrowseMedia.addEventListener("change", syncDocsBrowseDisclosure)
+  document.addEventListener("astro:after-swap", syncDocsBrowseDisclosure)
 </script>
 
 <style>
+  .docs-sidebar__current { display: block; padding: .75rem 0; color: var(--color-text); font-size: .85rem; line-height: 1.5; overflow-wrap: anywhere; }
+  .docs-sidebar__group { border-bottom: 1px solid var(--color-border); }
+  .docs-sidebar__group-title { display: flex; align-items: center; justify-content: space-between; min-height: 2.75rem; cursor: pointer; font-size: .85rem; font-weight: 650; list-style: none; }
+  .docs-sidebar__group-title::after { content: "+"; color: var(--color-text-muted); }
+  .docs-sidebar__group[open] > .docs-sidebar__group-title::after { content: "−"; }
+  .docs-sidebar__group-title::-webkit-details-marker { display: none; }
+  .docs-sidebar__group-title:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  .docs-sidebar__close { display: none; }
+  @media (min-width: 769px) { .docs-sidebar { max-height: calc(100svh - 6rem); overflow-y: auto; padding: .25rem; } }
+  @media (max-width: 768px) {
+    .docs-sidebar__browse > nav { max-height: min(55svh, 30rem); overflow-y: auto; overscroll-behavior: contain; padding: .25rem; }
+    .docs-sidebar__close:not([hidden]) { display: flex; align-items: center; min-height: 2.75rem; width: 100%; padding: .5rem .75rem; margin-top: .75rem; color: var(--color-accent); border: 1px solid var(--color-border); border-radius: .5rem; }
+  }
+
   .docs-shell {
     width: min(100% - 2rem, 80rem);
     margin-inline: auto;
@@ -167,6 +279,12 @@ const navGroups: { heading: string; links: NavLink[] }[] =
   .docs-sidebar {
     position: sticky;
     top: 5rem;
+  }
+
+  /* The details element is open in server HTML so desktop and no-JS users retain
+     the existing navigation. The bundled enhancement closes it on mobile. */
+  .docs-sidebar__summary {
+    display: none;
   }
 
   .docs-sidebar__heading {
@@ -220,6 +338,7 @@ const navGroups: { heading: string; links: NavLink[] }[] =
 
   .docs-main {
     min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .docs-updated {
@@ -237,7 +356,7 @@ const navGroups: { heading: string; links: NavLink[] }[] =
     font-size: clamp(2rem, 5vw, 3.75rem);
     font-weight: 800;
     line-height: 0.95;
-    letter-spacing: -0.045em;
+    letter-spacing: -0.035em;
   }
 
   .docs-main :global(h2) {
@@ -258,6 +377,7 @@ const navGroups: { heading: string; links: NavLink[] }[] =
   .docs-main :global(p) {
     margin: 1rem 0 0;
     color: var(--color-text-muted);
+    max-width: 75ch;
     line-height: 1.75;
   }
 
@@ -281,6 +401,7 @@ const navGroups: { heading: string; links: NavLink[] }[] =
     margin: 0.75rem 0 0;
     padding-left: 1.5rem;
     color: var(--color-text-muted);
+    max-width: 75ch;
     line-height: 1.75;
   }
 
@@ -408,7 +529,7 @@ const navGroups: { heading: string; links: NavLink[] }[] =
 
   .docs-main :global(.nav-cards) {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
     gap: 0.75rem;
     margin-top: 1.5rem;
   }
@@ -482,10 +603,56 @@ const navGroups: { heading: string; links: NavLink[] }[] =
       position: static;
     }
 
-    .docs-sidebar__list {
+    .docs-sidebar__summary {
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.25rem 0;
+      min-height: 2.75rem;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.55rem 0.85rem;
+      border: 1px solid var(--color-border);
+      border-radius: 0.55rem;
+      color: var(--color-text);
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      list-style: none;
+    }
+
+    .docs-sidebar__summary > span { min-width: 0; overflow-wrap: anywhere; }
+
+    .docs-sidebar__summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .docs-sidebar__summary::after {
+      content: "+";
+      color: var(--color-text-muted);
+      font-family: "JetBrains Mono Variable", monospace;
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+
+    .docs-sidebar__browse[open] > .docs-sidebar__summary::after {
+      content: "−";
+    }
+
+    .docs-sidebar__summary:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+
+    .docs-sidebar__browse:not([open]) > nav {
+      display: none;
+    }
+
+    .docs-sidebar__browse[open] > nav {
+      display: block;
+      margin-top: 0.85rem;
+    }
+
+    .docs-sidebar__list {
+      display: block;
       border-left: none;
       border-top: 1px solid var(--color-border);
       border-bottom: 1px solid var(--color-border);
@@ -509,4 +676,18 @@ const navGroups: { heading: string; links: NavLink[] }[] =
       margin-left: 0.2rem;
     }
   }
+
+  .docs-sidebar__search { display: block; margin: 0.5rem 0 0.75rem; }
+  .docs-sidebar__search input {
+    width: 100%;
+    min-height: 2.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    background: var(--color-bg-raised);
+    padding: 0 0.75rem;
+    color: var(--color-text);
+    font-size: 0.85rem;
+  }
+  .docs-sidebar__search input:focus-visible { border-color: var(--color-accent); outline: 2px solid var(--color-accent); outline-offset: 1px; }
+  .docs-sidebar__empty { margin: 0.75rem 0.2rem; color: var(--color-text-muted); font-size: 0.8rem; line-height: 1.5; }
 </style>

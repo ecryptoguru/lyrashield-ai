@@ -70,6 +70,40 @@ describe("logger — redaction", () => {
     expect(s).toContain("[Circular]")
   })
 
+  it("keeps oversized nested metadata as valid bounded JSON", () => {
+    const serialized = safeStringify({
+      level: "info",
+      message: "scan completed",
+      timestamp: "2026-09-30T00:00:00.000Z",
+      requestId: "request-1",
+      metadata: { scans: [{ output: "x".repeat(25_000) }] },
+    })
+
+    expect(serialized.length).toBeLessThanOrEqual(20_000)
+    expect(JSON.parse(serialized)).toMatchObject({
+      level: "info",
+      message: "scan completed",
+      requestId: "request-1",
+      _truncated: true,
+    })
+  })
+
+  it("returns bounded valid JSON when metadata cannot be serialized", () => {
+    const serialized = safeStringify({
+      level: "info",
+      message: "scan completed",
+      timestamp: "2026-09-30T00:00:00.000Z",
+      metadata: { count: 1n },
+    })
+
+    expect(JSON.parse(serialized)).toMatchObject({
+      level: "error",
+      message: "Failed to serialize log entry",
+      _logError: "metadata_serialization_failed",
+      _truncated: true,
+    })
+  })
+
   it("captures Error name/message/stack", () => {
     const out = redact({ err: new Error("boom") }, new WeakSet(), 0) as Record<string, unknown>
     const err = out.err as Record<string, unknown>

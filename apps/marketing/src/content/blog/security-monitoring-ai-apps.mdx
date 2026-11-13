@@ -131,7 +131,7 @@ Then test failure cases:
 - replay the same event identifier and confirm retries do not create an alert storm
 - remove the primary recipient and confirm the fallback route works
 
-These checks test plumbing and ownership. They do not prove that every important event has been identified or that a reported condition is exploitable. An alert is a detected signal, not independent verification. Closing an alert also does not prove the underlying condition was fixed.
+These checks test plumbing and ownership. They do not prove that every important event has been identified or that a reported condition is exploitable. An alert is a detected signal, not a retest. Closing an alert also does not prove the underlying condition was fixed.
 
 The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help document whether monitoring, retention and ownership have been considered. It cannot connect to your event pipeline or prove that an alert reaches anyone. For event-field design, continue with [keeping sensitive data out of application logs](/blog/sensitive-data-logging).
 

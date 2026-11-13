@@ -10,6 +10,25 @@ import { scanAgentConfig } from "../../../../apps/worker/src/engine/scanners/age
 // The worker-owned scanner logs through this package; keep its test output quiet.
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn() } }))
 
+// Agent metadata never reaches the scanner. Only identical complete fixture
+// sets share an execution; new paths or content automatically gain a case.
+const fixtureSets = new Map<
+  string,
+  { id: string; rules: ReturnType<typeof renderRuleForAgent>[] }
+>()
+for (const agent of listAgents()) {
+  const rules = agent.rulesFiles
+    .map((file) => renderRuleForAgent(agent, file))
+    .sort((a, b) => a.file.localeCompare(b.file))
+  if (rules.length === 0) continue
+  const identity = JSON.stringify(rules.map(({ file, content }) => [file, content]))
+  if (!fixtureSets.has(identity)) fixtureSets.set(identity, { id: agent.id, rules })
+}
+
+it("has nonempty rendered fixture sets to scan", () => {
+  expect(fixtureSets.size).toBeGreaterThan(0)
+})
+
 describe("rendered rules must pass the agent-config scanner", () => {
   let tmp: string
 
@@ -21,10 +40,9 @@ describe("rendered rules must pass the agent-config scanner", () => {
     await rm(tmp, { recursive: true, force: true })
   })
 
-  for (const agent of listAgents()) {
-    it(`scans ${agent.id} rule files with zero findings`, async () => {
-      for (const rulesFile of agent.rulesFiles) {
-        const rule = renderRuleForAgent(agent, rulesFile)
+  for (const { id, rules } of fixtureSets.values()) {
+    it(`scans ${id} rule files with zero findings`, async () => {
+      for (const rule of rules) {
         const target = path.join(tmp, rule.file)
         const dir = path.dirname(target)
         if (dir !== tmp) {

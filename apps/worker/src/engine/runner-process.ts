@@ -1,3 +1,9 @@
+import {
+  assertColdDatabaseEpoch,
+  failClosedColdWorker,
+  withColdDatabaseEpochCancellation,
+} from "../cold-database-epoch"
+import type { RepositoryAuth } from "./repository-auth"
 import { spawn, type ChildProcess } from "child_process"
 import { logger } from "@lyrashield/logger"
 import type { EngineCommand } from "./command-builder"
@@ -104,7 +110,43 @@ export function createKillEscalation(
     },
   }
 }
-export async function runEngineProcess(
+export class EngineProcessStopUnconfirmedError extends Error {
+  constructor() {
+    super("Engine process stop could not be confirmed; execution remains held")
+    this.name = "EngineProcessStopUnconfirmedError"
+  }
+}
+
+/** A spawn/kill error is not exit evidence. Hold the caller until close or a retained unknown stop. */
+function deferEngineProcessFailure(
+  child: ChildProcess,
+  terminate: () => void,
+  reject: (error: Error) => void
+) {
+  let failure: Error | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  child.on("error", (error) => {
+    failure ??= error
+    timer ??= setTimeout(() => {
+      const unknownStop = new EngineProcessStopUnconfirmedError()
+      failClosedColdWorker(unknownStop)
+      reject(unknownStop)
+    }, 10_000)
+    terminate()
+  })
+  // A recorded failure must win before the normal close listener can resolve an exit code of zero.
+  child.prependOnceListener("close", () => {
+    clearTimeout(timer)
+    if (failure) reject(failure)
+  })
+}
+
+interface EngineProcessContext {
+  runType?: string
+  repositoryAuth?: RepositoryAuth
+}
+
+async function startEngineProcess(
   cmd: EngineCommand,
   absWorkDir: string,
   scanId: string,
@@ -116,7 +158,7 @@ export async function runEngineProcess(
   readSpendUsd?: () => Promise<number | null>,
   onAgentLoopTick?: (elapsedMs: number) => void,
   relay?: { url: string; grant: string },
-  runType?: string
+  context?: EngineProcessContext
 ): Promise<{
   exitCode: number
   timedOut: boolean
@@ -128,7 +170,7 @@ export async function runEngineProcess(
   return new Promise((resolvePromise, reject) => {
     const child: ChildProcess = spawn(cmd.executable, cmd.args, {
       cwd: absWorkDir,
-      env: buildEngineEnv(profile, scanId, { runType, relay }),
+      env: buildEngineEnv(profile, scanId, { ...context, relay }),
       stdio: ["ignore", "pipe", "pipe"],
     })
 
@@ -320,15 +362,17 @@ export async function runEngineProcess(
       })
     })
 
-    child.on("error", (err) => {
-      closed = true
-      if (timer) clearTimeout(timer)
-      clearInterval(heartbeatTimer)
-      if (progressTimer) clearInterval(progressTimer)
-      if (cancellationTimer) clearInterval(cancellationTimer)
-      escalation.markExited()
-      stopTracking()
-      reject(err)
-    })
+    deferEngineProcessFailure(child, terminate, reject)
   })
+}
+
+/** Main analysis and AI triage share this last boundary before a provider-capable process. */
+export async function runEngineProcess(...args: Parameters<typeof startEngineProcess>) {
+  await assertColdDatabaseEpoch()
+  args[5] = withColdDatabaseEpochCancellation(args[5])
+  try {
+    return await startEngineProcess(...args)
+  } finally {
+    await assertColdDatabaseEpoch()
+  }
 }

@@ -21,6 +21,10 @@ export const CANONICAL_OPERATIONS = {
 
 export type CanonicalOperation = (typeof CANONICAL_OPERATIONS)[keyof typeof CANONICAL_OPERATIONS]
 
+/** Server-only headers used by the hosted MCP gate to prove scan causality. */
+export const DELEGATED_OPERATION_ID_HEADER = "x-lyrashield-delegated-operation-id"
+export const DELEGATED_OPERATION_PROOF_HEADER = "x-lyrashield-delegated-operation-proof"
+
 export const AUTOMATION_WORKFLOWS = [
   {
     id: "scans",

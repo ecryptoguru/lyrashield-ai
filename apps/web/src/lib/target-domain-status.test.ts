@@ -6,6 +6,7 @@ const { proofs, audits, rls } = vi.hoisted(() => ({
 }))
 vi.mock("@lyrashield/db", () => ({ withWorkspaceRLS: rls }))
 import { getTargetDomainStatuses } from "./target-domain-status"
+import { formatTargetDomainStatus } from "./target-domain-status-format"
 describe("target domain status summaries", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -50,6 +51,11 @@ describe("target domain status summaries", () => {
         ])
       ).get("t1")
     ).toBe(expected)
+  })
+  it("formats verified-until status for people while retaining its UTC zone", () => {
+    expect(formatTargetDomainStatus("Verified until 2099-01-01T00:00:00.000Z")).toBe(
+      "Verified until Jan 1, 2099, 00:00 UTC"
+    )
   })
   it("skips proof lookups for repositories and invalid domains", async () => {
     await getTargetDomainStatuses("ws1", [{ id: "r1", type: "REPO", url: null }])

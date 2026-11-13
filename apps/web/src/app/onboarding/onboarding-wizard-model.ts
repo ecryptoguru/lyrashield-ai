@@ -1,10 +1,13 @@
 import { ApiError } from "@/lib/api-client"
 import { planIntentPath } from "@/lib/plan-intent"
-import {
-  nextStepForPath,
-  onboardingPathForTargetType,
-  type OnboardingPath,
-} from "./onboarding-flow.utils"
+import type { OperationFailurePresentation } from "@/lib/operation-failure"
+import { onboardingPathForTargetType, type OnboardingPath } from "./onboarding-flow.utils"
+
+/** Structured operation failure surfaced to the wizard's alert area (W1-07). */
+export type OnboardingFailureState = {
+  presentation: OperationFailurePresentation
+  retry: (() => void) | null
+} | null
 
 export interface OnboardingData {
   updatedAt?: string
@@ -21,6 +24,9 @@ export interface OnboardingData {
 
 export interface OnboardingWizardProps {
   principalId: string
+  githubStatus?: string
+  canManageGitHub?: boolean
+  workspaceChoices?: Array<{ id: string; name: string; role: string }>
   initialState: OnboardingData
   selectedPlan?: string | null
   /** Used to name a default workspace when the user has none (W2-01). */
@@ -48,21 +54,20 @@ export interface OnboardingWizardProps {
   oauthReturnQuery?: string | null
 }
 
-// Workspace naming is outside the critical path. An arriving target hint
-// starts at its details only before the user has progressed or made a target.
+// An arriving target hint preselects the chooser path and nothing else. It
+// must never skip a step: the URL/API forms are step 1, and the workspace is
+// created when those forms are submitted (P1-1). Jumping a hinted user
+// straight to the details step left them with no workspace and no source, so
+// the start action could only ever answer "Workspace is required."
 export function initialOnboardingSelection(
   initialState: OnboardingData,
   targetTypeHint?: "url" | "api" | null
 ): { path: OnboardingPath; step: number } {
   const hintedPath: OnboardingPath =
     targetTypeHint && !initialState.targetId && !initialState.targetType ? targetTypeHint : null
-  const persistedStep = Math.max(initialState.currentStep ?? 1, 1)
   return {
     path: onboardingPathForTargetType(initialState.targetType ?? null) ?? hintedPath,
-    step:
-      hintedPath && persistedStep <= 1
-        ? (nextStepForPath(hintedPath) ?? persistedStep)
-        : persistedStep,
+    step: Math.max(initialState.currentStep ?? 1, 1),
   }
 }
 
@@ -105,10 +110,10 @@ export function friendlyTargetError(cause: unknown): string {
     if (cause.code === "VALIDATION_ERROR") {
       return "We couldn't save your target. Please check the name and URL and try again."
     }
-    // W2-02: a same-source retry continues with the target that already
-    // exists instead of creating a second one.
+    // A same-source conflict can differ in target settings, so direct users
+    // to review the existing target instead of suggesting automatic reuse.
     if (cause.code === "TARGET_EXISTS") {
-      return "A target for this source already exists in your workspace. Open Targets to continue with it — no duplicate was created."
+      return "A target for this source already exists in your workspace. Open Targets to review it before continuing — no duplicate was created."
     }
   }
   return cause instanceof Error ? cause.message : "Could not start the review."

@@ -27,34 +27,49 @@ const blogImages = defineCollection({
 
 const blog = defineCollection({
   loader: glob({ base: "./src/content/blog", pattern: "**/*.{md,mdx}" }),
-  schema: z.object({
-    title: z.string().max(70),
-    description: z.string().min(70).max(160),
-    pubDate: z.coerce.date(),
-    updatedDate: z.coerce.date().optional(),
-    author: reference("authors"),
-    tags: z
-      .array(
-        z.enum([
-          "vibe-coding-security",
-          "access-control",
-          "web-security",
-          "supply-chain",
-          "agent-security",
-          "verification",
-        ])
-      )
-      .min(1)
-      .max(5),
-    draft: z.boolean().default(true),
-    heroImage: reference("blogImages"),
-    canonical: z.url().optional(),
-    faq: z
-      .array(z.object({ q: z.string(), a: z.string() }))
-      .min(2)
-      .max(4)
-      .optional(),
-  }),
+  schema: z
+    .object({
+      title: z.string().max(70),
+      description: z.string().min(70).max(160),
+      pubDate: z.coerce.date(),
+      updatedDate: z.coerce.date().optional(),
+      author: reference("authors"),
+      tags: z
+        .array(
+          z.enum([
+            "vibe-coding-security",
+            "access-control",
+            "web-security",
+            "supply-chain",
+            "agent-security",
+            "verification",
+          ])
+        )
+        .min(1)
+        .max(5),
+      draft: z.boolean().default(true),
+      heroImage: reference("blogImages"),
+      canonical: z.url().optional(),
+      faq: z
+        .array(z.object({ q: z.string(), a: z.string() }))
+        .min(2)
+        .max(4)
+        .optional(),
+      // Optional technical-review attribution. Both fields must appear together
+      // (or neither): a reviewer with no date is an unverifiable claim and a
+      // review date with no reviewer is a meaningless stamp. Only set them when a
+      // real named technical review happened — see /blog/editorial-policy.
+      reviewer: reference("authors").optional(),
+      reviewedDate: z.coerce.date().optional(),
+    })
+    .superRefine((data, ctx) => {
+      if ((data.reviewer === undefined) !== (data.reviewedDate === undefined)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "reviewer and reviewedDate must be set together or not at all",
+        })
+      }
+    }),
 })
 
 const compare = defineCollection({
@@ -68,6 +83,12 @@ const compare = defineCollection({
     updatedDate: z.coerce.date(),
     draft: z.boolean().default(true),
     pricingLadder: z.literal(true),
+    // Wave 8 (D9): a compare page is the canonical home for competitor facts, so
+    // it declares that it carries competitor claims and names the competitor's
+    // own domain. The compare validator then requires a `## Sources` block with a
+    // citation on that domain. See scripts/compare-validation-lib.mjs.
+    competitorClaims: z.boolean().default(true),
+    competitorDomain: z.string().min(3).optional(),
     canonical: z.url().optional(),
     faq: z
       .array(z.object({ q: z.string(), a: z.string() }))

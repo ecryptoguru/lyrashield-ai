@@ -24,8 +24,10 @@ const AI_05_RULE_ID = "AI-05.excessive-agency" as const
  */
 const DESTRUCTIVE_NAME_PATTERN =
   /(?<![A-Za-z0-9])(?:delete|remove|drop|rm|truncate|overwrite|destroy)(?![A-Za-z0-9])/i
-const CAMEL_CASE_DESTRUCTIVE_NAME_PATTERN =
-  /(?<![A-Za-z0-9])(?:delete|remove|drop|rm|truncate|overwrite|destroy)(?=[A-Z])/
+const CAMEL_CASE_DESTRUCTIVE_NAME_PATTERNS = [
+  /(?<![A-Za-z0-9])(?:[Dd]elete|[Rr]emove|[Dd]rop(?![Dd]own\b)|[Rr]m|[Tt]runcate|[Oo]verwrite|[Dd]estroy)(?=[A-Z])/,
+  /(?<![A-Za-z0-9])[A-Za-z][a-z0-9]*(?:Delete|Remove|Drop(?!Down\b)|Rm|Truncate|Overwrite|Destroy)(?=[A-Z]|\W|$)/,
+]
 
 const AUTO_APPROVE_PATTERNS = [
   /autoApprove\s*:\s*true/i,
@@ -40,7 +42,10 @@ function hasDestructiveToolWithoutApproval(line: string): boolean {
   // A destructive application call (for example Set.delete or db.drop) is not
   // evidence that an AI agent can invoke it. Require a tool declaration or call.
   if (!/\bname\s*:\s*["'`]|\btool\s*\./i.test(line)) return false
-  if (!DESTRUCTIVE_NAME_PATTERN.test(line) && !CAMEL_CASE_DESTRUCTIVE_NAME_PATTERN.test(line)) {
+  if (
+    !DESTRUCTIVE_NAME_PATTERN.test(line) &&
+    !CAMEL_CASE_DESTRUCTIVE_NAME_PATTERNS.some((pattern) => pattern.test(line))
+  ) {
     return false
   }
 

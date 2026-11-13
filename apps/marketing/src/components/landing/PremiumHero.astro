@@ -1,11 +1,16 @@
 ---
+import { CTA_LABEL, TRIAL_LINE } from "../../lib/site-copy"
+
+interface Props { cinematic?: boolean }
+const { cinematic = false } = Astro.props
+
 import premiumHeroAvif from "../../assets/premium-hero.avif"
 import premiumHeroJpeg from "../../assets/premium-hero.jpg"
 import premiumHeroWebp from "../../assets/premium-hero.webp"
 ---
 
-<section class="premium-hero">
-  <picture class="premium-hero__poster">
+<section class:list={["premium-hero", { "premium-hero--cinematic": cinematic }]}>
+  {!cinematic && <picture class="premium-hero__poster">
     <source srcset={premiumHeroAvif.src} type="image/avif" />
     <source srcset={premiumHeroWebp.src} type="image/webp" />
     <img
@@ -17,74 +22,53 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       fetchpriority="high"
       decoding="async"
     />
-  </picture>
+  </picture>}
   <div class="premium-hero__veil" aria-hidden="true"></div>
   <div class="premium-hero__content">
-    <p class="premium-hero__eyebrow">
-      Open beta · Release assurance for AI-built apps
-    </p>
-    <h1 id="premium-hero-title">Know what your AI-built app is ready to ship.</h1>
+    <h1 id="premium-hero-title">The launch gate for AI-built apps.</h1>
     <p class="premium-hero__lede">
-      Review an authorized repository, URL or API. See what was checked, what needs attention and
-      what a fresh retest confirms.
+      Review your repo, website or API. Approve proposed fixes and retest before you ship.
     </p>
-    <ul class="premium-hero__proof">
-      <li>Nothing auto-merges</li>
-      <li>Missing evidence stays visible</li>
-      <li>Works with GitHub and coding agents</li>
-    </ul>
+    <p class="premium-hero__proof">Evidence attached. Fixes need approval.</p>
+
     <div class="premium-hero__actions">
       <a
         class="premium-hero__primary"
-        href="https://app.lyrashieldai.com/sign-up?source=landing_hero&cta=review_app"
-        data-cta-id="premium-hero-review-app"
+        href="https://app.lyrashieldai.com/sign-up?source=landing_hero&cta=start_trial"
+        data-cta-id="premium-hero-primary"
       >
-        Start a review
+        {CTA_LABEL.signUp}
       </a>
       <a
         class="premium-hero__secondary"
-        href="#free-scan" data-cta-id="premium-hero-lite-check"
+        href="#how-it-works" data-cta-id="premium-hero-workflow"
       >
-        Try the free Lite Check
+        See the workflow
       </a>
     </div>
-    <p class="premium-hero__trial-note">
-      No card needed. The trial includes 60 agent-minutes over 7 days — coverage depends on
-      target size and review depth.
-    </p>
-    <a
-      class="premium-hero__agent-link"
-      href="/agents"
-      data-cta-id="premium-hero-agent-setup"
-    >
-      Using a coding agent? Use LyraShield from it →
-    </a>
-    <p class="premium-hero__boundary">
-      Evidence is limited to the authorized scope and checks that ran. No security guarantee.
-    </p>
+
+
+    <p class="premium-hero__trial-note">{TRIAL_LINE}</p>
   </div>
 
-  <div class="premium-hero__artifact hidden lg:block" aria-hidden="true">
-    <div class="premium-hero__artifact-card">
-      <div class="premium-hero__artifact-header">
-        <span class="premium-hero__artifact-dot"></span>
-        <span class="premium-hero__artifact-status">Example finding · Detected</span>
-      </div>
-      <p class="premium-hero__artifact-title">Server credential referenced by client build</p>
-      <p class="premium-hero__artifact-meta">Target: mock-app.example</p>
-      <p class="premium-hero__artifact-meta">Evidence: bounded to the checks that ran</p>
-    </div>
-  </div>
-
-  <div class="premium-hero__rail" aria-hidden="true"><span>01</span><i></i><span>07</span></div>
 </section>
 
 <style>
+  .premium-hero__artifact-scope { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; font-size: .72rem; line-height: 1.5; }
+  .premium-hero__artifact-scope > div { min-width: 0; overflow-wrap: anywhere; }
+  .premium-hero__artifact-scope dt { color: #b7cad8; }
+  .premium-hero__artifact-scope dd { margin: .2rem 0 0; }
+  :global(:root[data-theme="light"]) .premium-hero__artifact-scope dt { color: #415568; }
+  .premium-hero__example-id { display: block; margin-top: .4rem; color: #b7cad8; font-size: .7rem; line-height: 1.5; }
+  :global(:root[data-theme="light"]) .premium-hero__example-id { color: #415568; }
   .premium-hero {
     --hero-cyan: #54d6df;
     position: relative;
     display: grid;
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not 1fr: a bare fr track keeps an auto minimum equal to
+       its items' min-content width, so one long word in the headline grew the
+       whole track past the viewport at 200% text. */
+    grid-template-columns: minmax(0, 1fr);
     min-height: min(720px, calc(100svh - 3.5rem));
     overflow: hidden;
     isolation: isolate;
@@ -129,6 +113,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
 
   .premium-hero__content {
     align-self: center;
+    min-width: 0;
     width: min(100% - 2rem, 1280px);
     margin-inline: auto;
     padding-block: clamp(4rem, 8vh, 6.5rem) clamp(2.5rem, 5vh, 3.5rem);
@@ -142,18 +127,10 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     }
   }
 
-  .premium-hero__eyebrow,
   .premium-hero__boundary {
     font-family: "JetBrains Mono Variable", monospace;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-  }
-
-  .premium-hero__eyebrow {
-    margin: 0 0 0.85rem;
-    color: var(--hero-cyan);
-    font-size: clamp(0.78rem, 1vw, 0.95rem);
-    font-weight: 650;
   }
 
   h1 {
@@ -165,6 +142,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     line-height: 0.9;
     letter-spacing: -0.055em;
     text-wrap: balance;
+    overflow-wrap: anywhere;
   }
 
   .premium-hero__lede {
@@ -186,10 +164,115 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     list-style: none;
   }
 
+  .premium-hero__proof li {
+    max-width: 100%;
+  }
+
   .premium-hero__proof li::before {
     margin-right: 0.45rem;
     color: var(--hero-cyan);
     content: "✓";
+  }
+
+  .premium-hero__field {
+    max-width: 34rem;
+    margin-top: 1.35rem;
+  }
+
+  .premium-hero__field-label {
+    display: block;
+    color: #b7cad8;
+    font: 600 0.72rem/1.4 "JetBrains Mono Variable", monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .premium-hero__field-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 0.5rem;
+  }
+
+  .premium-hero__field-input {
+    flex: 1 1 12rem;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 3.25rem;
+    border: 1px solid rgba(84, 214, 223, 0.3);
+    border-radius: 0.25rem;
+    padding: 0.7rem 0.9rem;
+    color: #edf6fb;
+    background: rgba(8, 17, 28, 0.72);
+    font-size: 1rem;
+  }
+
+  .premium-hero__field-input::placeholder {
+    color: #7d92a4;
+  }
+
+  .premium-hero__field-input:focus-visible {
+    border-color: var(--hero-cyan);
+    outline: 3px solid #f5b84b;
+    outline-offset: 2px;
+  }
+
+  .premium-hero__field-button {
+    flex: 0 1 auto;
+    min-height: 3.25rem;
+    max-width: 100%;
+    border: 1px solid var(--hero-cyan);
+    border-radius: 0.25rem;
+    padding: 0.7rem 1.15rem;
+    color: #08111c;
+    background: var(--hero-cyan);
+    font-size: 0.95rem;
+    font-weight: 750;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  .premium-hero__field-input:disabled,
+  .premium-hero__field-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .premium-hero__field-consent {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.6rem;
+    color: #b7cad8;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .premium-hero__field-consent a {
+    color: var(--hero-cyan);
+    text-underline-offset: 3px;
+  }
+
+  .premium-hero__field-check {
+    flex: none;
+    margin-top: 0.2rem;
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--hero-cyan);
+  }
+
+  .premium-hero__field-status,
+  .premium-hero__field-error {
+    margin: 0.6rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .premium-hero__field-status {
+    color: #91a7b8;
+  }
+
+  .premium-hero__field-error {
+    color: #ff9b93;
   }
 
   .premium-hero__actions {
@@ -202,6 +285,10 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   .premium-hero__actions a {
     display: inline-flex;
     min-height: 3.25rem;
+    /* At 200% root text on a 320px viewport the label plus padding is wider
+       than the screen, so the box must be capped and the label allowed to
+       wrap. Without this the button clipped off the right edge. */
+    max-width: 100%;
     align-items: center;
     justify-content: center;
     border: 1px solid rgba(84, 214, 223, 0.42);
@@ -209,12 +296,14 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     padding: 0.85rem 1.25rem;
     font-weight: 750;
     text-decoration: none;
-    transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+    transition: background-color 160ms ease, border-color 160ms ease;
   }
 
   .premium-hero__actions a:hover {
-    transform: translateY(-2px);
+    border-color: var(--hero-cyan);
   }
+
+  .premium-hero__actions a:active { filter: brightness(.92); }
 
   .premium-hero__actions a:focus-visible {
     outline: 3px solid #f5b84b;
@@ -264,54 +353,31 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     line-height: 1.6;
   }
 
-  .premium-hero__rail {
-    position: absolute;
-    right: clamp(1rem, 3vw, 3rem);
-    bottom: 2.25rem;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    color: #91a7b8;
-    font: 600 0.66rem/1 "JetBrains Mono Variable", monospace;
-  }
-
-  .premium-hero__rail i {
-    display: block;
-    width: min(10vw, 7rem);
-    height: 1px;
-    background: linear-gradient(90deg, var(--hero-cyan), rgba(84, 214, 223, 0.15));
-  }
-
   @media (prefers-reduced-motion: no-preference) {
-    .premium-hero__poster img {
-      animation: hero-settle 1.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    .premium-hero__artifact-card.is-arrived { animation: evidence-arrival 700ms cubic-bezier(.16,1,.3,1) both; }
+    @keyframes evidence-arrival { from { opacity: .65; clip-path: inset(0 0 12% 0); transform: translateY(8px); } to { opacity: 1; clip-path: inset(0); transform: none; } }
+  }
+
+  .premium-hero__artifact-card::after {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 2px;
+    background: var(--hero-cyan);
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .premium-hero__artifact-card.is-arrived::after {
+      animation: evidence-line 1100ms cubic-bezier(.16,1,.3,1) 150ms both;
     }
-
-    .premium-hero__eyebrow,
-    .premium-hero h1,
-    .premium-hero__lede,
-    .premium-hero__proof,
-    .premium-hero__actions,
-    .premium-hero__boundary,
-    .premium-hero__artifact {
-      animation: hero-rise 0.68s cubic-bezier(0.22, 1, 0.36, 1) both;
+    .is-arrived .premium-hero__example-id {
+      animation: evidence-arrival 700ms cubic-bezier(.16,1,.3,1) 200ms both;
     }
-
-    .premium-hero h1 { animation-delay: 70ms; }
-    .premium-hero__lede { animation-delay: 130ms; }
-    .premium-hero__proof { animation-delay: 190ms; }
-    .premium-hero__actions { animation-delay: 250ms; }
-    .premium-hero__artifact { animation-delay: 310ms; }
-    .premium-hero__boundary { animation-delay: 370ms; }
-
-    @keyframes hero-rise {
-      from { opacity: 0; transform: translateY(1rem); }
-      to { opacity: 1; transform: none; }
-    }
-
-    @keyframes hero-settle {
-      from { opacity: 0.72; transform: scale(1.035); }
-      to { opacity: 1; transform: scale(1); }
+    @keyframes evidence-line {
+      0% { transform: scaleX(0); opacity: 1; }
+      70% { transform: scaleX(1); opacity: 1; }
+      100% { transform: scaleX(1); opacity: 0; }
     }
   }
 
@@ -321,11 +387,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       display: flex;
       flex-direction: column;
       padding-block: clamp(3rem, 8vh, 4rem) clamp(1.75rem, 5vh, 2.5rem);
-    }
-
-    .premium-hero__eyebrow {
-      order: 0;
-      font-size: 0.68rem;
     }
 
     h1 {
@@ -346,6 +407,8 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       order: 3;
     }
 
+    /* The field is the primary action on a phone, so it sits above the sign-up
+       button and the secondary link. */
     .premium-hero__actions {
       order: 4;
       margin-top: 1.1rem;
@@ -356,16 +419,20 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       padding: 0.7rem 1.05rem;
     }
 
-    .premium-hero__trial-note {
+    .premium-hero__field {
       order: 5;
     }
 
-    .premium-hero__agent-link {
+    .premium-hero__trial-note {
       order: 6;
     }
 
-    .premium-hero__boundary {
+    .premium-hero__agent-link {
       order: 7;
+    }
+
+    .premium-hero__boundary {
+      order: 8;
     }
   }
 
@@ -378,6 +445,8 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   }
 
   .premium-hero__artifact-card {
+    position: relative;
+    overflow: hidden;
     width: 100%;
     max-width: 22rem;
     border: 1px solid rgba(84, 214, 223, 0.24);
@@ -425,15 +494,79 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     font: 500 0.75rem/1.5 "JetBrains Mono Variable", monospace;
   }
 
+  .premium-hero__artifact-sample {
+    margin: 0 0 0.4rem;
+    color: #91a7b8;
+    font: 600 0.66rem/1 "JetBrains Mono Variable", monospace;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .premium-hero__artifact-findings {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .premium-hero__artifact-findings li {
+    display: grid;
+    gap: 0.25rem;
+    color: #edf6fb;
+    font-size: 0.86rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  /* Only Detected is ever shown on this card: the artifact is a synthetic
+     sample, so it must never claim a retest-confirmed or verified state. */
+  .premium-hero__artifact-state {
+    width: fit-content;
+    border: 1px solid rgba(84, 214, 223, 0.42);
+    border-radius: 0.2rem;
+    padding: 0.1rem 0.4rem;
+    color: var(--hero-cyan);
+    font: 600 0.62rem/1.4 "JetBrains Mono Variable", monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* The sample verdict card is part of the promise, so it is shown at every
+     width instead of being hidden below the two-column breakpoint. */
   @media (max-width: 1023px) {
     .premium-hero__artifact {
-      display: none;
+      align-self: start;
+      justify-self: stretch;
+      padding: 0 1rem 2.5rem;
+    }
+
+    .premium-hero__artifact-card {
+      max-width: none;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .premium-hero__artifact-sample {
+      margin-bottom: 0.5rem;
+      text-align: right;
     }
   }
 
   @media (max-width: 720px) {
     .premium-hero {
       min-height: calc(100svh - 3.5rem);
+    }
+
+    /* Flex would shrink both controls onto one line rather than wrap them, so
+       the phone layout is an explicit single column with full-width targets. */
+    .premium-hero__field-row {
+      display: grid;
+    }
+
+    .premium-hero__field-input,
+    .premium-hero__field-button {
+      width: 100%;
     }
 
     .premium-hero__poster img {
@@ -457,9 +590,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       display: grid;
     }
 
-    .premium-hero__rail {
-      display: none;
-    }
   }
 
   @media (max-width: 480px) {
@@ -482,6 +612,48 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       transition: none;
     }
   }
+  .premium-hero.premium-hero--cinematic { background: transparent; }
+  .premium-hero--cinematic .premium-hero__artifact { align-self: end; margin-bottom: 2rem; }
+  .premium-hero--cinematic .premium-hero__proof { max-width: 44rem; }
+  .premium-hero--cinematic .premium-hero__veil { background: linear-gradient(90deg, rgba(8,17,28,.95), rgba(8,17,28,.82) 42%, transparent 70%); }
+  :global(:root[data-theme="light"]) .premium-hero.premium-hero--cinematic { background: transparent; }
+  :global(:root[data-theme="light"]) .premium-hero--cinematic .premium-hero__veil { background: linear-gradient(90deg, #f3f9fc, rgba(243,249,252,.97) 42%, rgba(243,249,252,.1) 70%, transparent); }
+  @media (max-width: 1023px) {
+    .premium-hero--cinematic { --mobile-scene: clamp(10rem, 36svh, 21rem); }
+    .premium-hero--cinematic .premium-hero__content {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      padding: var(--mobile-scene) 1rem 2rem;
+      background: linear-gradient(180deg, transparent calc(var(--mobile-scene) - 2.5rem), rgba(8,17,28,.88) var(--mobile-scene), rgba(8,17,28,.88));
+    }
+    .premium-hero--cinematic h1 { order: 1; }
+    .premium-hero--cinematic .premium-hero__lede { order: 2; }
+    .premium-hero--cinematic .premium-hero__actions { order: 3; }
+    .premium-hero--cinematic .premium-hero__proof { order: 4; }
+    .premium-hero--cinematic .premium-hero__field { order: 5; }
+    .premium-hero--cinematic .premium-hero__trial-note { order: 6; }
+    .premium-hero--cinematic .premium-hero__agent-link { order: 7; }
+    .premium-hero--cinematic .premium-hero__boundary { order: 8; }
+    .premium-hero--cinematic .premium-hero__veil { background: none; }
+    :global(:root[data-theme="light"]) .premium-hero--cinematic .premium-hero__veil { background: none; }
+    :global(:root[data-theme="light"]) .premium-hero--cinematic .premium-hero__content {
+      background: linear-gradient(180deg, transparent calc(var(--mobile-scene) - 2.5rem), rgba(243,249,252,.94) var(--mobile-scene), rgba(243,249,252,.94));
+    }
+  }
+  @media (max-width: 1023px) and (max-height: 700px) {
+    .premium-hero--cinematic { --mobile-scene: clamp(7rem, 20svh, 10rem); }
+    .premium-hero--cinematic .premium-hero__actions { order: 2; }
+    .premium-hero--cinematic .premium-hero__lede { order: 3; }
+  }
+  .premium-hero--cinematic { align-content: start; }
+  .premium-hero--cinematic .premium-hero__content { align-self: start; }
+  h1 { font-size: clamp(3.8rem, 7.4vw, 6rem); letter-spacing: -.04em; }
+  @media(max-width:720px) { h1 { font-size: clamp(3.25rem, 15vw, 5.2rem); } }
+  @media(max-width:480px) { h1 { font-size: clamp(2.35rem, 10.5vw, 2.9rem); } }
+</style>
+
+<style>
 
   :global(:root[data-theme="light"]) .premium-hero {
     --hero-cyan: #087f78;
@@ -519,13 +691,13 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   }
 
   :global(:root[data-theme="light"]) .premium-hero__boundary,
-  :global(:root[data-theme="light"]) .premium-hero__rail,
-  :global(:root[data-theme="light"]) .premium-hero__artifact-meta {
+  :global(:root[data-theme="light"]) .premium-hero__artifact-meta,
+  :global(:root[data-theme="light"]) .premium-hero__artifact-sample {
     color: #5f7081;
   }
 
   :global(:root[data-theme="light"]) .premium-hero__primary {
-    color: #ffffff;
+    color: #ffffff; /* 4.86:1 on #087f78 */
     background: #087f78;
     box-shadow: 0 0.8rem 2.5rem rgba(8, 127, 120, 0.18);
   }
@@ -549,6 +721,59 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     color: #102235;
   }
 
+  /* The URL field and the sample-card finding rows carried dark-theme colours
+     with no light override, so on the light hero the "Public app URL" label and
+     the consent sentence sat near 1.6:1 on #eef6fa, the input stayed a heavy
+     dark box and the two finding titles were near-white on the white card.
+     Every colour below clears 4.5:1 against the surface it actually renders on. */
+  :global(:root[data-theme="light"]) .premium-hero__field-label {
+    color: #3c5568; /* 7.13:1 on #eef6fa */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-input {
+    border-color: rgba(8, 127, 120, 0.35);
+    color: #102235; /* 16.13:1 on #ffffff */
+    background: #ffffff;
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-input::placeholder {
+    color: #5f7081; /* 5.10:1 on #ffffff */
+  }
+
+  /* The dark theme's amber focus ring reaches only 1.62:1 on the light hero, so
+     the light theme reuses the darkened teal already used for the hero link. */
+  :global(:root[data-theme="light"]) .premium-hero__field-input:focus-visible {
+    border-color: #087f78;
+    outline: 3px solid #076c66;
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-button { color: #ffffff; }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-consent {
+    color: #40596c; /* 6.70:1 on #eef6fa */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-consent a {
+    color: #076c66; /* 5.74:1 on #eef6fa */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-status {
+    color: #3c5568; /* 7.13:1 on #eef6fa */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-error {
+    color: #b42318; /* 6.01:1 on #eef6fa */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__artifact-findings li {
+    color: #102235; /* 15.96:1 on the light card */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__artifact-state {
+    border-color: rgba(8, 127, 120, 0.42);
+    color: #087f78;
+  }
+
   @media (max-width: 720px) {
     :global(:root[data-theme="light"]) .premium-hero__veil {
       background: linear-gradient(
@@ -558,4 +783,11 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       );
     }
   }
+  .premium-hero--cinematic { align-content: start; }
+  .premium-hero--cinematic .premium-hero__content { align-self: start; }
+  h1 { font-size: clamp(3.8rem, 7.4vw, 6rem); letter-spacing: -.04em; }
+  @media(max-width:720px) { h1 { font-size: clamp(3.25rem, 15vw, 5.2rem); } }
+  @media(max-width:480px) { h1 { font-size: clamp(2.35rem, 10.5vw, 2.9rem); } }
 </style>
+
+<script>import "./landing-effects"</script>

@@ -4,13 +4,4 @@
  * (fetch-time) enforce identical rules and can never diverge. Re-exported here
  * to preserve existing import paths.
  */
-export {
-  checkScanUrlSafe,
-  isBlockedIp,
-  parseIpLiteral,
-  canonicalizeIpv4,
-  expandIpv6,
-  type SsrfReason,
-  type SsrfCheckResult,
-  type HostResolver,
-} from "@lyrashield/security"
+export { checkScanUrlSafe } from "@lyrashield/security"

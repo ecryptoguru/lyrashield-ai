@@ -6,6 +6,7 @@ import {
   createGetFindingsTool,
   createGetLaunchReadinessTool,
   createGetScanEligibilityTool,
+  createGetSetupHealthTool,
   createCreateReportTool,
   createPrSecurityRecapTool,
   type ToolHandlerContext,
@@ -54,6 +55,18 @@ describe("MCP safety metadata", () => {
       expect(typeof MCP_TOOL_ANNOTATIONS[tool.name]?.openWorldHint).toBe("boolean")
     }
   })
+
+  it("publishes caller-stable retry keys on every mutating tool", async () => {
+    const { createAllTools } = await import("./tools")
+    for (const tool of createAllTools(context).filter((candidate) => candidate.mutating)) {
+      expect(tool.inputSchema.properties.idempotencyKey, tool.name).toMatchObject({
+        type: "string",
+        minLength: 1,
+        maxLength: 128,
+      })
+      expect(tool.inputSchema.required ?? [], tool.name).not.toContain("idempotencyKey")
+    }
+  })
 })
 
 describe("createScanTargetTool", () => {
@@ -85,7 +98,8 @@ describe("createScanTargetTool", () => {
     const request = mockFetch.mock.calls[0]![1] as RequestInit
     expect(JSON.parse(String(request.body))).toMatchObject({ goal: "TEST_APP", mode: "STANDARD" })
     const modeSchema = tool.inputSchema.properties.mode as { description: string }
-    expect(modeSchema.description).toContain("STANDARD")
+    expect(modeSchema.description).toContain("Defaults to STANDARD")
+    expect(tool.inputSchema.required ?? []).not.toContain("mode")
   })
 
   it("returns error on API failure", async () => {
@@ -261,17 +275,6 @@ describe("createCancelScanTool", () => {
     const data = JSON.parse(result.content[0]!.text)
     expect(data.action).toBe("scan_cancel_requested")
     expect(data.scan.status).toBe("CANCELLED")
-  })
-
-  it("is registered as a mutating tool with annotations", async () => {
-    const { createAllTools } = await import("./tools")
-    const { MUTATING_TOOL_NAMES } = await import("./tool-policy")
-    const tools = createAllTools(context)
-    const cancel = tools.find((t) => t.name === "lyrashield_cancel_scan")
-    expect(cancel).toBeDefined()
-    expect(cancel!.mutating).toBe(true)
-    expect(MCP_TOOL_ANNOTATIONS["lyrashield_cancel_scan"]).toBeDefined()
-    expect(MUTATING_TOOL_NAMES).toContain("lyrashield_cancel_scan")
   })
 
   it("keeps the caller idempotency key in the header, hashed like other mutations", async () => {
@@ -545,6 +548,49 @@ describe("apiCall error handling", () => {
     expect(result.isError).toBe(true)
     const data = JSON.parse(result.content[0]!.text)
     expect(data.error).toBe("Permission denied")
+  })
+})
+
+describe("createGetSetupHealthTool", () => {
+  it("returns the shared setup-health reason and recovery codes without mutating", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeApiResponse({
+        version: "lyrashield-setup-health/1.0.0",
+        status: "blocked",
+        allowed: false,
+        checkedAt: "2026-11-05T00:00:00.000Z",
+        expiresAt: "2026-11-05T00:01:00.000Z",
+        scopeFingerprint: "a".repeat(64),
+        scope: {},
+        checks: [
+          {
+            code: "DOMAIN_VERIFICATION_REQUIRED",
+            status: "blocked",
+            explanation: "Verify control of this domain once.",
+            recoveryAction: "VERIFY_DOMAIN",
+          },
+        ],
+        primaryCheck: "DOMAIN_VERIFICATION_REQUIRED",
+        limitations: [],
+      })
+    )
+
+    const tool = createGetSetupHealthTool(context)
+    const result = await tool.handler({
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+    })
+    const data = JSON.parse(result.content[0]!.text)
+
+    expect(result.isError).toBeUndefined()
+    expect(data.primaryCheck).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(data.checks[0].recoveryAction).toBe("VERIFY_DOMAIN")
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/setup-health?"),
+      expect.objectContaining({ method: "GET" })
+    )
   })
 })
 

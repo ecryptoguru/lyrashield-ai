@@ -1,9 +1,10 @@
 import { withCookieMutation } from "../../../lib/api-auth"
-import { listSchedules, createSchedule, getNextRunAt, prisma } from "@lyrashield/db"
-import { resolveTargetScanMode } from "@lyrashield/types"
-import { requirePermission } from "@lyrashield/auth/server"
+import { listSchedules, createSchedule, prisma } from "@lyrashield/db"
+import { CreateScheduleSchema, resolveTargetScanMode } from "@lyrashield/types"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
+import { SCHEDULE_ADMISSION_ENABLED } from "../../../lib/scan-admission"
 import { authErrorResponse } from "../../../lib/api-auth"
 import {
   apiError,
@@ -11,7 +12,6 @@ import {
   apiPaginated,
   parsePaginationParams,
 } from "../../../lib/api-response"
-import { z } from "zod"
 
 export async function GET(request: Request) {
   try {
@@ -24,13 +24,14 @@ export async function GET(request: Request) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.schedule.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.schedule.view)
+    const readScope = resolveOAuthReadScope(session, targetId)
 
     const { cursor, limit } = parsePaginationParams(searchParams)
 
     const result = await listSchedules({
       workspaceId,
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(enabled === "true" || enabled === "false" ? { enabled: enabled === "true" } : {}),
       ...(cursor ? { cursor } : {}),
       limit,
@@ -45,27 +46,6 @@ export async function GET(request: Request) {
   }
 }
 
-const CreateScheduleSchema = z.object({
-  workspaceId: z.string().min(1),
-  targetId: z.string().min(1),
-  cron: z
-    .string()
-    .min(1, "cron expression is required")
-    .refine(
-      (c) => getNextRunAt(c.trim()) !== null,
-      "Use a five-field schedule like '0 0 * * 0' or '30 8 * * *'"
-    ),
-  goal: z.enum([
-    "CHECK_PR",
-    "TEST_APP",
-    "LAUNCH_REVIEW",
-    "WEEKLY_MONITOR",
-    "FULL_PENTEST",
-    "COMPLIANCE_REVIEW",
-  ]),
-  mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).default("SAFE"),
-})
-
 async function post(request: Request) {
   try {
     const body = await request.json()
@@ -78,6 +58,14 @@ async function post(request: Request) {
     const { workspaceId, targetId, cron, goal, mode } = parsed.data
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.schedule.create)
+
+    if (!SCHEDULE_ADMISSION_ENABLED) {
+      return apiError(
+        "SCHEDULE_UNAVAILABLE",
+        "Scheduled scans are not available in this release.",
+        403
+      )
+    }
 
     const target = await prisma.target.findFirst({
       where: { id: targetId, workspaceId, deletedAt: null },

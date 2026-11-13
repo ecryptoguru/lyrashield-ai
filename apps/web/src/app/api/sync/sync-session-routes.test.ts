@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   requireAuth: vi.fn(),
-  workspaceMemberFindUnique: vi.fn(),
+  requirePermission: vi.fn(),
   licenseUpdate: vi.fn(),
   systemLicenseUpdate: vi.fn(),
   syncCursorFindUnique: vi.fn(),
@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@lyrashield/config", () => ({
   env: { BETTER_AUTH_SECRET: "a".repeat(48) },
 }))
-vi.mock("@lyrashield/auth/server", () => ({ requireAuth: mocks.requireAuth }))
+vi.mock("@lyrashield/auth/server", () => ({
+  requireAuth: mocks.requireAuth,
+  requirePermission: mocks.requirePermission,
+}))
 vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -22,7 +25,6 @@ vi.mock("@lyrashield/logger", () => ({
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     license: { update: mocks.licenseUpdate },
-    workspaceMember: { findUnique: mocks.workspaceMemberFindUnique },
     workspace: { findUnique: vi.fn() },
   },
   getSystemPrisma: () => ({ license: { update: mocks.systemLicenseUpdate } }),
@@ -73,7 +75,7 @@ describe("sync session routes", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.requireAuth.mockResolvedValue(session)
-    mocks.workspaceMemberFindUnique.mockResolvedValue({ status: "active" })
+    mocks.requirePermission.mockResolvedValue({ workspace: { role: "OWNER" } })
     mocks.findLicenseByKeyHash.mockResolvedValue({ license })
     mocks.syncCursorFindUnique.mockResolvedValue(cursorRow)
     mocks.syncCursorUpdate.mockResolvedValue(cursorRow)
@@ -91,6 +93,7 @@ describe("sync session routes", () => {
     expect(response.status).toBe(200)
     expect(body.data).not.toHaveProperty("licenseKey")
     expect(body.data.syncSessionExpiresAt).toBeTruthy()
+    expect(mocks.requirePermission).toHaveBeenCalledWith("workspace_1", "finding:update")
     expect(
       verifySyncSessionToken(body.data.syncSessionToken, {
         workspaceId: "workspace_1",
@@ -111,6 +114,7 @@ describe("sync session routes", () => {
     )
 
     expect(response.status).toBe(200)
+    expect(mocks.requirePermission).toHaveBeenCalledWith("workspace_1", "finding:update")
     expect(mocks.systemLicenseUpdate).toHaveBeenCalledWith({
       where: { id: "license_1" },
       data: { workspaceId: "workspace_1" },
@@ -134,17 +138,17 @@ describe("sync session routes", () => {
     )
 
     expect(response.status).toBe(200)
+    expect(mocks.requirePermission).toHaveBeenCalledWith("workspace_1", "finding:update")
     expect(mocks.findLicenseById).toHaveBeenCalledWith("license_1")
     expect(mocks.findLicenseByKeyHash).not.toHaveBeenCalled()
   })
 
-  it("refuses license transfer without active membership in its owning workspace", async () => {
+  it("refuses license transfer without write permission in its owning workspace", async () => {
     mocks.findLicenseByKeyHash.mockResolvedValue({
       license: { ...license, workspaceId: "other_workspace" },
     })
-    mocks.workspaceMemberFindUnique
-      .mockResolvedValueOnce({ status: "active" })
-      .mockResolvedValueOnce(null)
+    mocks.requirePermission.mockResolvedValueOnce({ workspace: { role: "OWNER" } })
+    mocks.requirePermission.mockRejectedValueOnce(new Error("FORBIDDEN"))
     const response = await connect(
       new Request("http://localhost/api/sync/connect", {
         method: "POST",
@@ -158,10 +162,12 @@ describe("sync session routes", () => {
     expect(mocks.syncCursorUpdate).not.toHaveBeenCalled()
   })
 
-  it("transfers through the system client after both workspace memberships pass", async () => {
+  it("transfers through the system client after both workspace write permissions pass", async () => {
     mocks.findLicenseByKeyHash.mockResolvedValue({
       license: { ...license, workspaceId: "other_workspace" },
     })
+    mocks.requirePermission.mockResolvedValueOnce({ workspace: { role: "OWNER" } })
+    mocks.requirePermission.mockResolvedValueOnce({ workspace: { role: "OWNER" } })
     const response = await connect(
       new Request("http://localhost/api/sync/connect", {
         method: "POST",
@@ -169,13 +175,140 @@ describe("sync session routes", () => {
       })
     )
     expect(response.status).toBe(200)
-    expect(mocks.workspaceMemberFindUnique).toHaveBeenNthCalledWith(2, {
-      where: { workspaceId_userId: { workspaceId: "other_workspace", userId: session.userId } },
-    })
+    expect(mocks.requirePermission).toHaveBeenNthCalledWith(2, "other_workspace", "finding:update")
     expect(mocks.systemLicenseUpdate).toHaveBeenCalledWith({
       where: { id: license.id },
       data: { workspaceId: "workspace_1" },
     })
     expect(mocks.licenseUpdate).not.toHaveBeenCalled()
   })
+
+  it("rejects transfer by a destination writer who is only a viewer in the owning workspace", async () => {
+    mocks.findLicenseByKeyHash.mockResolvedValue({
+      license: { ...license, workspaceId: "other_workspace" },
+    })
+    mocks.requirePermission.mockResolvedValueOnce({ workspace: { role: "OWNER" } })
+    mocks.requirePermission.mockResolvedValueOnce({ workspace: { role: "VIEWER" } })
+
+    const response = await connect(
+      new Request("http://localhost/api/sync/connect", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: "workspace_1", licenseKey: "raw-license-key" }),
+      })
+    )
+
+    expect(response.status).toBe(403)
+    expect(mocks.systemLicenseUpdate).not.toHaveBeenCalled()
+    expect(mocks.syncCursorUpdate).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["connect", connect, "http://localhost/api/sync/connect", { licenseKey: "raw-license-key" }],
+    ["cursor", cursor, "http://localhost/api/sync/cursor", { syncSessionToken: "session-token" }],
+  ] as const)(
+    "denies a Viewer on sync %s before writing",
+    async (_name, route, url, credential) => {
+      mocks.requirePermission.mockResolvedValue({ workspace: { role: "VIEWER" } })
+      const response = await route(
+        new Request(url, {
+          method: _name === "connect" ? "POST" : "PUT",
+          body: JSON.stringify({ workspaceId: "workspace_1", ...credential }),
+        })
+      )
+
+      expect(response.status).toBe(403)
+      expect(mocks.requirePermission).toHaveBeenCalledWith("workspace_1", "finding:update")
+      expect(mocks.findLicenseByKeyHash).not.toHaveBeenCalled()
+      expect(mocks.findLicenseById).not.toHaveBeenCalled()
+      expect(mocks.syncCursorFindUnique).not.toHaveBeenCalled()
+      expect(mocks.systemLicenseUpdate).not.toHaveBeenCalled()
+      expect(mocks.syncCursorUpdate).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    [
+      "suspended member",
+      "connect",
+      connect,
+      "http://localhost/api/sync/connect",
+      { licenseKey: "raw-license-key" },
+    ],
+    [
+      "suspended member",
+      "cursor",
+      cursor,
+      "http://localhost/api/sync/cursor",
+      { syncSessionToken: "session-token" },
+    ],
+  ] as const)(
+    "denies a %s on sync %s before writes",
+    async (_membershipState, _name, route, url, credential) => {
+      mocks.requirePermission.mockRejectedValue(new Error("FORBIDDEN"))
+      const response = await route(
+        new Request(url, {
+          method: _name === "connect" ? "POST" : "PUT",
+          body: JSON.stringify({ workspaceId: "workspace_1", ...credential }),
+        })
+      )
+
+      expect(response.status).toBe(403)
+      expect(mocks.requirePermission).toHaveBeenCalledWith("workspace_1", "finding:update")
+      expect(mocks.findLicenseByKeyHash).not.toHaveBeenCalled()
+      expect(mocks.findLicenseById).not.toHaveBeenCalled()
+      expect(mocks.syncCursorFindUnique).not.toHaveBeenCalled()
+      expect(mocks.systemLicenseUpdate).not.toHaveBeenCalled()
+      expect(mocks.syncCursorUpdate).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    ["connect", connect, "http://localhost/api/sync/connect", { licenseKey: "raw-license-key" }],
+    ["cursor", cursor, "http://localhost/api/sync/cursor", { syncSessionToken: "session-token" }],
+  ] as const)(
+    "rejects %s for an API key scoped to a different workspace before authorization or writes",
+    async (_name, route, url, credential) => {
+      const response = await route(
+        new Request(url, {
+          method: _name === "connect" ? "POST" : "PUT",
+          body: JSON.stringify({ workspaceId: "workspace_2", ...credential }),
+        })
+      )
+
+      expect(response.status).toBe(403)
+      expect(mocks.requirePermission).not.toHaveBeenCalled()
+      expect(mocks.findLicenseByKeyHash).not.toHaveBeenCalled()
+      expect(mocks.findLicenseById).not.toHaveBeenCalled()
+      expect(mocks.syncCursorFindUnique).not.toHaveBeenCalled()
+      expect(mocks.systemLicenseUpdate).not.toHaveBeenCalled()
+      expect(mocks.syncCursorUpdate).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    ["connect", connect, "http://localhost/api/sync/connect", { licenseKey: "raw-license-key" }],
+    ["cursor", cursor, "http://localhost/api/sync/cursor", { syncSessionToken: "session-token" }],
+  ] as const)(
+    "authorizes the requested destination workspace for sync %s before writes",
+    async (_name, route, url, credential) => {
+      const cookieSession = { ...session, apiKey: undefined }
+      mocks.requireAuth.mockResolvedValue(cookieSession)
+      mocks.requirePermission.mockRejectedValue(new Error("FORBIDDEN"))
+
+      const response = await route(
+        new Request(url, {
+          method: _name === "connect" ? "POST" : "PUT",
+          body: JSON.stringify({ workspaceId: "workspace_2", ...credential }),
+        })
+      )
+
+      expect(response.status).toBe(403)
+      expect(mocks.requirePermission).toHaveBeenCalledWith("workspace_2", "finding:update")
+      expect(mocks.findLicenseByKeyHash).not.toHaveBeenCalled()
+      expect(mocks.findLicenseById).not.toHaveBeenCalled()
+      expect(mocks.syncCursorFindUnique).not.toHaveBeenCalled()
+      expect(mocks.systemLicenseUpdate).not.toHaveBeenCalled()
+      expect(mocks.syncCursorUpdate).not.toHaveBeenCalled()
+    }
+  )
 })

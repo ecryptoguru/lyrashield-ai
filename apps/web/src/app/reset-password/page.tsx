@@ -6,21 +6,32 @@
 export const dynamic = "force-dynamic"
 
 import Link from "next/link"
-import { useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { ShieldCheck } from "lucide-react"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
 import { Button, FormField, Spinner } from "@lyrashield/ui"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { PasswordInput } from "@/components/password-input"
+import { cleanResetTokenFromUrl } from "./reset-password-url"
 
 export default function ResetPasswordPage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
+  const [completed, setCompleted] = useState(false)
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const token = searchParams.get("token")
+  const [token] = useState(() => searchParams.get("token"))
+
+  useEffect(() => {
+    if (!token) return
+    if (!new URL(window.location.href).searchParams.has("token")) return
+    window.history.replaceState(
+      window.history.state,
+      "",
+      cleanResetTokenFromUrl(window.location.href)
+    )
+  }, [token])
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -33,8 +44,8 @@ export default function ResetPasswordPage() {
     try {
       const { error: resetError } = await authClient.resetPassword({ newPassword: password, token })
       if (resetError) throw resetError
-      router.push("/sign-in")
-      router.refresh()
+      setPassword("")
+      setCompleted(true)
     } catch (cause) {
       setError(getAuthErrorMessage(cause) ?? "Could not reset your password. Request a new link.")
     } finally {
@@ -50,41 +61,67 @@ export default function ResetPasswordPage() {
           <div className="gradient-primary mb-3 flex h-12 w-12 items-center justify-center rounded-xl border p-1">
             <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Choose a new password</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {completed
+              ? "Password reset"
+              : token
+                ? "Choose a new password"
+                : "Request a new reset link"}
+          </h1>
         </div>
         <div className="bg-card border p-6 shadow-sm sm:p-8">
-          <form onSubmit={submit} className="space-y-4">
-            <FormField label="New password" htmlFor="password">
-              <PasswordInput
-                id="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="new-password"
-                required
-                minLength={8}
-                placeholder="At least 8 characters"
-                aria-describedby="password-hint"
-              />
-              <p id="password-hint" className="text-muted-foreground mt-1.5 text-xs">
-                At least 8 characters. Use a mix of letters, numbers and symbols for a stronger
-                password.
+          {completed ? (
+            <div className="space-y-4">
+              <p role="status" className="text-sm">
+                Password reset successfully. You can now sign in with your new password.
               </p>
-            </FormField>
-            {error && (
-              <p role="alert" className="text-destructive text-sm">
-                {error}
-              </p>
-            )}
-            <Button type="submit" disabled={loading} className="w-full" size="lg">
-              {loading && <Spinner className="mr-2" />}Reset password
-            </Button>
-          </form>
+              <Link
+                href="/sign-in"
+                className="text-primary font-medium underline underline-offset-4"
+              >
+                Continue to sign in
+              </Link>
+            </div>
+          ) : !token ? (
+            <p role="status" className="text-muted-foreground text-sm">
+              This reset link is invalid or has expired. Request a new link to reset your password.
+            </p>
+          ) : (
+            <form onSubmit={submit} className="space-y-4">
+              <FormField label="New password" htmlFor="password">
+                <PasswordInput
+                  id="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  placeholder="At least 8 characters"
+                  aria-describedby="password-hint"
+                />
+                <p id="password-hint" className="text-muted-foreground mt-1.5 text-xs">
+                  At least 8 characters. Use a mix of letters, numbers and symbols for a stronger
+                  password.
+                </p>
+              </FormField>
+              {error && (
+                <p role="alert" className="text-destructive text-sm">
+                  {error}
+                </p>
+              )}
+              <Button type="submit" disabled={loading} className="w-full" size="lg">
+                {loading && <Spinner className="mr-2" />}Reset password
+              </Button>
+            </form>
+          )}
         </div>
-        <p className="text-muted-foreground mt-6 text-center text-sm">
-          <Link href="/forgot-password" className="text-primary font-medium hover:underline">
-            Request a new link
-          </Link>
-        </p>
+        {!completed && (
+          <p className="text-muted-foreground mt-6 text-center text-sm">
+            <Link href="/forgot-password" className="text-primary font-medium hover:underline">
+              Request a new link
+            </Link>
+          </p>
+        )}
       </div>
     </main>
   )

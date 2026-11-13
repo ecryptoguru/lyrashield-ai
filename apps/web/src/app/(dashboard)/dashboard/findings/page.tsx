@@ -20,6 +20,7 @@ import { listFixProposals } from "@lyrashield/db"
 import Link from "next/link"
 import { EmptyState, buttonVariants } from "@lyrashield/ui"
 import { SEVERITY_ORDER } from "@/lib/severity-presentation"
+import { permanentRedirect } from "next/navigation"
 
 const FINDINGS_TABS: SectionTab[] = [
   // The `issues` tab value is a compatibility URL parameter; the visible label
@@ -37,8 +38,38 @@ type FindingsTab = "issues" | "evidence" | "fixes"
 function normalizeTab(value: string | undefined): FindingsTab {
   if (value === "evidence") return value
   if (value === "fixes") return value
-  // The legacy reports tab is a permanent redirect to /dashboard/reports.
+  // The legacy reports tab is redirected before tab normalization.
   return "issues"
+}
+
+function legacyReportsHref(params: { scanId?: string; targetId?: string }): string {
+  const reportScope = new URLSearchParams()
+  if (params.scanId) reportScope.set("scanId", params.scanId)
+  if (params.targetId) reportScope.set("targetId", params.targetId)
+  const query = reportScope.toString()
+  return `/dashboard/reports${query ? `?${query}` : ""}`
+}
+
+type FindingsSearchParams = {
+  finding?: string
+  tab?: string
+  scanId?: string
+  targetId?: string
+  filter?: string
+  status?: string
+  severity?: string
+  evidence?: string
+  sort?: string
+  target?: string
+  q?: string
+}
+
+async function findingsSearchParams(
+  searchParams: Promise<FindingsSearchParams>
+): Promise<FindingsSearchParams> {
+  const params = await searchParams
+  if (params.tab === "reports") permanentRedirect(legacyReportsHref(params))
+  return params
 }
 
 export const metadata: Metadata = {
@@ -89,17 +120,10 @@ function FindingsScopeStrip({
 export default async function FindingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    finding?: string
-    tab?: string
-    scanId?: string
-    targetId?: string
-    filter?: string
-    sort?: string
-    target?: string
-    q?: string
-  }>
+  searchParams: Promise<FindingsSearchParams>
 }) {
+  const params = await findingsSearchParams(searchParams)
+
   const session = await getCachedSession()
   if (!session) return null
 
@@ -119,7 +143,6 @@ export default async function FindingsPage({
     )
   }
 
-  const params = await searchParams
   const tab = normalizeTab(params.tab)
   // Filter/sort/search are parsed on the server and passed as initial props so
   // the server-rendered tree and the client's first render match exactly.
@@ -197,45 +220,27 @@ export default async function FindingsPage({
   }
 
   if (tab === "fixes") {
+    const membership = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: session.userId } },
+      select: { role: true, status: true },
+    })
     const { items: fixProposals, nextCursor: fixProposalsCursor } = await listFixProposals({
       workspaceId,
       ...(effectiveTargetId ? { targetId: effectiveTargetId } : {}),
       ...(listParams.scanId ? { observedInScanId: listParams.scanId } : {}),
       limit: 20,
     })
-    const initialFixes = fixProposals.map((p) => ({
-      id: p.id,
-      kind: p.kind,
-      summary: p.summary,
-      status: p.status,
-      safetyScore: p.safetyScore,
-      generatedByModel: p.generatedByModel,
-      createdAt: p.createdAt.toISOString(),
-      finding: {
-        id: p.finding.id,
-        title: p.finding.title,
-        severity: p.finding.severity,
-        status: p.finding.status,
-        cwe: p.finding.cwe,
-        target: p.finding.target,
-      },
-      pullRequests: p.pullRequests.map((pr) => ({
-        id: pr.id,
-        provider: pr.provider,
-        repoOwner: pr.repoOwner,
-        repoName: pr.repoName,
-        branchName: pr.branchName,
-        prNumber: pr.prNumber,
-        prUrl: pr.prUrl,
-        status: pr.status,
-      })),
-    }))
+    const initialFixes = serializeFixProposals(fixProposals)
     return (
       <div>
         {renderHeader("Proposed fixes for these findings, with their pull requests.")}
         <FixesClient
           key={`${workspaceId}:${listParams.scanId}:${effectiveTargetId}`}
           workspaceId={workspaceId}
+          canCreatePr={
+            membership?.status === "active" &&
+            hasPermission(membership.role, PERMISSIONS.fix.createPr)
+          }
           {...(effectiveTargetId ? { targetId: effectiveTargetId } : {})}
           {...(listParams.scanId ? { observedInScanId: listParams.scanId } : {})}
           initialData={initialFixes}
@@ -372,4 +377,37 @@ export default async function FindingsPage({
       />
     </div>
   )
+}
+
+function serializeFixProposals(
+  fixProposals: Awaited<ReturnType<typeof listFixProposals>>["items"]
+) {
+  return fixProposals.map((p) => ({
+    id: p.id,
+    kind: p.kind,
+    summary: p.summary,
+    status: p.status,
+    hasStoredPatch: Boolean(p.diffRef),
+    safetyScore: p.safetyScore,
+    generatedByModel: p.generatedByModel,
+    createdAt: p.createdAt.toISOString(),
+    finding: {
+      id: p.finding.id,
+      title: p.finding.title,
+      severity: p.finding.severity,
+      status: p.finding.status,
+      cwe: p.finding.cwe,
+      target: p.finding.target,
+    },
+    pullRequests: p.pullRequests.map((pr) => ({
+      id: pr.id,
+      provider: pr.provider,
+      repoOwner: pr.repoOwner,
+      repoName: pr.repoName,
+      branchName: pr.branchName,
+      prNumber: pr.prNumber,
+      prUrl: pr.prUrl,
+      status: pr.status,
+    })),
+  }))
 }

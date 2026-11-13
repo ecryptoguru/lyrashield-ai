@@ -168,6 +168,46 @@ describe("blog validator", () => {
     expect(errors).toContain("unresolved placeholder: lorem ipsum")
   })
 
+  it.each([
+    [2, 400],
+    [2, 1700],
+    [1, 800],
+    [1, 3500],
+  ])(
+    "treats total article length as guidance for program index %s with %s words",
+    (index, words) => {
+      const entry = {
+        index,
+        slug: "length-guidance",
+        cluster: "Access",
+        cta: "Pillar + RLS Checker",
+      }
+      const article = {
+        slug: entry.slug,
+        data: stableFrontmatter,
+        body: `${Array(45).fill("answer").join(" ")}
+
+## Verify safely
+
+[Authority guide](/blog/vibe-coding-security-guide)
+
+${Array(words).fill("guidance").join(" ")}
+
+[RLS checker](/tools/supabase-rls-checker) and [related article](/blog/related-article).
+
+${Array.from({ length: 8 }, (_, i) => `[RFC ${i}](https://www.rfc-editor.org/rfc/rfc${9110 + i})`).join(" ")}
+`,
+      }
+      const context = {
+        availableSlugs: new Set(["vibe-coding-security-guide", "related-article"]),
+        programBySlug: new Map([
+          ["related-article", { index: 3, slug: "related-article", cluster: "Access" }],
+        ]),
+      }
+      expect(validateArticle(article, entry, context)).toEqual([])
+    }
+  )
+
   it("enforces the final shared-image distribution", () => {
     expect(validateUsageCounts(sharedUsageDistribution(), true)).toEqual([])
     expect(validateUsageCounts([...Array(IMAGE_CORPUS.shared - 1).fill(3)], true)).toContain(
@@ -461,9 +501,10 @@ ${filler}
   })
 
   it.each([
-    ["GitHub diff", "Pillar + GitHub diff gate"],
-    ["MCP", "Pillar + MCP security"],
-  ])("keeps %s topic CTAs on the honest free checklist", (_topic, cta) => {
+    ["GitHub diff", "Pillar + GitHub diff gate", "/tools/ai-app-security-checklist"],
+    ["MCP", "Pillar + MCP security", "/tools/ai-app-security-checklist"],
+    ["PHP", "Pillar + PHP checker", "/tools/php2shell-checker"],
+  ])("keeps %s topic CTAs on the required free tool", (_topic, cta, requiredRoute) => {
     const directAnswer = Array(45).fill("answer").join(" ")
     const filler = Array(1160).fill("guidance").join(" ")
     const entry = { index: 28, slug: "workflow-post", cluster: "Agent", cta }
@@ -485,7 +526,7 @@ ${filler}
 
 ${filler}
 
-[Free checklist](/tools/ai-app-security-checklist) and [related article](/blog/agent-post).
+[Free tool](${requiredRoute}) and [related article](/blog/agent-post).
 
 [OWASP](https://owasp.org/a) [NIST](https://csrc.nist.gov/b) [RFC](https://www.rfc-editor.org/c)
 `,
@@ -499,15 +540,27 @@ ${filler}
 
     const scanOnly = {
       ...article,
-      body: article.body.replace("/tools/ai-app-security-checklist", "/scan"),
+      body: article.body.replace(requiredRoute, "/scan"),
     }
     expect(validateArticle(scanOnly, entry, context)).toContain(
-      `missing approved CTA link for ${cta}: /tools/ai-app-security-checklist`
+      `missing approved CTA link for ${cta}: ${requiredRoute}`
     )
   })
 
   it("classifies primary and authoritative sources deterministically", () => {
     expect(classifySource("https://datatracker.ietf.org/doc/html/rfc9110")).toBe("primary")
+    expect(classifySource("https://www.php.net/archive/2026.php")).toBe("official")
+    expect(classifySource("https://getcomposer.org/doc/06-config.md#platform")).toBe("official")
+    expect(classifySource("https://wordpress.org/documentation/article/site-health-screen/")).toBe(
+      "official"
+    )
+    expect(classifySource("https://php.net.untrusted.test/advisory")).toBe("other")
+    expect(classifySource("https://cloudlinux.statuspage.io/incidents/zl0vt1yq3dj5")).toBe(
+      "primary"
+    )
+    expect(classifySource("https://access.redhat.com/security/updates/backporting")).toBe("primary")
+    expect(classifySource("https://unrelated.statuspage.io/incidents/report")).toBe("other")
+    expect(classifySource("https://access.redhat.com.untrusted.test/backporting")).toBe("other")
     expect(classifySource("https://owasp.org/www-project-top-ten/")).toBe("official")
     expect(
       classifySource("https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/")
@@ -537,6 +590,44 @@ ${filler}
         { slug: "post" }
       )
     ).toContain("duplicate FAQ question: where does the config live?")
+  })
+
+  it("requires reviewer and reviewedDate to be set together", () => {
+    const minimal = { slug: "post", body: "Body copy without an H1." }
+    expect(
+      validateArticle({ ...minimal, data: { reviewer: "lyrashield-team" } }, { slug: "post" })
+    ).toContain("reviewer and reviewedDate must be set together or not at all")
+    expect(
+      validateArticle({ ...minimal, data: { reviewedDate: "2026-10-06" } }, { slug: "post" })
+    ).toContain("reviewer and reviewedDate must be set together or not at all")
+    // A complete, well-ordered pair produces no pairing error.
+    expect(
+      validateArticle(
+        {
+          ...minimal,
+          data: {
+            pubDate: "2026-09-22",
+            reviewer: "lyrashield-team",
+            reviewedDate: "2026-10-06",
+          },
+        },
+        { slug: "post" }
+      )
+    ).not.toContain("reviewer and reviewedDate must be set together or not at all")
+    // A review cannot predate the article.
+    expect(
+      validateArticle(
+        {
+          ...minimal,
+          data: {
+            pubDate: "2026-09-22",
+            reviewer: "lyrashield-team",
+            reviewedDate: "2026-01-01",
+          },
+        },
+        { slug: "post" }
+      )
+    ).toContain("reviewedDate cannot precede pubDate")
   })
 
   it("validates catalog paths, dimensions, budgets, hashes, clusters, and adjacency", () => {

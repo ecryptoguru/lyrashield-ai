@@ -1,0 +1,17 @@
+{
+  "name": "lyrashield",
+  "version": "0.1.0",
+  "description": "LyraShield AI MCP tools and evidence-aware coding workflows.",
+  "contextFileName": "QWEN.md",
+  "commands": "commands",
+  "skills": "skills",
+  "mcpServers": {
+    "lyrashield": {
+      "httpUrl": "https://app.lyrashieldai.com/api/mcp",
+      "oauth": {
+        "enabled": true,
+        "scopes": ["lyrashield.read"]
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://mimo.xiaomi.com/mimocode/config.json",
+  "mcp": {
+    "lyrashield": {
+      "type": "local",
+      "command": ["npx", "-y", "@lyrashield/mcp@0.2.12"],
+    },
+  },
+}

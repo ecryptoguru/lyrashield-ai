@@ -37,6 +37,8 @@ describe("openapi workflow/provenance contract", () => {
     )
     const scope = props.scope as { enum?: string[] }
     expect(scope.enum).toEqual(["SNAPSHOT", "DIFF", "LIVE"])
+    expect(props).not.toHaveProperty("authorizationRef")
+    expect((props.limits as { properties: object }).properties).not.toHaveProperty("maxBudgetUsd")
   })
 
   it("exposes distinct verification tiers on the Finding component", () => {
@@ -54,10 +56,21 @@ describe("openapi workflow/provenance contract", () => {
   it("documents the recorded workflow inputs on CreateScan", () => {
     const createScan = spec.components.schemas.CreateScan
     const props = createScan.properties as Record<string, unknown>
+    expect(props.engineBudgetCeilingUsd).toMatchObject({ type: "number", exclusiveMinimum: 0 })
+    expect(spec.paths["/scans/eligibility"].get.parameters).toContainEqual(
+      expect.objectContaining({ name: "engineBudgetCeilingUsd", in: "query", required: false })
+    )
     expect(props.workflow).toBeDefined()
     expect(props.baseRef).toBeDefined()
     expect(props.headRef).toBeDefined()
     expect(props.attachmentIds).toBeDefined()
+  })
+
+  it("documents patch availability without a storage reference on the versioned proposal list", () => {
+    const schema = JSON.stringify(responseSchema("/fix-proposals", "get", "200"))
+    expect(schema).toContain("hasStoredPatch")
+    expect(schema).not.toContain("diffRef")
+    expect(schema).toContain("does not verify patch provenance or compatibility")
   })
 
   it("returns typed Scan results from scan endpoints", () => {

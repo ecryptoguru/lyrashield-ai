@@ -24,7 +24,7 @@ function artifact(overrides: Record<string, unknown> = {}) {
     status: "COMPLETED",
     terminalReason: null,
     policyVersion: "ai-security-triage-policy/1.0",
-    modelRoute: "azure_ai/gpt-5.6-luna",
+    modelRoute: "azure_ai/gpt-6-luna",
     inputChecksum: checksum,
     cacheKey: checksum,
     redactionReceipt: {
@@ -69,7 +69,7 @@ describe("applyEngineTriageArtifact", () => {
       triage: {
         disposition: "LIKELY_FALSE_POSITIVE",
         confidence: 73,
-        modelRoute: "azure_ai/gpt-5.6-luna",
+        modelRoute: "azure_ai/gpt-6-luna",
       },
     })
   })

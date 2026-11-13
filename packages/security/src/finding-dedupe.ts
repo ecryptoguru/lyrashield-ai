@@ -17,10 +17,13 @@ export interface DedupeIdentity {
   startLine?: number | string | null
   endLine?: number | string | null
   title?: string | null
-  /** Dependency findings key on package identity instead of location. */
+  /** Case-sensitive Compose service identity for PHP runtime findings. */
+  runtimeService?: string
+  /** Composer fixes are scoped to a lockfile; other dependencies keep package identity. */
   dependency?: {
     packageEcosystem?: string | null
     packageName?: string | null
+    lockfilePath?: string
   }
 }
 
@@ -47,5 +50,16 @@ export function computeDedupeKey(identity: DedupeIdentity, targetId: string): st
   const raw = ["v2", targetId, ...parts]
     .map((value) => String(value).trim().toLowerCase())
     .join("|")
-  return createHash("sha256").update(raw).digest("hex").slice(0, 32)
+  const location =
+    isDependency && identity.dependency?.packageEcosystem?.toLowerCase() === "packagist"
+      ? identity.dependency.lockfilePath
+      : identity.findingClass?.startsWith("php_runtime_")
+        ? identity.runtimeService
+        : undefined
+  // Keep existing identities unchanged; repository paths and service names are case-sensitive.
+  const scoped =
+    location === undefined
+      ? raw
+      : JSON.stringify([raw, ...(isDependency ? [] : [identity.file ?? ""]), location])
+  return createHash("sha256").update(scoped).digest("hex").slice(0, 32)
 }

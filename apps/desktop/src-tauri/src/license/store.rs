@@ -86,11 +86,6 @@ pub fn load_license() -> Result<Option<StoredLicense>, String> {
     Err("failed to parse license: unknown format".into())
 }
 
-/// Load only the LicenseFile (legacy helper for simple checks).
-pub fn load_license_file() -> Result<Option<LicenseFile>, String> {
-    Ok(load_license()?.map(|s| s.license))
-}
-
 /// Clear the stored license file (on revoke hard-stop or user-initiated logout).
 pub fn clear_license() -> Result<(), String> {
     let path = license_path()?;
@@ -114,16 +109,6 @@ pub fn save_license_key(key: &str) -> Result<(), String> {
         .map_err(|e| format!("save license key to keychain: {}", e))
 }
 
-pub fn load_license_key() -> Result<Option<String>, String> {
-    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, LICENSE_KEY_ACCOUNT)
-        .map_err(|e| format!("keychain entry: {}", e))?;
-    match entry.get_password() {
-        Ok(v) => Ok(Some(v)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(format!("read license key from keychain: {}", e)),
-    }
-}
-
 pub fn clear_license_key() -> Result<(), String> {
     let entry = keyring::Entry::new(KEYCHAIN_SERVICE, LICENSE_KEY_ACCOUNT)
         .map_err(|e| format!("keychain entry: {}", e))?;
@@ -141,6 +126,9 @@ mod tests {
     use std::sync::{Mutex, OnceLock};
 
     // Serialize all store tests — they share the global HOME/XDG_DATA_HOME env.
+    // Kept as the store-side counterpart of `crate::license::TEST_ENV_LOCK`;
+    // the individual tests currently take the shared lock directly.
+    #[allow(dead_code)]
     static STORE_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     // Shared with guard tests to avoid HOME race — guard tests use crate::license::TEST_ENV_LOCK which is same underlying OnceLock
 

@@ -8,6 +8,7 @@ import {
 import { env } from "@lyrashield/config"
 import { assertEvidenceEncrypted } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
+import { isEvidenceStorageUriForWorkspace } from "@lyrashield/security"
 import { drainArtifactDeletionTasksWith, type ArtifactDeletionDrainResult } from "./deletion-drain"
 import {
   ENVELOPE_KEY_REF,
@@ -68,6 +69,15 @@ function isS3Configured(): boolean {
 
 function isLocalEvidenceConfigured(): boolean {
   return env.NODE_ENV !== "production" && env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE === "1"
+}
+
+function isOwnedEvidenceUri(storageUri: string, workspaceId: string): boolean {
+  return isEvidenceStorageUriForWorkspace({
+    storageUri,
+    workspaceId,
+    s3Bucket: env.S3_BUCKET ?? "",
+    localEvidenceRoot: env.LYRASHIELD_LOCAL_EVIDENCE_DIR || `${process.cwd()}/.lyrashield/evidence`,
+  })
 }
 
 function activeEvidenceKeyRef(): string {
@@ -320,6 +330,9 @@ export async function readEncryptedArtifact(
 ): Promise<ReadEncryptedArtifactResult> {
   assertValidKeyComponent(expectedWorkspaceId)
   if (storageUri.startsWith("file:")) {
+    if (!isOwnedEvidenceUri(storageUri, expectedWorkspaceId)) {
+      throw new Error("Evidence storage URI does not belong to workspace")
+    }
     if (!isLocalEvidenceConfigured()) throw new EvidenceStorageConfigurationError()
     const { readLocalEvidence } = await import(/* turbopackIgnore: true */ "./local.js")
     const content = await readLocalEvidence(storageUri, expectedWorkspaceId)
@@ -331,15 +344,11 @@ export async function readEncryptedArtifact(
     }
   }
 
-  const parsed = new URL(storageUri)
-  const key = parsed.pathname.slice(1)
-  if (
-    parsed.protocol !== "s3:" ||
-    parsed.hostname !== env.S3_BUCKET ||
-    !key.startsWith(`evidence/${expectedWorkspaceId}/`)
-  ) {
+  if (!isOwnedEvidenceUri(storageUri, expectedWorkspaceId)) {
     throw new Error("Evidence storage URI does not belong to workspace")
   }
+  const parsed = new URL(storageUri)
+  const key = parsed.pathname.slice(1)
   if (!isS3Configured()) throw new EvidenceStorageConfigurationError()
 
   const response = await getS3Client().send(
@@ -375,21 +384,20 @@ export async function deleteEncryptedArtifact(
 ): Promise<void> {
   assertValidKeyComponent(expectedWorkspaceId)
   if (storageUri.startsWith("file:")) {
+    if (!isOwnedEvidenceUri(storageUri, expectedWorkspaceId)) {
+      throw new Error("Evidence storage URI does not belong to workspace")
+    }
     if (!isLocalEvidenceConfigured()) throw new EvidenceStorageConfigurationError()
     const { deleteLocalEvidence } = await import(/* turbopackIgnore: true */ "./local.js")
     await deleteLocalEvidence(storageUri, expectedWorkspaceId)
     return
   }
 
-  const parsed = new URL(storageUri)
-  const key = parsed.pathname.slice(1)
-  if (
-    parsed.protocol !== "s3:" ||
-    parsed.hostname !== env.S3_BUCKET ||
-    !key.startsWith(`evidence/${expectedWorkspaceId}/`)
-  ) {
+  if (!isOwnedEvidenceUri(storageUri, expectedWorkspaceId)) {
     throw new Error("Evidence storage URI does not belong to workspace")
   }
+  const parsed = new URL(storageUri)
+  const key = parsed.pathname.slice(1)
   if (!isS3Configured()) throw new EvidenceStorageConfigurationError()
   await getS3Client().send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key }))
 }

@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "limits": {
+    "max-lines": 600,
+    "max-lines-per-function": 150
+  },
+  "metrics": {
+    ".github/scripts/lighthouse-production.mjs|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 18,
+      "maxExcess": 18
+    },
+    ".github/scripts/qualify-release-source.mjs|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 1,
+      "maxExcess": 1
+    },
+    ".github/scripts/verify-webhook-cutover.mjs|max-lines": {
+      "count": 1,
+      "totalExcess": 81,
+      "maxExcess": 81
+    },
+    "apps/marketing/astro.config.mjs|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 13,
+      "maxExcess": 13
+    },
+    "apps/marketing/scripts/blog-validation-lib.mjs|max-lines": {
+      "count": 1,
+      "totalExcess": 342,
+      "maxExcess": 342
+    },
+    "apps/marketing/scripts/blog-validation-lib.mjs|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 24,
+      "maxExcess": 22
+    },
+    "apps/marketing/scripts/crawl-built-site.mjs|max-lines": {
+      "count": 1,
+      "totalExcess": 17,
+      "maxExcess": 17
+    },
+    "apps/marketing/src/components/landing/PremiumHero.astro|max-lines": {
+      "count": 1,
+      "totalExcess": 82,
+      "maxExcess": 82
+    },
+    "apps/marketing/src/components/tools/WebMcpSecurityLab.astro|max-lines": {
+      "count": 1,
+      "totalExcess": 71,
+      "maxExcess": 71
+    },
+    "apps/marketing/src/layouts/DocsLayout.astro|max-lines": {
+      "count": 1,
+      "totalExcess": 14,
+      "maxExcess": 14
+    },
+    "apps/marketing/src/pages/demo.astro|max-lines": {
+      "count": 1,
+      "totalExcess": 448,
+      "maxExcess": 448
+    },
+    "apps/marketing/src/pages/scan.astro|max-lines": {
+      "count": 1,
+      "totalExcess": 201,
+      "maxExcess": 201
+    },
+    "ops/worker/webhook-empty-state-candidate.mjs|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 12,
+      "maxExcess": 12
+    },
+    "ops/worker/webhook-empty-state-producer.mjs|max-lines": {
+      "count": 1,
+      "totalExcess": 24,
+      "maxExcess": 24
+    },
+    "ops/worker/webhook-empty-state-producer.mjs|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 116,
+      "maxExcess": 116
+    },
+    "packages/db/scripts/webhook-empty-state-migration.mjs|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 10,
+      "maxExcess": 10
+    },
+    "packages/db/scripts/webhook-empty-state-receipt-v2.mjs|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 70,
+      "maxExcess": 70
+    }
+  }
+}

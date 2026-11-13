@@ -160,6 +160,9 @@ describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
     expect(result.currency).toBe("USD")
     // A reserve-release payout was created
     expect(prisma.payout.create).toHaveBeenCalledOnce()
+    const payoutData = vi.mocked(prisma.payout.create).mock.calls[0]?.[0]?.data
+    expect(payoutData).not.toHaveProperty("id")
+    expect(payoutData?.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i)
     // Two payout items (one per commission)
     expect(prisma.payoutItem.create).toHaveBeenCalledTimes(2)
     // Each commission was marked reserveReleasedAt (updateMany with CAS)
@@ -168,6 +171,11 @@ describe("reserve-release — RISK-C7 hold/release math + idempotency", () => {
     const legacyUpdateCalls = (prisma.commission.update as unknown as ReturnType<typeof vi.fn>).mock
       .calls.length
     expect(updateCalls + legacyUpdateCalls).toBe(2)
+    expect(prisma.commission.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "c1", status: "PAID", reserveReleasedAt: null },
+      })
+    )
   })
 
   it("is idempotent — commissions already released (reserveReleasedAt set) are filtered out", async () => {

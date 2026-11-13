@@ -1,0 +1,20 @@
+{
+  "name": "lyrashield-marketplace",
+  "owner": {
+    "name": "LyraShield AI",
+    "url": "https://lyrashieldai.com"
+  },
+  "plugins": [
+    {
+      "name": "lyrashield",
+      "source": "./plugins/lyrashield",
+      "category": "security",
+      "tags": ["security", "mcp", "skills", "release-readiness"],
+      "strict": true
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "description": "Preparation marketplace for LyraShield AI Qoder plugins."
+  }
+}

@@ -1,13 +1,14 @@
 ---
 import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
+import CliConfigPreview from "@components/integrations/CliConfigPreview.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for Roo Code — Setup Guide"
 const description =
   "Connect LyraShield to Roo Code. Configure .roo/mcp.json with the mcpServers object for stdio or use type: streamable-http for the remote endpoint."
-const updatedDate = "2026-09-09"
+const updatedDate = "2026-10-02"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
@@ -34,7 +35,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 2,
         name: "Add the lyrashield entry",
-        text: 'Add the mcpServers key with command "npx" and args ["-y","@lyrashield/mcp@0.2.11"] and set LYRASHIELD_API_KEY in the env block.',
+        text: 'Add the mcpServers key with command "npx" and args ["-y","@lyrashield/mcp@0.2.12"] and set LYRASHIELD_API_KEY in the env block.',
       },
       {
         "@type": "HowToStep",
@@ -63,14 +64,7 @@ const jsonLd: unknown[] = [
     <code>alwaysAllow: string[]</code> and <code>disabled: boolean</code> fields.
   </p>
 
-  <h2>Install with the CLI (fastest)</h2>
-  <p>
-    Run <code>npx lyrashield install roo-code</code> from your project root. It detects Roo Code,
-    writes the correct config automatically and never inlines your API key into a file you might
-    commit. Add <code>--dry-run</code> first to preview the change with no write or run{" "}
-    <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
-  </p>
-  <pre><code>npx lyrashield install roo-code</code></pre>
+  <CliConfigPreview agentId="roo-code" />
   <p>Prefer to see exactly what gets written or set it up without Node.js? Configure it by hand below.</p>
 
   <h2>Local stdio setup</h2>
@@ -110,6 +104,6 @@ const jsonLd: unknown[] = [
   <div class="callout callout--warn">
     <strong>Requirements:</strong> For local stdio, Node.js 24+ and a local OAuth login or workspace API key. Remote OAuth needs no local key. The{" "}
     <code>@lyrashield/mcp</code> package is published on npm, so{" "}
-    <code>npx -y @lyrashield/mcp@0.2.11</code> resolves directly.
+    <code>npx -y @lyrashield/mcp@0.2.12</code> resolves directly.
   </div>
 </DocsLayout>

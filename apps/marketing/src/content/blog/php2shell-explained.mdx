@@ -1,0 +1,82 @@
+---
+title: "PHP2Shell explained: affected versions and fixes"
+description: "Understand the two PHP2Shell CVEs, fixed PHP branches, temporary mitigations and the evidence needed to confirm your web workers were updated."
+pubDate: 2026-10-24T00:00:00+05:30
+author: lyrashield-team
+tags: ["web-security", "supply-chain", "verification"]
+draft: false
+heroImage: php2shell-overview
+faq:
+  - q: "Which PHP versions fix PHP2Shell?"
+    a: "The October 21 fixes are in PHP 8.2.35, 8.3.36, 8.4.27 and 8.5.12. Compare within the installed branch, or obtain your distribution's explicit backport advisory."
+  - q: "Does disabling session upload progress fix both CVEs?"
+    a: "No. It blocks confirmed session lifecycle paths and mitigates the separate October 23 serializer-switch issue. Updating remains necessary for the two October 21 vulnerabilities."
+  - q: "Can a public URL check prove PHP2Shell is patched?"
+    a: "No. Headers and public behavior cannot attest the binary and configuration of every running PHP worker. Confirm those through authorized runtime and vendor evidence."
+---
+
+PHP2Shell is the name commonly used for two PHP vulnerabilities disclosed on October 21, 2026: CVE-2026-109618 and CVE-2026-109619. Start by identifying the PHP runtime serving your application, update its supported branch or verified vendor package and restart the affected workers. A patched package on disk is only part of the job; the processes receiving web requests must use it.
+
+For a small team, the awkward part is usually ownership. The application lives in Git, PHP comes from a container or hosting plan and someone else controls the service restart. The [vibe coding security guide](/blog/vibe-coding-security-guide) treats these deployment boundaries as part of application security. This incident needs that same approach: follow the request to the runtime that handles it.
+
+## Two bugs share an operational response
+
+The maintainer advisory for [CVE-2026-109618](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w) describes corruption associated with out-of-memory handling. Its confirmed mod_php attack can begin before application code runs. The [CVE-2026-109619 advisory](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp) concerns stale internal state crossing a request boundary. They are separate problems, so a workaround for one path cannot close the whole incident.
+
+You do not need to understand allocator behavior to begin remediation. You do need to avoid narrowing the ticket to a vulnerable plugin or one upload form. Runtime vulnerabilities sit below those application features. An application update that leaves the PHP executable unchanged may leave the affected component in place.
+
+That also changes how to read a quiet error log. A service can accept ordinary requests while running a vulnerable interpreter. Successful health checks are useful availability evidence, but they do not establish that the relevant security patch reached the workers. Keep those two checks separate in the response record.
+
+## Find your branch before choosing a version
+
+PHP's [October 21 announcement](https://www.php.net/archive/2026.php#2026-10-21-1) names fixed releases in four branches: 8.2.35, 8.3.36, 8.4.27 and 8.5.12. Read those as branch-specific floors. A version starting with 8.3 does not outrank every version starting with 8.2 for this decision; compare the installed release with the fix for its own branch.
+
+Distribution packages need another step. A vendor may backport a security change while retaining an older upstream-looking version. Obtain the vendor bulletin and exact package revision rather than declaring every such package vulnerable or treating any recent build date as proof. For older PHP branches, require explicit vendor coverage or plan a supported upgrade.
+
+For an inherited service, make a short inventory before anyone changes the deployment. Include the public hostname, origin service, PHP branch, package or image source, runtime owner and restart method. Record staging separately. A patched staging shell is easy to mistake for production when both machines use the same prompt.
+
+## A header is a clue, not an inventory
+
+An `X-Powered-By` value may identify PHP and suggest a version. It may also be absent, stale, rewritten by a proxy or emitted by a different backend. Treat it as a lead for investigation. Removing the header can reduce disclosure, but it does not update the interpreter.
+
+Use authorized access to inspect the running container or server. Compare that result with deployment configuration, then confirm which SAPI serves requests. CLI, FPM and Apache can load different binaries or configuration files. PHP documents these configuration distinctions in its [configuration file reference](https://www.php.net/manual/en/configuration.file.php).
+
+Our [PHP2Shell checker](/tools/php2shell-checker) helps organize a supplied version and configuration assessment. Its output depends on the evidence you provide. If you only know a repository constraint, record that as a declared requirement and leave the deployed runtime unknown. The [version checking guide](/blog/check-php-version-php2shell) walks through that distinction.
+
+## Patch the release path you actually operate
+
+For a distribution package, use the vendor's supported update procedure and retain the package transaction result. For a container, update the build input, rebuild and deploy the resulting artifact. Editing a Dockerfile without replacing the running container does not change production. The [Docker, FPM and Apache patching guide](/blog/patch-php2shell-docker-fpm-apache) covers those workflows.
+
+Choose the smallest supported change that your application can accept. Test its ordinary request paths, extensions and background tasks before widening deployment. A major branch upgrade may be necessary for an unsupported installation, but it deserves compatibility testing rather than an improvised version substitution during an incident.
+
+For example, a team can update its application image while a second service still owns the upload endpoint. Assign a runtime owner to each entry point, including customer-specific deployments. Ask that owner to attach the replacement evidence to the same incident record. That avoids a handoff where everyone assumes another team restarted the remaining pool.
+
+Agree on rollback before rollout. A rollback target should preserve the security patch where possible. If availability forces a return to an affected runtime, record the restored exposure and apply reviewed containment. Do not let the deployment system quietly turn yesterday's vulnerable image into today's successful recovery.
+
+## Use temporary settings with their limits attached
+
+Disabling session upload progress is relevant to confirmed session paths. It must apply before request parsing and survive worker restarts. Setting a value inside an application entry point is too late for that purpose. PHP's [October guidance](https://www.php.net/archive/2026.php#2026-10-21-1) also describes other partial mitigations and makes clear that updating is the complete response to the two original CVEs.
+
+Avoid copying a memory setting from a social post into production without reviewing resource controls. Changes to memory behavior can affect availability, and a control aimed at one trigger may leave other paths. If you need temporary containment, have the runtime owner choose and test it against the current maintainer instructions.
+
+Attach an expiry and owner to every workaround. Write down where it is configured, how the effective value was checked and which application behavior may change. An emergency setting left undocumented can disappear during the next image rebuild or confuse the engineer investigating a broken upload progress indicator.
+
+## Keep the October 23 issue separate
+
+On October 23, PHP published a [session upload progress notice](https://www.php.net/archive/2026.php#2026-10-23-1) for CVE-2026-115560. It describes an unusual combination of serializer configuration and a runtime serializer switch. The notice recommends disabling upload progress pending the next regular bugfix release. Do not infer that the October 21 version floors resolve this later issue.
+
+Maintain a separate checklist item even when the same configuration change helps both incidents. One item records that the original two patches reached production. The other records whether the serializer-switch preconditions apply and whether the temporary mitigation is effective. Our [CVE-2026-115560 guide](/blog/cve-2026-115560-session-upload-progress) covers that review without treating every PHP application as an exploitation match.
+
+## Close with evidence another engineer can read
+
+A useful closure record names the affected service, previous package, replacement package or image digest, deployment time and worker restart evidence. Add a runtime readback taken after the change. If a vendor backport explains an older version string, keep the vendor advisory beside the exact package revision so the next reviewer can follow it.
+
+Check every replica and pool that can serve the hostname. Include standby instances that automation might reactivate. Give each unchecked instance a named owner and a next action so a missing runtime receipt remains visible after the main service recovers. Record a missing readback as an open item rather than extrapolating from one healthy container. This is also a good time to check who owns the base image and how future security updates enter the normal release process.
+
+If you find suspicious activity, preserve relevant evidence and follow your incident response process. Patching removes an affected runtime condition; it does not establish whether an intrusion already occurred. Avoid testing public exploit code against a production service just to obtain a more dramatic confirmation.
+
+## Put the checks into your release workflow
+
+LyraShield AI can conditionally run PHP checks in Standard and Deep scans when the target and available evidence support them. Results are bounded by that evidence and do not attest every deployed worker. A repository finding can help locate a stale image declaration while an operator still needs to confirm what production runs.
+
+Use the [free Lite Check](/scan) for a passive public URL review. For an authorized application assessment, [create an account and choose a Deep scan](https://app.lyrashieldai.com/sign-up), then connect the result to the package and runtime record. Keep the original alert open until the required patch, restart and readback evidence is present, with any unresolved environment stated plainly.

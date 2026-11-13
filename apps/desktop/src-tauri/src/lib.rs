@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod api;
 mod byok;
 #[macro_use]
@@ -35,6 +33,7 @@ pub fn run() {
             logout_chatgpt,
             save_azure_config,
             clear_azure_config,
+            select_byok_provider,
             get_byok_metadata,
             get_byok_status,
             start_scan,
@@ -42,6 +41,7 @@ pub fn run() {
             list_cloud_targets,
             cancel_scan,
             list_scans,
+            list_scan_page,
             get_scan_detail,
             get_scan_events,
             export_sarif,

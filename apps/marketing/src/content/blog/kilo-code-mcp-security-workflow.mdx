@@ -2,7 +2,7 @@
 title: Kilo Code MCP security workflow before you ship
 description: Configure LyraShield AI with Kilo Code via MCP to run bounded scans per target, preserve evidence states and enforce diff aware gating on pull requests.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-11
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -15,12 +15,12 @@ faq:
   - q: "Can this gate pull requests?"
     a: "Yes. Wire the LyraShield GitHub Action in diff aware mode to comment on PRs and upload SARIF, then require the check in branch protection."
   - q: "Where does Kilo Code read MCP server config from?"
-    a: "Kilo Code reads MCP servers from the top-level mcp object. Use the CLI installer to write the entry with the correct transport and keep the lsk_ key in an environment reference."
+    a: Follow /docs/integrations/kilo-code for manual setup. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Use CLI 0.2.14 and MCP 0.2.12 for local stdio, then verify discovery and a read-only client call.
 ---
 
-Fastest path: run `npx lyrashield init` to auto-detect Kilo Code and write the correct entry, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference.
+Follow the current [kilo-code integration guide](/docs/integrations/kilo-code) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.14 login --oauth` and use `@lyrashield/mcp@0.2.12`. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
-You can connect Kilo Code to LyraShield AI over MCP to get target aware scans, recorded evidence states and fix proposals inside your normal agent loop. This guide uses the current Kilo contract and the pinned `@lyrashield/mcp@0.2.11` package.
+You can connect Kilo Code to LyraShield AI over MCP to get target aware scans, recorded evidence states and fix proposals inside your normal agent loop. This guide uses the current Kilo contract and the pinned `@lyrashield/mcp@0.2.12` package.
 
 Vibe coding moves fast and security debt can accumulate when large batches of routes, components and queries are generated in one pass. If your team uses Kilo Code to scaffold features, you want verification that matches that speed. A good starting policy is the [vibe coding security guide](/blog/vibe-coding-security-guide) which frames prompt hygiene, review checkpoints and supply chain checks. For context on what to look for, see [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), both of which confirm injection, broken access control and vulnerable dependencies remain top risks in generated web apps.
 
@@ -30,7 +30,7 @@ When you generate code with an agent, you generate more attack surface than a hu
 
 Start with Node.js 24 or newer which you can confirm via [Node.js docs](https://nodejs.org/en/docs), Git with pull request workflow and a LyraShield API key in the form lsk\_... Set the key as an environment variable named LYRASHIELD_API_KEY and avoid pasting raw values into checked in files. Kilo Code resolves `{env:LYRASHIELD_API_KEY}` at runtime, so secrets stay out of kilo.jsonc.
 
-Take stock of the app scope you want to protect. LyraShield combines bounded repository review, SCA, secrets scanning, a GitHub Action and SARIF output. Findings retain their recorded evidence states; scan detection alone is not independent verification. Fix proposals and retests remain approval-gated and PR execution remains unavailable until a server-generated patch can be bound to an exact approval. Read [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for why stdio works locally and streamable HTTP fits remote hosting.
+Take stock of the app scope you want to protect. LyraShield combines bounded repository review, SCA, secrets scanning, a GitHub Action and SARIF output. Findings retain their recorded evidence states; scan detection alone is not a retest. Fix proposals and retests remain approval-gated and PR execution remains unavailable until a server-generated patch can be bound to an exact approval. Read [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for why stdio works locally and streamable HTTP fits remote hosting.
 
 Quick sanity checks for the MCP package and env wiring:
 
@@ -38,7 +38,7 @@ Quick sanity checks for the MCP package and env wiring:
 node -v
 npm view @lyrashield/mcp version
 export LYRASHIELD_API_KEY=lsk_your_key_here
-npx lyrashield doctor
+npx -y lyrashield@0.2.14 doctor
 ```
 
 For a concrete remediation checklist that mirrors your stack, keep a sibling reference such as [Kilo Code app security checklist](/blog/kilo-code-app-security-checklist) open while you implement. It helps you map a recorded finding to a specific fix pattern without guessing.
@@ -54,7 +54,7 @@ Kilo Code reads MCP servers from `kilo.jsonc` or `.kilo/kilo.jsonc` in a project
   "mcp": {
     "lyrashield": {
       "type": "local",
-      "command": ["npx", "-y", "@lyrashield/mcp@0.2.11"],
+      "command": ["npx", "-y", "@lyrashield/mcp@0.2.12"],
       "environment": {
         "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
       },
@@ -111,14 +111,14 @@ With tools listed, run a focused scan from inside Kilo Code rather than switchin
 
 ```text
 Prompt for Kilo Code agent:
-Scan target staging-lyrafin-web using lyrashield_scan_target.
+Scan target staging-web using lyrashield_scan_target.
 Scope limit: src/app/api, src/lib/engines.
 Return findings with their recorded evidence state, CWE, evidence snippet, file and line.
 Include OWASP mapping when applicable.
 Save report id for PR gate.
 ```
 
-A good response contains finding id, severity, evidence state, file path, evidence and suggested patch location. Prioritize independently verified findings while retaining detected and inconclusive items for triage. For context on categories, see [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) again for category definitions and examples. Do not claim fixes, branches or PRs exist unless the corresponding action completed.
+A good response contains finding id, severity, evidence state, file path, evidence and suggested patch location. Prioritize retest-confirmed findings while retaining detected and inconclusive items for triage. For context on categories, see [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) again for category definitions and examples. Do not claim fixes, branches or PRs exist unless the corresponding action completed.
 
 This inline check is also where you catch secrets that were generated into sample env files. LyraShield v1 includes secrets scanning alongside SCA, so a single scan can surface both hardcoded credentials and vulnerable packages. When evidence points to a config file, rotate the secret first, then fix the code path that introduced it.
 
@@ -150,7 +150,7 @@ jobs:
           fail_on_severity: HIGH
 ```
 
-Require the security job in branch protection settings. The pairing of MCP for local dev plus the Action for CI mirrors the Model Context Protocol idea of keeping context close to the agent while enforcing policy in CI. See [GitHub Actions docs](https://docs.github.com/en/actions) for reusable workflows and [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for transport details. Once required, developers cannot merge when findings meet the configured severity gate; that policy does not turn a detected finding into an independently verified one.
+Require the security job in branch protection settings. The pairing of MCP for local dev plus the Action for CI mirrors the Model Context Protocol idea of keeping context close to the agent while enforcing policy in CI. See [GitHub Actions docs](https://docs.github.com/en/actions) for reusable workflows and [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for transport details. Once required, developers cannot merge when findings meet the configured severity gate; that policy does not turn a detected finding into a retest-confirmed one.
 
 ## 6. Add agent rules for consistent secure coding
 
@@ -178,6 +178,6 @@ Store the file as .kilo/rules.md or kilo.md in your repo root so it travels with
 
 ## Why pair Kilo Code with LyraShield
 
-Kilo Code gives you fast scaffolding and agent controlled edits, but fast generation still needs bounded review. LyraShield records findings with explicit evidence states, maps each issue to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), checks dependencies using [OSV](https://osv.dev/) and keeps the loop inside MCP so you avoid context switching. The configured gate and SARIF output make triage visible where developers already work without claiming that every detection is independently verified.
+Kilo Code gives you fast scaffolding and agent controlled edits, but fast generation still needs bounded review. LyraShield records findings with explicit evidence states, maps each issue to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), checks dependencies using [OSV](https://osv.dev/) and keeps the loop inside MCP so you avoid context switching. The configured gate and SARIF output make triage visible where developers already work without claiming that every detection is retest-confirmed.
 
 Close the loop with the working checklist: walk through [AI app security checklist](/tools/ai-app-security-checklist) on each release candidate and confirm your config matches [Kilo Code integration guide](/docs/integrations/kilo-code). When you are ready to evaluate managed scanning, [create an account at LyraShield AI](https://app.lyrashieldai.com/sign-up) and keep the PR gate as your source of truth for verification.

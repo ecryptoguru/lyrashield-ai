@@ -47,7 +47,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!(await verifyTurnstile(parsed.data.turnstileToken))) {
     return response(
       request,
-      { error: "bot_check_failed", message: "Please retry the abuse check." },
+      { error: "bot_check_failed", message: "Complete verification again, then retry." },
       403
     )
   }

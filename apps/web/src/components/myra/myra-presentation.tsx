@@ -572,7 +572,7 @@ export function ProposalActions({
   if (state.state === "cancelled") {
     return (
       <p role="status" className="text-muted-foreground mt-2 text-xs">
-        Canceled before execution.
+        Cancelled before execution.
       </p>
     )
   }

@@ -34,7 +34,7 @@ const COLORS = {
 export const OG_CARDS = [
   {
     slug: "home",
-    eyebrow: "RELEASE ASSURANCE",
+    eyebrow: "LAUNCH GATE",
     title: "Ship AI-built apps with evidence, not hope.",
     path: "lyrashieldai.com",
   },
@@ -65,7 +65,7 @@ export const OG_CARDS = [
   {
     slug: "agents",
     eyebrow: "FOR CODING AGENTS",
-    title: "Release assurance your agent can act on",
+    title: "A launch gate your agent can act on",
     path: "lyrashieldai.com/agents",
   },
   {
@@ -88,8 +88,8 @@ export const OG_CARDS = [
   },
   {
     slug: "ai-safety",
-    eyebrow: "AI SAFETY",
-    title: "Prompt-injection guard evaluation",
+    eyebrow: "MCP GUARD",
+    title: "MCP guard evaluation",
     path: "lyrashieldai.com/ai-safety",
   },
   {
@@ -131,7 +131,10 @@ async function fontFace(family, file) {
 
 export async function renderCards({ write = true } = {}) {
   const faces = [
-    await fontFace("Bricolage", "bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2"),
+    await fontFace(
+      "Bricolage",
+      "bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2"
+    ),
     await fontFace("JetBrains", "jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2"),
     await fontFace("Inter", "inter/files/inter-latin-wght-normal.woff2"),
   ].join("")

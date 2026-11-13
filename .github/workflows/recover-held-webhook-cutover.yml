@@ -1,0 +1,58 @@
+name: Recover held webhook cutover
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact current main commit for the recovery candidate
+        required: true
+        type: string
+      prepared_run_id:
+        description: Successful offline recovery candidate build run ID
+        required: true
+        type: string
+      original_run_id:
+        description: Failed original cutover GitHub Actions run ID
+        required: true
+        type: string
+      original_owner:
+        description: Exact original admission stop owner (run ID:attempt)
+        required: true
+        type: string
+      original_source_sha:
+        description: Exact original cutover product commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate-dispatch-ref:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require recovery dispatch from main
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          if [[ "$DISPATCH_REF" != 'refs/heads/main' ]]; then
+            echo 'Held webhook recovery must be dispatched from main.' >&2
+            exit 1
+          fi
+  recover:
+    needs: validate-dispatch-ref
+    # The reusable deployment owns the same production concurrency lock as
+    # ordinary releases; never create an independent recovery lock here.
+    uses: ./.github/workflows/deploy-azure.yml
+    with:
+      source_sha: ${{ inputs.source_sha }}
+      held_recovery_prepared_run_id: ${{ inputs.prepared_run_id }}
+      held_recovery_original_run_id: ${{ inputs.original_run_id }}
+      held_recovery_original_owner: ${{ inputs.original_owner }}
+      held_recovery_original_source_sha: ${{ inputs.original_source_sha }}
+    secrets: inherit
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      packages: write

@@ -143,3 +143,14 @@ against the light background) on the light theme.
 - Don't introduce purple/violet, glassmorphism-heavy layers or emoji in UI.
 - Don't change public copy claims (certification, guarantee, universal
   coverage) — see `docs/policies.md`.
+
+## Homepage surface
+
+The concise cinematic homepage follows [its surface brief](docs/design/homepage.md),
+including its fluid type scale, motion budget and localhost approval gate.
+
+## Public reading and tools
+
+Guides, docs, policies and supporting product pages follow
+[the reading and tools brief](docs/design/public-reading-and-tools.md), with
+text-first hierarchy, compact navigation and explicit local-check feedback.

@@ -267,7 +267,7 @@ Use only the approved stable tags. The suggested tags below are intentionally na
 - Required source families: NIST software-assurance research, OASIS SARIF, official scanner dismissal documentation.
 - Authority link context: cite the guide's detected versus independently verified states before discussing dismissals.
 - Free-tool CTA: `/tools/secret-exposure-scanner`, used as a transparent example of deterministic patterns and explicit false-positive limits.
-- Product bridge: verified findings and evidence retry. Do not imply confidence alone sets a finding to verified.
+- Product bridge: recorded findings, evidence and retry behavior. State that current scans do not produce the reserved `VERIFIED` status; confidence alone never creates verification.
 - Related dependency: `/blog/verify-security-finding`.
 - Suggested tags: `verification`.
 - FAQ decision: yes. Cover acceptable false-positive rate, suppression versus fix and why lower noise can increase false negatives.

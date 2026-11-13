@@ -12,10 +12,21 @@ const world = readFileSync(
   "utf8"
 )
 const worldModule = readFileSync(
-  new URL("../components/landing/evidence-world.ts", import.meta.url),
+  new URL("../components/landing/evidence-journey.ts", import.meta.url),
   "utf8"
 )
+const motionManifest = readFileSync(new URL("../lib/motion-manifest.ts", import.meta.url), "utf8")
+const manifestIds = [...motionManifest.matchAll(/^    id: "([a-z-]+)",$/gm)].map(
+  (match) => match[1]
+)
 const astroConfig = readFileSync(new URL("../../astro.config.mjs", import.meta.url), "utf8")
+
+/**
+ * Hero copy is wrapped across source lines, so assertions run against a
+ * whitespace-collapsed copy of the component. Without this, re-wrapping the same
+ * approved sentence would fail the test.
+ */
+const heroCopy = hero.replace(/\s+/g, " ")
 
 describe("premium assurance-world homepage", () => {
   it("promotes the assurance world to the canonical homepage", () => {
@@ -25,12 +36,18 @@ describe("premium assurance-world homepage", () => {
     expect(astroConfig).toContain('inlineStylesheets: "auto"')
     expect(homepage).toContain("<HomeLiteScan />")
     expect(homepage).toContain("<EvidenceWorld manifest={motionManifest} />")
-    expect(homepage.indexOf("<PremiumHero />")).toBeLessThan(homepage.indexOf('id="how-it-works"'))
-    expect(homepage.indexOf('id="how-it-works"')).toBeLessThan(
+    // Nine-block order (spec section 8): hero, what is different, Lite Check,
+    // journey, surfaces, coverage, pricing, FAQ, closing CTA.
+    expect(homepage.indexOf("<PremiumHero cinematic />")).toBeLessThan(
+      homepage.indexOf("<EvidenceMap />")
+    )
+    expect(homepage.indexOf("<EvidenceMap />")).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
+    expect(homepage.indexOf("<HomeLiteScan")).toBeLessThan(homepage.indexOf("<EvidenceWorld"))
+    expect(homepage.indexOf("<EvidenceWorld")).toBeLessThan(
       homepage.indexOf("<HeroProductFrame />")
     )
-    expect(homepage.indexOf("<HeroProductFrame />")).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
-    expect(homepage.indexOf("<HomeLiteScan")).toBeLessThan(homepage.indexOf("<EvidenceWorld"))
+    // The journey block carries the anchor the header links to.
+    expect(homepage.indexOf('id="how-it-works"')).toBeLessThan(homepage.indexOf("<EvidenceWorld"))
     expect(homepage).toContain('renderHash === "local" ? "/media-local"')
     expect(homepage.match(/cinematic-threshold--to-dark/g)).toHaveLength(3)
     expect(homepage.match(/cinematic-threshold--to-light/g)).toHaveLength(3)
@@ -39,70 +56,83 @@ describe("premium assurance-world homepage", () => {
     expect(homepage).not.toContain("<Loop />")
   })
 
-  it("uses approved gateway copy and conversion anchors", () => {
-    expect(hero).toContain("Release assurance for AI-built apps")
-    expect(hero).toContain("Know what your AI-built app is ready to ship.")
-    expect(hero).toContain(
-      "Review an authorized repository, URL or API. See what was checked, what needs attention and"
-    )
-    expect(hero.indexOf("landing_hero&cta=review_app")).toBeLessThan(
-      hero.indexOf('href="#free-scan"')
+  it("uses concise launch-gate copy and preserves conversion attribution", () => {
+    expect(hero).toContain("The launch gate for AI-built apps.")
+    expect(heroCopy).toContain("Review your repo, website or API.")
+    expect(heroCopy).toContain("Approve proposed fixes and retest before you ship.")
+    expect(hero).not.toContain("Release assurance")
+    expect(hero.indexOf("landing_hero&cta=start_trial")).toBeLessThan(
+      hero.indexOf('href="#how-it-works"')
     )
     expect(hero).toContain("app.lyrashieldai.com/sign-up")
-    expect(hero).toContain("Missing evidence stays visible")
   })
 
-  it("keeps the hero task-oriented and the artifact example honest", () => {
-    // EXP-001: task CTA outranks account creation; lite check is a real
-    // secondary action, not a buried text link.
-    expect(hero).toContain("Start a review")
-    expect(hero).toContain('data-cta-id="premium-hero-review-app"')
-    expect(hero).toContain("premium-hero__secondary")
-    expect(hero).toContain("Try the free Lite Check")
+  it("keeps one hero action pair and one honest illustrative finding in the journey", () => {
+    expect(hero).toContain("CTA_LABEL.signUp")
+    expect(hero).toContain("TRIAL_LINE")
+    expect(hero).toContain('data-cta-id="premium-hero-primary"')
+    expect(hero).toContain('data-cta-id="premium-hero-workflow"')
+    expect(hero).toContain("See the workflow")
     expect(hero).not.toContain("Create account")
-    // The artifact is a synthetic example — it must never claim a verified or
-    // independently-reviewed state.
-    expect(hero).toContain("Example finding · Detected")
-    expect(hero).toContain("bounded to the checks that ran")
-    expect(hero).not.toMatch(/Verified finding|independent verification/i)
+    expect(hero).not.toContain("<figure")
+    expect(hero).not.toContain("<form")
+    expect(world).toContain("Illustrative example")
+    expect(world).toContain("Finding EX-014")
+    expect(world).toContain("Insufficient evidence")
+    const artifact = world.slice(world.indexOf('class="journey__artifact"'))
+    expect(artifact).not.toMatch(/state-verified|state-confirmed/)
   })
 
-  it("shows a three-step review flow in the landing decision path", () => {
-    expect(homepage).toContain('aria-labelledby="workflow-heading"')
-    expect(homepage).toContain("One review, from authorized scope to useful evidence")
-    for (const label of ["Choose scope", "Review evidence", "Decide what is next"]) {
-      expect(homepage).toContain(label)
+  it("tells the review loop through the journey block, not a static list", () => {
+    // The static three-step block retold the story the journey already tells in
+    // six chapters, so it was folded into block 4 (spec section 8).
+    expect(homepage).not.toContain("One review, from authorized scope to useful evidence")
+    expect(homepage).toContain("<EvidenceWorld manifest={motionManifest} />")
+    expect(homepage).toContain('id="how-it-works"')
+    // The six chapters still carry the loop, and the fix rule is still stated.
+    for (const chapter of [
+      "target",
+      "scan",
+      "evidence-state",
+      "fix-proposal",
+      "retest",
+      "report",
+    ]) {
+      expect(manifestIds).toContain(chapter)
     }
-    expect(homepage).toContain(
-      "review a proposed fix, approve it explicitly and run a fresh retest"
-    )
+    expect(motionManifest).toContain("Nothing auto-merges")
     expect(homepage).not.toMatch(/independent verification|verified fixes/i)
   })
 
-  it("keeps agent setup subordinate to existing homepage conversions", () => {
-    const agentLink = hero.indexOf("premium-hero-agent-setup")
-    expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-lite-check"))
-    expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-review-app"))
+  it("keeps agent setup reachable after the main homepage conversions", () => {
+    const agentLink = homepage.indexOf('href="/agents"')
+    expect(agentLink).toBeGreaterThan(homepage.indexOf("<PremiumHero cinematic />"))
+    expect(agentLink).toBeGreaterThan(homepage.indexOf("<HomeLiteScan />"))
+    expect(homepage).toContain("cliLoginCommand")
   })
 
   it("builds one immutable desktop and portrait track with seven timed chapters", () => {
     const manifest = createMotionMediaManifest("/media-local/", "test-render")
     const ids = manifest.chapters.map((chapter) => chapter.id)
-    expect(manifest.version).toBe("2")
+    expect(manifest.version).toBe("3")
     expect(manifest.desktop).toEqual({
-      src: "/media-local/assurance-world/v2/test-render/desktop/assurance-world.mp4",
-      width: 1600,
-      height: 900,
-      duration: 42,
+      src: "/media-local/assurance-world/v3/test-render/desktop/assurance-world.mp4",
+      width: 1440,
+      height: 810,
+      duration: 56,
     })
     expect(manifest.portrait).toEqual({
-      src: "/media-local/assurance-world/v2/test-render/portrait/assurance-world.mp4",
+      src: "/media-local/assurance-world/v3/test-render/portrait/assurance-world.mp4",
       width: 720,
       height: 1280,
-      duration: 42,
+      duration: 56,
     })
     expect(ids).toHaveLength(7)
-    expect(manifest.chapters.filter((chapter) => chapter.supportingCard)).toHaveLength(5)
+    expect(manifest.chapters.filter((chapter) => chapter.supportingCard)).toHaveLength(0)
+    for (const chapter of manifest.chapters) {
+      expect(chapter.title.length).toBeLessThan(35)
+      expect(chapter.body.length).toBeLessThan(115)
+    }
     expect(new Set(ids).size).toBe(7)
     expect(ids).toEqual([
       "gateway",
@@ -114,13 +144,13 @@ describe("premium assurance-world homepage", () => {
       "report",
     ])
     expect(manifest.chapters.map(({ start, end }) => [start, end])).toEqual([
-      [0, 6],
-      [6, 12],
-      [12, 18],
-      [18, 24],
-      [24, 30],
-      [30, 36],
-      [36, 42],
+      [0, 8],
+      [8, 16],
+      [16, 24],
+      [24, 32],
+      [32, 40],
+      [40, 48],
+      [48, 56],
     ])
     for (const chapter of manifest.chapters) {
       expect(chapter.desktopPoster).toMatch(/-desktop\.webp$/)
@@ -128,74 +158,25 @@ describe("premium assurance-world homepage", () => {
     }
   })
 
-  it("lazy-loads the evidence-world module as an island", () => {
-    expect(world).toContain('import("./evidence-world.ts")')
-    expect(world).toContain("IntersectionObserver")
-    expect(world).toContain("bootstrapEvidenceWorld")
-    expect(world).toContain("min-height: max(840px, 115svh)")
-    expect(world).toContain("min-height: max(840px, 125svh)")
-    expect(world).toContain("font-size: clamp(1.6rem, 7.4vw, 2.5rem)")
-  })
-
-  it("warms the scrubbed timeline in parallel with the page, but only when wanted", () => {
-    // The story is scroll-scrubbed, so arriving with an empty buffer stutters on
-    // the first pass. The element upgrades early and fetches ahead of arrival.
-    expect(worldModule).toContain('this.video.preload = "auto"')
-    expect(worldModule).not.toContain('this.video.preload = "metadata"')
-    // Only the fetch moves early; per-frame scroll work still waits for the
-    // observer, so the module must still assign the source before observing.
-    expect(worldModule.indexOf("this.assignSource()")).toBeLessThan(
-      worldModule.indexOf("this.observer = new IntersectionObserver")
-    )
-
-    // Scheduled off the critical path so it never competes with the hero.
-    expect(world).toContain("requestIdleCallback")
-    expect(world).toContain('document.readyState === "complete"')
-    expect(world).toContain('addEventListener("load", schedule, { once: true })')
-
-    // A multi-megabyte prefetch has to stay opt-out-able.
-    expect(world).toContain("if (!reduced && !saveData && !slowNetwork)")
-    expect(world).toContain('connection?.effectiveType === "slow-2g"')
-
-    // The markup itself must stay preload="none" so a no-JS or reduced-motion
-    // visit fetches no video at all.
-    expect(world).toContain('preload="none"')
-  })
-
-  it("keeps telemetry privacy-bounded and includes resilient media fallbacks", () => {
-    expect(worldModule).toContain('"cinematic_chapter_view"')
-    expect(worldModule).toContain("{ chapter_id: chapterId, mode }")
-    expect(worldModule).toContain('"cinematic_media_error"')
-    expect(worldModule).toContain("chapter_id: chapterId")
-    expect(worldModule).toContain("asset_type: assetType")
-    expect(worldModule).not.toContain("exception")
-    expect(worldModule).not.toContain("userAgent")
+  it("ships the evidence journey without a video download or motion dependency", () => {
+    expect(world).not.toContain("<video")
+    expect(world).toContain('import "./evidence-journey"')
+    expect(worldModule).toContain("IntersectionObserver")
+    expect(worldModule).toContain("document.hidden")
     expect(worldModule).toContain('matchMedia("(prefers-reduced-motion: reduce)")')
-    expect(worldModule).toContain("connection?.saveData")
-    expect(worldModule.indexOf("if (!this.motionEnabled)")).toBeLessThan(
-      worldModule.indexOf('this.classList.add("is-enhanced")')
-    )
-    expect(worldModule).toContain('rootMargin: "50% 0px"')
-    expect(worldModule).not.toContain("URL.createObjectURL")
+    expect(worldModule).toContain("saveData")
+    expect(worldModule).toContain("disconnectedCallback")
   })
 
-  it("coalesces scroll seeks and keeps exactly one decoded video layer in front", () => {
-    expect(world.match(/<video/g)).toHaveLength(1)
-    expect(worldModule).toContain("if (video.seeking) return")
-    expect(worldModule).toContain("requestVideoFrameCallback")
-    expect(worldModule).toContain("setTimeout(painted, 120)")
-    expect(worldModule).toContain('addEventListener("loadeddata", this.queueUpdate)')
-    expect(worldModule).toContain("HTMLMediaElement.HAVE_CURRENT_DATA")
-    expect(worldModule).toContain("this.showPoster()")
-    expect(worldModule).toContain("this.showVideo()")
-    expect(worldModule).toContain("Math.max(this.targetTime, 0)")
-    expect(worldModule).not.toContain("video.currentTime + delta *")
-    expect(worldModule).not.toContain("response.blob()")
-    expect(worldModule).not.toContain("URL.createObjectURL")
-    expect(worldModule).not.toContain("loadPair")
-    expect(worldModule).toContain("if (innerWidth === this.viewportWidth)")
-    expect(worldModule).toContain('chapter.classList.toggle("is-active", chapterIndex === index)')
-    expect(worldModule).toContain("chapterProgress >= 0.58")
-    expect(worldModule).toContain('"is-card-active"')
+  it("keeps the same illustrative finding and its limitations through the report", () => {
+    expect(world).toContain("Finding EX-014")
+    expect(world).toContain("Example EX-014 remains on record")
+    expect(world).toContain("Incomplete coverage · inconclusive")
+    expect(world).toContain("Insufficient evidence")
+    expect(world).toContain("Approval required")
+    expect(world).toContain("Retest coverage incomplete")
+    expect(world).not.toContain("state-verified")
+    expect(world).toContain('aria-label="Evidence journey chapters"')
+    expect(world).toContain('href="#product-preview"')
   })
 })

@@ -1,4 +1,6 @@
 import pg from "pg"
+import { getCACertificates } from "node:tls"
+import { SUPABASE_ROOT_CA } from "./supabase-ca"
 import { logger } from "@lyrashield/logger"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { createBoundedPgAdapter, observePgPoolConnections, resolveDbPoolMax } from "./pool"
@@ -35,11 +37,23 @@ describe("resolveDbPoolMax", () => {
 })
 
 describe("createBoundedPgAdapter", () => {
-  it("builds an adapter without throwing for a valid connection string", () => {
-    // The adapter wraps a pg.Pool built from the config; it does not connect
-    // until first use, so construction alone must succeed.
-    expect(() => createBoundedPgAdapter("postgresql://u:p@127.0.0.1:5432/db")).not.toThrow()
-  })
+  it.each(["db", "db:system"] as const)(
+    "enforces verified Supabase TLS in the %s pool",
+    async (scope) => {
+      const raw =
+        "postgres://runtime:synthetic@aws-0-test.pooler.supabase.com:5432/postgres?sslmode=require&uselibpqcompat=true"
+      const adapter = await createBoundedPgAdapter(raw, scope).connect()
+      const pool = adapter.underlyingDriver()
+      expect(pool.options).not.toHaveProperty("connectionString")
+      expect(pool.options.ssl).toEqual({
+        rejectUnauthorized: true,
+        ca: [...getCACertificates("default"), SUPABASE_ROOT_CA],
+      })
+      expect(pool.options.host).toBe("aws-0-test.pooler.supabase.com")
+      expect(pool.options.max).toBe(4)
+      await adapter.dispose()
+    }
+  )
 
   it("observes the pg pool created by Prisma without opening a database connection", async () => {
     const adapter = await createBoundedPgAdapter("postgresql://u:p@127.0.0.1:5432/db").connect()

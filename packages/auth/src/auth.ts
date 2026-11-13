@@ -16,6 +16,7 @@ import { buildMicrosoftSocialProvider, isOAuthProviderConfigured } from "./oauth
 import { needsOAuthWorkspaceSelection } from "./oauth-workspace"
 import { resourcesMatch } from "./oauth-resource"
 import { hasPermission, PERMISSIONS } from "./permissions"
+import { accountIssuerCompatibility } from "./account-issuer"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
 const GITHUB_CLIENT_SECRET = env.GITHUB_CLIENT_SECRET
@@ -35,6 +36,7 @@ export const OAUTH_AUTH_VERSION_CLAIM = "https://lyrashieldai.com/auth_version"
 import { OAUTH_SCOPE_READ, OAUTH_SCOPE_WRITE } from "./oauth-scopes"
 import { oauthConsentReferenceId, selectedOAuthWorkspaceId } from "./oauth-consent-reference"
 import { validateSessionFieldWrite } from "./session-field-guard"
+import { capturePasswordResetForTest } from "./password-reset-capture"
 export { OAUTH_SCOPE_READ, OAUTH_SCOPE_WRITE }
 export const OAUTH_RESOURCE = new URL("/api/mcp", env.NEXT_PUBLIC_APP_URL).toString()
 export const OAUTH_ISSUER = new URL("/api/auth", env.BETTER_AUTH_URL).toString().replace(/\/$/, "")
@@ -77,13 +79,17 @@ const oauthProviderPlugin = oauthProvider({
   consentPage: "/oauth/consent",
   scopes: oauthScopes,
   validAudiences: [OAUTH_RESOURCE, env.NEXT_PUBLIC_APP_URL],
-  resources: [
-    {
-      identifier: OAUTH_RESOURCE,
-      name: "LyraShield MCP",
-      allowedScopes: oauthScopes,
-    },
-  ],
+  // Next imports auth while collecting routes. Seed resources only in the running app.
+  resources:
+    process.env.NEXT_PHASE === "phase-production-build"
+      ? []
+      : [
+          {
+            identifier: OAUTH_RESOURCE,
+            name: "LyraShield MCP",
+            allowedScopes: oauthScopes,
+          },
+        ],
   // There is one hosted resource. Existing and dynamically registered MCP
   // clients may request it without a separate administrative link step.
   enforcePerClientResources: false,
@@ -272,6 +278,7 @@ async function sendResetPasswordEmail({
   user: { email: string; name: string }
   url: string
 }) {
+  if (await capturePasswordResetForTest(user, url)) return
   if (isProd && env.BREVO_API_KEY) {
     const apiKey = env.BREVO_API_KEY as string
     void (async () => {
@@ -322,6 +329,7 @@ async function sendPlatformAdminSecurityAlert(subject: string, htmlContent: stri
 }
 
 export const auth = betterAuth({
+  ...accountIssuerCompatibility,
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
@@ -373,7 +381,11 @@ export const auth = betterAuth({
       if (context.path === "/update-session") {
         const sess = await getSessionFromCtx(context)
         if (sess?.user.id) {
-          await validateSessionFieldWrite(context.body, sess.user.id)
+          await validateSessionFieldWrite(
+            context.body,
+            sess.user.id,
+            (sess.session as { activeWorkspaceId?: string | null }).activeWorkspaceId
+          )
         }
       }
 

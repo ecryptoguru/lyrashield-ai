@@ -1,6 +1,42 @@
-import { prisma, createAndSendNotification } from "@lyrashield/db"
-import { sendNotification, type NotificationChannel } from "@lyrashield/integrations"
+import {
+  prisma,
+  createAndSendNotification,
+  getWorkspaceNotificationChannels,
+  withActiveWorkspaceNotificationDestination,
+} from "@lyrashield/db"
+import { sendNotification, sendWorkspaceNotification } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
+
+async function workspaceDelivery(workspaceId: string) {
+  let destinations: Awaited<ReturnType<typeof getWorkspaceNotificationChannels>> = []
+  try {
+    destinations = await getWorkspaceNotificationChannels(workspaceId)
+  } catch {
+    logger.warn("Workspace notification destinations unavailable; retaining in-app delivery", {
+      workspaceId,
+    })
+  }
+  return {
+    channels: ["in_app", ...destinations.map(({ channel }) => channel)],
+    sendFn: async (
+      channel: string,
+      payload: { type: string; title: string; body: string; workspaceName?: string }
+    ): Promise<boolean | "skipped"> => {
+      if (channel === "in_app") return sendNotification("in_app", payload)
+      const destination = destinations.find((item) => item.channel === channel)
+      if (!destination) return false
+      // Re-resolve under the same purpose lock used by reconnect and disable. The initial
+      // snapshot chooses channels only; it never authorizes sending to a stale credential.
+      const sent = await withActiveWorkspaceNotificationDestination(
+        workspaceId,
+        destination.channel,
+        (configRef) =>
+          sendWorkspaceNotification(destination.channel, payload, { workspaceId, configRef })
+      )
+      return sent ?? "skipped"
+    },
+  }
+}
 
 export async function notifyScanCompleted(
   workspaceId: string,
@@ -30,7 +66,7 @@ export async function notifyScanCompleted(
         windowLabel: "Recent scan completions",
         detail: `${summary} · ${findingCount} finding${findingCount === 1 ? "" : "s"}`,
       },
-      sendFn: (channel, payload) => sendNotification(channel as NotificationChannel, payload),
+      ...(await workspaceDelivery(workspaceId)),
     })
   } catch (error) {
     logger.error("Failed to send scan completed notification", { error: String(error), scanId })
@@ -58,12 +94,43 @@ export async function notifyScanFailed(
       title,
       body,
       workspaceName: workspace?.name,
-      sendFn: (channel, payload) => sendNotification(channel as NotificationChannel, payload),
+      ...(await workspaceDelivery(workspaceId)),
     })
   } catch (error) {
     logger.error("Failed to send scan failed notification", { error: String(error), scanId })
     throw error
   }
+}
+
+export async function notifyScheduleBlocked(
+  workspaceId: string,
+  scheduleId: string,
+  targetName: string,
+  reason:
+    | "DOMAIN_VERIFICATION_REQUIRED"
+    | "SCAN_ELIGIBILITY_REQUIRED"
+    | "SCAN_ELIGIBILITY_UNAVAILABLE"
+    | "SCAN_PROFILE_UNAVAILABLE",
+  day = new Date().toISOString().slice(0, 10)
+): Promise<void> {
+  const safeTargetName = targetName.trim().slice(0, 120) || "your target"
+  const detail =
+    reason === "SCAN_PROFILE_UNAVAILABLE"
+      ? `The scheduled review profile for ${safeTargetName} is no longer available. Update the schedule or target settings to resume it.`
+      : reason === "DOMAIN_VERIFICATION_REQUIRED"
+        ? `Verify domain control for ${safeTargetName} in target settings to resume engine-backed reviews.`
+        : reason === "SCAN_ELIGIBILITY_UNAVAILABLE"
+          ? `LyraShield could not confirm eligibility for the scheduled review of ${safeTargetName}. Check workspace access and try again later.`
+          : `The workspace is not currently eligible for the scheduled review of ${safeTargetName}. Restore billing or workspace access to resume it.`
+
+  await createAndSendNotification({
+    workspaceId,
+    type: "schedule.blocked",
+    title: "Scheduled review needs attention",
+    body: detail,
+    dedupeKey: `schedule-blocked:${scheduleId}:${reason}:${day}`,
+    ...(await workspaceDelivery(workspaceId)),
+  })
 }
 
 export async function notifyCriticalFinding(
@@ -83,7 +150,7 @@ export async function notifyCriticalFinding(
       title,
       body,
       workspaceName,
-      sendFn: (channel, payload) => sendNotification(channel as NotificationChannel, payload),
+      ...(await workspaceDelivery(workspaceId)),
     })
   } catch (error) {
     logger.error("Failed to send critical finding notification", {

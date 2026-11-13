@@ -1,3 +1,4 @@
+import { canonicalJson as canonicalize } from "@lyrashield/types"
 import { createHash } from "node:crypto"
 import { logger } from "@lyrashield/logger"
 import { prisma } from "./client"
@@ -17,16 +18,6 @@ export type AiSystemProfileInput = {
 
 const MAX_SCALAR_LENGTH = 4_000
 const MAX_ARRAY_ENTRIES = 50
-
-function canonicalize(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`
-  const object = value as Record<string, unknown>
-  return `{${Object.keys(object)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalize(object[key])}`)
-    .join(",")}}`
-}
 
 function validateScalar(value: string | null, field: string, required = false): void {
   if (required && !value?.trim())

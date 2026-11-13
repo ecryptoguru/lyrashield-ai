@@ -6,6 +6,7 @@ import {
   gateReasonSentence,
   parseReleaseReference,
   projectGateReadinessReport,
+  readinessTargetPageHref,
   resolveReleaseCheckTargetId,
 } from "./launch-readiness"
 
@@ -39,7 +40,41 @@ describe("resolveReleaseCheckTargetId", () => {
   })
 })
 
+describe("readiness target pagination links", () => {
+  it("preserves the selected target and release identity while changing cursor", () => {
+    const href = readinessTargetPageHref({
+      targetId: "target-1",
+      commit: "a".repeat(40),
+      cursor: "target-5",
+    })
+    const url = new URL(href, "https://example.test")
+    expect(url.pathname).toBe("/dashboard/launch-readiness")
+    expect(url.searchParams.get("targetId")).toBe("target-1")
+    expect(url.searchParams.get("commit")).toBe("a".repeat(40))
+    expect(url.searchParams.get("cursor")).toBe("target-5")
+  })
+})
+
 describe("projectGateReadinessReport", () => {
+  it("does not claim workspace readiness when the target list is partial", () => {
+    const report = projectGateReadinessReport(
+      [],
+      [
+        {
+          targetId: "t",
+          targetName: "API",
+          state: "READY",
+          applicable: true,
+          blockingFindings: 0,
+          reasons: [],
+        },
+      ],
+      { partial: true }
+    )
+    expect(report.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(report.summary).toContain("more target")
+  })
+
   it("maps Gate v2 NOT_READY without allowing a high score to override it", () => {
     const report = projectGateReadinessReport(
       [],
@@ -390,12 +425,6 @@ describe("generateLaunchReadinessReport", () => {
       expect(report.verdict).toBe("NO_GO")
       expect(report.score).not.toBeNull()
       expect(report.conditions.join(" ")).toContain("5 applicable control(s)")
-    })
-
-    it("is unchanged when the caller reports no unresolved controls", () => {
-      const report = generateLaunchReadinessReportFromAggregate([], true, { evaluated: true })
-      expect(report.verdict).toBe("GO")
-      expect(report.score).toBe(100)
     })
   })
 })

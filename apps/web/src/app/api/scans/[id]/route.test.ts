@@ -11,6 +11,21 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@lyrashield/db", () => ({
   getScanWithEvents: vi.fn(),
+  withDelegatedReadAuthority: async (
+    params: { targetId?: string; allTargets?: boolean; allowedTargetIds?: string[] },
+    run: (tx: unknown, authority: { targetIds: string[]; allowedProfiles: string[] }) => unknown
+  ) =>
+    run(
+      {},
+      {
+        targetIds: params.targetId
+          ? [params.targetId]
+          : params.allTargets
+            ? ["target-1"]
+            : (params.allowedTargetIds ?? []),
+        allowedProfiles: ["STANDARD"],
+      }
+    ),
   cancelScan: vi.fn(),
   removeScan: vi.fn(),
   claimOrGetAgentOperation: vi.fn(),
@@ -36,6 +51,31 @@ vi.mock("@lyrashield/logger", () => ({
   setRequestIdResolver: vi.fn(),
   logger: { error: vi.fn() },
 }))
+const delegatedScanAccessMock = vi.fn()
+vi.mock("../../../../lib/delegated-target-read-scope", () => ({
+  delegatedReadPrincipal: (session: {
+    userId?: string
+    oauth?: {
+      connectionId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+    }
+  }) =>
+    session.oauth?.connectionId
+      ? {
+          workspaceId: "ws-1",
+          userId: session.userId ?? "user-1",
+          memberId: "member-1",
+          memberRole: "OWNER",
+          memberUpdatedAt: new Date("2026-11-05T10:00:00Z"),
+          connectionId: session.oauth.connectionId,
+          authorizationVersion: 2,
+          allTargets: session.oauth.allTargets,
+          allowedTargetIds: session.oauth.allowedTargetIds ?? [],
+        }
+      : null,
+  delegatedScanAccess: (...args: unknown[]) => delegatedScanAccessMock(...args),
+}))
 
 import { DELETE, GET, POST } from "./route"
 import {
@@ -48,13 +88,58 @@ import {
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { getScanQueuePosition } from "@lyrashield/integrations"
+import { publicScanProvenance } from "../../../../lib/scan-provenance"
+import { buildScanExecutionPlan } from "@lyrashield/types"
 import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const routeParams = { params: Promise.resolve({ id: "scan-1" }) }
+const cookieSession = { userId: "user-1" }
+const narrowSession = {
+  userId: "user-1",
+  oauth: {
+    connectionId: "connection-1",
+    scopes: ["lyrashield.read", "lyrashield.write"],
+    allTargets: false,
+    allowedTargetIds: ["target-1"],
+  },
+}
+const allTargetsSession = {
+  userId: "user-1",
+  oauth: {
+    connectionId: "connection-2",
+    scopes: ["lyrashield.read", "lyrashield.write"],
+    allTargets: true,
+    allowedTargetIds: [],
+  },
+}
+const readOnlySession = {
+  userId: "user-1",
+  oauth: {
+    connectionId: "connection-3",
+    scopes: ["lyrashield.read"],
+    allTargets: false,
+    allowedTargetIds: ["target-1"],
+  },
+}
 
 describe("/api/scans/[id] workspace boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delegatedScanAccessMock.mockResolvedValue({
+      scanId: "scan-1",
+      status: "COMPLETED",
+      statusOnly: false,
+    })
+    vi.mocked(assertOAuthDelegatedScope).mockImplementation((session, targetId) => {
+      const connection = session.oauth
+      if (
+        connection?.connectionId &&
+        !connection.allTargets &&
+        (!targetId || !connection.allowedTargetIds?.includes(targetId))
+      ) {
+        throw new Error("FORBIDDEN")
+      }
+    })
   })
 
   it("requires an explicit workspace before reading a scan", async () => {
@@ -65,7 +150,12 @@ describe("/api/scans/[id] workspace boundary", () => {
   })
 
   it("authorizes and queries inside the requested workspace", async () => {
-    vi.mocked(getScanWithEvents).mockResolvedValue({ id: "scan-1", workspaceId: "ws-1" } as never)
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: cookieSession } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+    } as never)
 
     const response = await GET(
       new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
@@ -74,8 +164,172 @@ describe("/api/scans/[id] workspace boundary", () => {
 
     expect(response.status).toBe(200)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:view")
+    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
+    expect((await response.json()).data.eventsCursorApplied).toBeNull()
     // No `eventsAfter` param = no cursor: the full event window is returned.
     expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1", { eventsAfter: undefined })
+  })
+
+  it("returns only scan status and id for a delegated deleted target", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: allTargetsSession } as never)
+    delegatedScanAccessMock.mockResolvedValueOnce({
+      scanId: "scan-1",
+      status: "COMPLETED",
+      statusOnly: true,
+    })
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      success: true,
+      data: { id: "scan-1", status: "COMPLETED" },
+    })
+    expect(getScanWithEvents).not.toHaveBeenCalled()
+  })
+
+  it("withholds the scan id for an unproven legacy delegated record", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: allTargetsSession } as never)
+    delegatedScanAccessMock.mockResolvedValueOnce({
+      scanId: null,
+      status: "COMPLETED",
+      statusOnly: true,
+    })
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      success: true,
+      data: { status: "COMPLETED" },
+    })
+    expect(getScanWithEvents).not.toHaveBeenCalled()
+  })
+
+  it("denies a target-a connection reading a scan persisted on target-b", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: narrowSession } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValueOnce({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-2",
+    } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(403)
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(narrowSession, "target-2")
+    expect(getScanQueuePosition).not.toHaveBeenCalled()
+  })
+
+  it("returns allowlisted recorded provenance and binds it into the ETag", async () => {
+    const executionPlan = buildScanExecutionPlan({
+      targetType: "REPO",
+      mode: "STANDARD",
+      source: { revision: "a".repeat(40) },
+    })
+    const scan = {
+      id: "scan-1",
+      workspaceId: "ws-1",
+      executionPlan,
+      executionPlanHash: "b".repeat(64),
+    }
+    vi.mocked(getScanWithEvents).mockResolvedValue(scan as never)
+    const request = new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1")
+    const response = await GET(request, routeParams)
+    const body = await response.json()
+    expect(body.data.executionPlan).toMatchObject({
+      workflow: "REVIEW_TARGET",
+      source: { revision: "a".repeat(40) },
+    })
+    expect(body.data.executionPlan).not.toHaveProperty("limits.maxBudgetUsd")
+    expect(body.data.executionPlanHash).toBe(publicScanProvenance(executionPlan).executionPlanHash)
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      ...scan,
+      executionPlan: { ...executionPlan, source: { revision: "c".repeat(40) } },
+    } as never)
+    const changed = await GET(
+      new Request(request, { headers: { "if-none-match": response.headers.get("etag")! } }),
+      routeParams
+    )
+    expect(changed.status).toBe(200)
+    expect(changed.headers.get("etag")).not.toBe(response.headers.get("etag"))
+  })
+
+  it("returns unavailable provenance for legacy scans", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      executionPlan: null,
+      executionPlanHash: null,
+    } as never)
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+    expect((await response.json()).data).toMatchObject({
+      executionPlan: null,
+      executionPlanHash: null,
+    })
+  })
+
+  it("allows a connection when the persisted scan target is in its grant", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: narrowSession } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValueOnce({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+    } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(narrowSession, "target-1")
+  })
+
+  it("allows an all-targets connection to read another target's scan", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: allTargetsSession } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValueOnce({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-2",
+    } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
+  })
+
+  it("denies read-only OAuth scans outside the selected target grant", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: readOnlySession } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValueOnce({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-2",
+    } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(403)
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(readOnlySession, "target-2")
   })
 
   it("omits cost fields and internal accounting events from the dashboard response", async () => {
@@ -269,7 +523,11 @@ describe("/api/scans/[id] workspace boundary", () => {
   })
 
   it("passes a well-formed eventsAfter cursor through to the service", async () => {
-    vi.mocked(getScanWithEvents).mockResolvedValue({ id: "scan-1", workspaceId: "ws-1" } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      eventsCursorApplied: "event-42",
+    } as never)
 
     const response = await GET(
       new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1&eventsAfter=event-42"),
@@ -277,6 +535,7 @@ describe("/api/scans/[id] workspace boundary", () => {
     )
 
     expect(response.status).toBe(200)
+    expect((await response.json()).data.eventsCursorApplied).toBe("event-42")
     expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1", { eventsAfter: "event-42" })
   })
 

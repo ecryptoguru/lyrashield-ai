@@ -24,7 +24,14 @@ const GitHubPullRequestEventSchema = z.object({
   }),
   pull_request: z.object({
     number: z.number().int().positive(),
-    head: z.object({ ref: z.string().min(1).max(255) }),
+    head: z.object({
+      ref: z.string().min(1).max(255),
+      repo: z
+        .object({ full_name: z.string().min(1).max(255) })
+        .nullable()
+        .optional(),
+    }),
+    body: z.string().max(65536).nullable().optional(),
     base: z.object({ ref: z.string().min(1).max(255) }),
     merged: z.boolean().optional(),
   }),
@@ -255,17 +262,25 @@ async function handleMergedFixPullRequest(
   let loopClosureDelivered = false
   try {
     const { handleFixPrMergedAndReevaluate } = await import("@lyrashield/db")
-    const outcome = await handleFixPrMergedAndReevaluate(
+    const outcome = await handleFixPrMergedAndReevaluate({
       workspaceId,
-      pullRequest.head.ref,
-      pullRequest.number,
-      async (mode, sponsorAccountId, tx) => {
+      branchName: pullRequest.head.ref,
+      prNumber: pullRequest.number,
+      assertRetestAllowed: async (mode, sponsorAccountId, tx) => {
         const entitlement = await assertScanAllowed(workspaceId, mode, sponsorAccountId, tx)
         if (!entitlement.allowed) throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
-        await assertScanWorkerAvailable()
       },
-      repoFullName
-    )
+      repoFullName,
+      ...(pullRequest.head.repo && pullRequest.body
+        ? {
+            recoveryIdentity: {
+              headRepoFullName: pullRequest.head.repo.full_name,
+              body: pullRequest.body,
+            },
+          }
+        : {}),
+      assertRetestWorkerAvailable: assertScanWorkerAvailable,
+    })
     if (outcome) {
       // The retest scan exists but is not queued yet — packages/db
       // cannot reach the scan queue. Enqueue it here; a queue

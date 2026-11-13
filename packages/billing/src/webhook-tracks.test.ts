@@ -46,10 +46,13 @@ vi.mock("./provider-catalog-validation", () => ({
 
 import {
   computeApplicableTracks,
+  isExpiredWebhookTrackReplaySafe,
   runApplicableTracks,
   retryWebhookTrack,
   WEBHOOK_TRACK_MAX_ATTEMPTS,
   claimWebhookTrack,
+  getWebhookTrackRetrySchedule,
+  ensureWebhookTrackRows,
   markTrackFailed,
   markTrackSucceeded,
   type WebhookTrackHandlers,
@@ -60,9 +63,19 @@ import { prisma } from "@lyrashield/db"
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
 const handlers: WebhookTrackHandlers = { dispatchAffiliate: vi.fn().mockResolvedValue(undefined) }
 
+const databaseDueAt = new Date("2026-10-28T10:00:00.000Z")
+
+function mockQueryRows(rows: unknown[]) {
+  vi.mocked(prisma.$queryRaw).mockImplementation(async (query) =>
+    (query as unknown as string[]).join(" ").includes('AS "initialDueAt"')
+      ? [{ initialDueAt: databaseDueAt }]
+      : rows
+  )
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(prisma.$queryRaw).mockResolvedValue([{ generation: 0, attempts: 1 }])
+  mockQueryRows([{ generation: 0, attempts: 1 }])
   vi.mocked(prisma.$executeRaw).mockResolvedValue(1)
   mockPrisma.webhookEventTrack.createMany.mockResolvedValue({ count: 0 })
   mockPrisma.webhookEventTrack.findMany.mockResolvedValue([])
@@ -302,6 +315,36 @@ describe("c) Razorpay Track B — first + recurring payments each mint a license
 })
 
 describe("durable webhook claims", () => {
+  it("binds initial due times to the database clock", async () => {
+    await ensureWebhookTrackRows("evt_initial_due", ["billing", "license"])
+
+    expect(mockPrisma.webhookEventTrack.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          webhookEventId: "evt_initial_due",
+          track: "billing",
+          nextAttemptAt: databaseDueAt,
+          nextAttemptAtUtc: databaseDueAt,
+        },
+        {
+          webhookEventId: "evt_initial_due",
+          track: "license",
+          nextAttemptAt: databaseDueAt,
+          nextAttemptAtUtc: databaseDueAt,
+        },
+      ],
+      skipDuplicates: true,
+    })
+  })
+
+  it("refuses to invent a due time when the database clock is unavailable", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([])
+    await expect(ensureWebhookTrackRows("evt_no_clock", ["billing"])).rejects.toThrow(
+      "Database clock unavailable"
+    )
+    expect(mockPrisma.webhookEventTrack.createMany).not.toHaveBeenCalled()
+  })
+
   it("reserves attempts before handler execution and fences a successful receipt", async () => {
     const { event, payload } = polarLocalOrder("ord_success")
     const summary = await runApplicableTracks({
@@ -311,14 +354,14 @@ describe("durable webhook claims", () => {
       handlers,
     })
     expect(summary.succeeded).toBe(3)
-    expect(prisma.$queryRaw).toHaveBeenCalledTimes(3)
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(4)
     expect(prisma.$executeRaw).toHaveBeenCalled()
-    const claimSql = vi.mocked(prisma.$queryRaw).mock.calls[0]![0] as unknown as string[]
+    const claimSql = vi.mocked(prisma.$queryRaw).mock.calls[1]![0] as unknown as string[]
     expect(claimSql.join(" ")).toContain("attempts = attempts + 1")
   })
 
   it("busy and terminal claims never execute a handler", async () => {
-    vi.mocked(prisma.$queryRaw).mockResolvedValue([])
+    mockQueryRows([])
     mockPrisma.webhookEventTrack.findUnique.mockResolvedValue({ status: "processing" })
     const { event, payload } = polarLocalOrder("ord_busy")
     expect(
@@ -334,7 +377,7 @@ describe("durable webhook claims", () => {
   })
 
   it("historical null-due rows never gain implicit replay permission", async () => {
-    vi.mocked(prisma.$queryRaw).mockResolvedValue([])
+    mockQueryRows([])
     mockPrisma.webhookEventTrack.findUnique.mockResolvedValue({
       status: "pending",
       attempts: 0,
@@ -343,9 +386,113 @@ describe("durable webhook claims", () => {
     expect(await claimWebhookTrack("legacy", "affiliate")).toEqual({ outcome: "busy" })
     for (const call of vi.mocked(prisma.$executeRaw).mock.calls) {
       const sql = (call[0] as unknown as string[]).join(" ")
-      expect(sql).not.toContain('SET "nextAttemptAt" = now()')
+      expect(sql).not.toContain('SET "nextAttemptAtUtc" = now()')
     }
     expect(handlers.dispatchAffiliate).not.toHaveBeenCalled()
+  })
+
+  it("an audited reviewed track is terminal and never invokes its handler again", async () => {
+    mockQueryRows([])
+    mockPrisma.webhookEvent.findUnique.mockResolvedValue({
+      provider: "polar",
+      externalId: "delivery-reviewed",
+      eventType: "customer.state_changed",
+      payload: { type: "customer.state_changed", data: { id: "customer-1" } },
+      workspaceId: null,
+    })
+    mockPrisma.webhookEventTrack.findUnique.mockResolvedValue({ status: "reviewed" })
+    const dispatch = vi.fn().mockResolvedValue(undefined)
+
+    await expect(
+      retryWebhookTrack({
+        webhookEventId: "event-reviewed",
+        track: "billing",
+        generation: 8,
+        handlers: { dispatchAffiliate: dispatch },
+      })
+    ).resolves.toBe("skipped_reviewed")
+
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(processPolarEventMock).not.toHaveBeenCalled()
+  })
+
+  it("treats reviewed required tracks as resolved without reporting a handler success", async () => {
+    mockQueryRows([])
+    mockPrisma.webhookEventTrack.findUnique.mockResolvedValue({ status: "reviewed" })
+    mockPrisma.webhookEventTrack.count
+      .mockResolvedValueOnce(0) // no unresolved tracks
+      .mockResolvedValueOnce(1) // one required track
+      .mockResolvedValueOnce(0) // no unresolved tracks for processed derivation
+    const event = normalizeProviderEvent({
+      provider: "polar",
+      eventType: "customer.state_changed",
+      deliveryId: "delivery-reviewed",
+      payload: { type: "customer.state_changed", data: { id: "customer-1" } },
+    })
+
+    const summary = await runApplicableTracks({
+      webhookEventId: "event-reviewed",
+      event,
+      rawPayload: { type: "customer.state_changed", data: { id: "customer-1" } },
+      handlers: { dispatchAffiliate: vi.fn() },
+    })
+
+    expect(summary).toMatchObject({ allResolved: true, attempted: 0, succeeded: 0 })
+    expect(processPolarEventMock).not.toHaveBeenCalled()
+    expect(prisma.webhookEvent.updateMany).toHaveBeenCalledWith({
+      where: { id: "event-reviewed", processed: false },
+      data: { processed: true, processedAt: expect.any(Date) },
+    })
+  })
+
+  it("computes retry delay from the database clock", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([{ generation: 3, delayMs: 1_234 }])
+
+    await expect(getWebhookTrackRetrySchedule("evt", "billing")).resolves.toEqual({
+      generation: 3,
+      delayMs: 1_234,
+    })
+
+    const sql = (vi.mocked(prisma.$queryRaw).mock.calls[0]![0] as unknown as string[]).join(" ")
+    expect(sql).toContain('"nextAttemptAtUtc"')
+    expect(sql).toContain('"nextAttemptAtUtc" - now()')
+  })
+
+  it("allows expired replay only for the idempotent minute-pack billing path", () => {
+    const paidPack = normalizeProviderEvent({
+      provider: "polar",
+      eventType: "order.paid",
+      deliveryId: "order_pack",
+      payload: {
+        type: "order.paid",
+        data: {
+          id: "order_pack",
+          amount: 1500,
+          currency: "USD",
+          metadata: { workspaceId: "ws_1", accountId: "acct_1", packId: "pack_100" },
+        },
+      },
+    })
+    const subscription = normalizeProviderEvent({
+      provider: "polar",
+      eventType: "order.paid",
+      deliveryId: "order_subscription",
+      payload: {
+        type: "order.paid",
+        data: {
+          id: "order_subscription",
+          subscription_id: "sub_1",
+          amount: 4900,
+          currency: "USD",
+          metadata: { planId: "individual_monthly" },
+        },
+      },
+    })
+
+    expect(isExpiredWebhookTrackReplaySafe("billing", paidPack)).toBe(true)
+    expect(isExpiredWebhookTrackReplaySafe("license", paidPack)).toBe(false)
+    expect(isExpiredWebhookTrackReplaySafe("affiliate", paidPack)).toBe(false)
+    expect(isExpiredWebhookTrackReplaySafe("billing", subscription)).toBe(false)
   })
 
   it("fifth reservation dead-letters without extending the total budget", async () => {
@@ -368,6 +515,56 @@ describe("durable webhook claims", () => {
     expect(fail).toContain(true)
   })
 
+  it("keeps renewing after a transient database error", async () => {
+    vi.useFakeTimers()
+    let releaseHandler!: () => void
+    let handlerStarted!: () => void
+    const handlerStart = new Promise<void>((resolve) => {
+      handlerStarted = resolve
+    })
+    const handlerWait = new Promise<void>((resolve) => {
+      releaseHandler = resolve
+    })
+    const handler = vi.fn(async () => {
+      handlerStarted()
+      await handlerWait
+    })
+    mockPrisma.webhookEvent.findUnique.mockResolvedValue({
+      provider: "polar",
+      externalId: "ord_renewal_retry",
+      eventType: "order.paid",
+      payload: polarLocalOrder("ord_renewal_retry").payload,
+      workspaceId: null,
+    })
+    let renewalAttempts = 0
+    vi.mocked(prisma.$executeRaw).mockImplementation(async (...args) => {
+      const sql = (args[0] as unknown as string[]).join(" ")
+      if (sql.includes('SET "leaseExpiresAtUtc" = now() +')) {
+        renewalAttempts++
+        if (renewalAttempts === 1) throw new Error("temporary database failure")
+      }
+      return 1
+    })
+
+    try {
+      const running = retryWebhookTrack({
+        webhookEventId: "evt_renewal_retry",
+        track: "affiliate",
+        generation: 0,
+        handlers: { dispatchAffiliate: handler },
+      })
+      await handlerStart
+      await vi.advanceTimersByTimeAsync(60_000)
+      releaseHandler()
+
+      await expect(running).resolves.toBe("succeeded")
+      expect(renewalAttempts).toBeGreaterThan(1)
+    } finally {
+      releaseHandler()
+      vi.useRealTimers()
+    }
+  })
+
   it("stale ownership cannot complete or downgrade a terminal receipt", async () => {
     vi.mocked(prisma.$executeRaw).mockResolvedValue(0)
     const claim = {
@@ -382,7 +579,7 @@ describe("durable webhook claims", () => {
     for (const call of vi.mocked(prisma.$executeRaw).mock.calls) {
       const sql = (call[0] as unknown as string[]).join(" ")
       expect(sql).toContain("status = 'processing'")
-      expect(sql).toContain('"leaseExpiresAt" > now()')
+      expect(sql).toContain('"leaseExpiresAtUtc" > now()')
       expect(call).toContain("stale")
     }
   })

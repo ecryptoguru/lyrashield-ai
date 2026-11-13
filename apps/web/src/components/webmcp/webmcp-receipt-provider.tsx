@@ -25,7 +25,7 @@ export function WebMcpReceiptProvider({ children }: { children: ReactNode }) {
   return (
     <WebMcpReceiptContext.Provider value={store}>
       {children}
-      <WebMcpActivityDrawer />
+      <WebMcpActivityDrawer store={store} />
     </WebMcpReceiptContext.Provider>
   )
 }

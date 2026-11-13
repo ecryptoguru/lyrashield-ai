@@ -60,7 +60,19 @@ export default async function SettingsPage() {
     }),
   ])
 
-  if (!workspace) return null
+  if (!workspace)
+    return (
+      <div>
+        <PageHeader
+          title="Personal settings"
+          description="Your account security and connected sign-in accounts."
+        />
+        <NoWorkspaceState
+          icon={Settings}
+          description="This workspace is no longer available. Choose an accessible workspace or create a new one."
+        />
+      </div>
+    )
 
   return (
     <div className="min-w-0 space-y-6">

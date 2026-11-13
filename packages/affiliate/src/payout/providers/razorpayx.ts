@@ -8,9 +8,88 @@
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 
+const PAYOUT_REQUEST_TIMEOUT_MS = 30_000
+const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024
+const REJECTED_STATUSES = new Set(["rejected", "failed", "cancelled", "reversed"])
+const PAYOUT_STATUSES = new Set([
+  ...REJECTED_STATUSES,
+  "processed",
+  "queued",
+  "pending",
+  "processing",
+  "scheduled",
+])
+
+type PayoutStatus =
+  | "rejected"
+  | "failed"
+  | "cancelled"
+  | "reversed"
+  | "processed"
+  | "queued"
+  | "pending"
+  | "processing"
+  | "scheduled"
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function parsePayoutMethod(value: unknown): RazorpayXPayoutMethod | null {
+  if (!isRecord(value) || value.type !== "razorpayx" || !isFundAccountId(value.fundAccountId)) {
+    return null
+  }
+  return { type: "razorpayx", fundAccountId: value.fundAccountId }
+}
+
+function isPayoutResponse(value: unknown): value is { id: string; status: PayoutStatus } {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    value.id.length > 0 &&
+    value.id.length <= 128 &&
+    typeof value.status === "string" &&
+    PAYOUT_STATUSES.has(value.status)
+  )
+}
+
+async function readBoundedJson(response: Response): Promise<unknown> {
+  const contentLength = Number(response.headers.get("content-length"))
+  if (Number.isFinite(contentLength) && contentLength > MAX_PROVIDER_RESPONSE_BYTES) {
+    await response.body?.cancel().catch(() => undefined)
+    return null
+  }
+
+  if (!response.body) return null
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let byteLength = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      byteLength += value.byteLength
+      if (byteLength > MAX_PROVIDER_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined)
+        return null
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown
+  } catch {
+    return null
+  }
+}
+
 export interface RazorpayXProvider {
   send(
     payoutId: string,
+    idempotencyKey: string,
     amount: string,
     currency: string,
     payoutMethod: unknown
@@ -62,6 +141,7 @@ export function createRazorpayXProvider(): RazorpayXProvider {
   return {
     async send(
       payoutId: string,
+      idempotencyKey: string,
       amount: string,
       currency: string,
       payoutMethod: unknown
@@ -72,7 +152,7 @@ export function createRazorpayXProvider(): RazorpayXProvider {
       providerPayoutId?: string
       error?: string
     }> {
-      const method = payoutMethod as RazorpayXPayoutMethod | null
+      const method = parsePayoutMethod(payoutMethod)
 
       if (!method || method.type !== "razorpayx") {
         return { success: false, error: "Invalid payout method for RazorpayX" }
@@ -96,7 +176,7 @@ export function createRazorpayXProvider(): RazorpayXProvider {
           headers: {
             Authorization: `Basic ${Buffer.from(`${env.RAZORPAYX_API_KEY}:${env.RAZORPAYX_API_SECRET}`).toString("base64")}`,
             "Content-Type": "application/json",
-            "X-Payout-Idempotency": payoutId,
+            "X-Payout-Idempotency": idempotencyKey,
           },
           body: JSON.stringify({
             account_number: env.RAZORPAYX_ACCOUNT_NUMBER,
@@ -109,33 +189,42 @@ export function createRazorpayXProvider(): RazorpayXProvider {
             reference_id: payoutId,
             narration: "LyraShield affiliate payout",
           }),
+          signal: AbortSignal.timeout(PAYOUT_REQUEST_TIMEOUT_MS),
         })
-        const body = (await response.json().catch(() => null)) as {
-          id?: string
-          status?: string
-        } | null
-        const rejected = ["rejected", "failed", "cancelled", "reversed"].includes(
-          body?.status ?? ""
-        )
-        if (rejected) {
-          return { success: false, rejected: true, error: "RazorpayX rejected the payout" }
-        }
-        if (!response.ok || !body?.id)
+        const parsedBody = await readBoundedJson(response)
+        if (!isPayoutResponse(parsedBody)) {
           return { success: false, error: "RazorpayX outcome unconfirmed" }
+        }
+        const body = parsedBody
+        if (!response.ok) {
+          return {
+            success: false,
+            error: "RazorpayX outcome unconfirmed",
+            providerPayoutId: body.id,
+          }
+        }
+        if (REJECTED_STATUSES.has(body.status)) {
+          return {
+            success: false,
+            rejected: true,
+            providerPayoutId: body.id,
+            error: "RazorpayX rejected the payout",
+          }
+        }
         logger.info("RazorpayX payout accepted", {
           payoutId,
           providerPayoutId: body.id,
           status: body.status,
         })
         if (body.status === "processed") return { success: true, providerPayoutId: body.id }
-        if (["queued", "pending", "processing", "scheduled"].includes(body.status ?? "")) {
+        if (["queued", "pending", "processing", "scheduled"].includes(body.status)) {
           return { success: false, pending: true, providerPayoutId: body.id }
         }
         return { success: false, error: "RazorpayX outcome unconfirmed", providerPayoutId: body.id }
-      } catch (error) {
+      } catch {
         return {
           success: false,
-          error: error instanceof Error ? error.message : "RazorpayX payout failed",
+          error: "RazorpayX outcome unconfirmed",
         }
       }
     },

@@ -1,16 +1,18 @@
 # @lyrashield/mcp
 
+This guide documents `@lyrashield/mcp@0.2.12` and its matching `lyrashield@0.2.14` CLI setup.
+
 The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an AI coding tool run bounded security scans, read findings with their recorded evidence states and drive the fix → verify loop against your LyraShield workspace — without leaving the editor.
 
 Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0). The server is also distributed as a portable Agent Plugin via [`@lyrashield/agent-plugin`](../agent-plugin/README.md) (Agent Plugins v1.0.0).
 
 Use hosted OAuth when the client supports remote MCP authorization. For local stdio clients,
-run `lyrashield login --oauth` once and reuse the user-only credential store. Workspace API keys
-are the explicit CI/headless fallback, not the default interactive setup.
+run `npx -y lyrashield@0.2.14 login --oauth` once and reuse the user-only credential store.
+Workspace API keys are the explicit CI/headless fallback, not the default interactive setup.
 
 ## Protocol compatibility
 
-This release uses `@modelcontextprotocol/sdk` 1.30.1. Its latest stable protocol is `2025-11-25`; it also negotiates `2025-06-18`, `2025-03-26`, `2024-11-05` and `2024-10-07` for older clients. The published `2026-07-28` protocol revision is **not** supported: no stable SDK negotiates it as of 1.30.1, so it is neither advertised nor emulated — an `initialize` for it is answered with `2025-11-25` and post-initialization requests bearing the `2026-07-28` header are rejected with the supported-version list.
+The workspace lock used for this release resolves `@modelcontextprotocol/sdk` 1.31.0. That installed version reports `2025-11-25` as its latest protocol and also negotiates `2025-06-18`, `2025-03-26`, `2024-11-05` and `2024-10-07` for older clients. Protocol version `2026-07-28` is **not** in the pinned SDK's supported-version list, so LyraShield neither advertises nor emulates it — an `initialize` for it is answered with `2025-11-25` and post-initialization requests bearing the `2026-07-28` header are rejected with the supported-version list.
 
 - Server identity includes a title, description, website, version and usage instructions.
 - Every tool publishes an input schema, output schema, title, safety annotations and structured content.
@@ -34,6 +36,7 @@ Every API-backed tool calls the LyraShield REST API with a workspace API key or 
 | `lyrashield_get_scan_status`          | read  | Status, timing and events for a scan                                                                              |
 | `lyrashield_get_scan_quality`         | read  | Evidence-quality surface for a scan: verification tiers, coverage receipts and labeled heuristics                 |
 | `lyrashield_get_scan_eligibility`     | read  | Advisory preflight: whether a scan on a target would currently be admitted, with denial codes                     |
+| `lyrashield_get_setup_health`         | read  | Versioned cross-client setup health with stable reason and recovery codes; never mutates or authorizes a scan     |
 | `lyrashield_get_findings`             | read  | Paginated findings (default 50, max 100), filterable by target, scan, status, severity and verification           |
 | `lyrashield_explain_finding`          | read  | Full detail + plain-language explanation of a finding                                                             |
 | `lyrashield_generate_fix_plan`        | read  | Assemble a remediation plan from a finding                                                                        |
@@ -59,8 +62,8 @@ Every API-backed tool calls the LyraShield REST API with a workspace API key or 
 
 ## Setup
 
-1. Run `npx lyrashield login --oauth` and select one workspace in the browser.
-2. Add `npx -y @lyrashield/mcp` to the client. No secret belongs in a project config file.
+1. Run `npx -y lyrashield@0.2.14 login --oauth` and select one workspace in the browser.
+2. Add `npx -y @lyrashield/mcp@0.2.12` to the client. No secret belongs in a project config file.
 
 For CI or another environment that cannot complete OAuth, create a workspace API key in
 LyraShield under **Settings → API keys** (prefer read-only), then inject these through the
@@ -78,13 +81,13 @@ The interactive examples below use the OAuth credential store and therefore cont
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"]
+      "args": ["-y", "@lyrashield/mcp@0.2.12"]
     }
   }
 }
 ```
 
-Claude Code one-liner: `claude mcp add lyrashield -- npx -y @lyrashield/mcp`
+Claude Code one-liner: `claude mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.12`
 
 ### VS Code (note: the root key is `servers`, not `mcpServers`)
 
@@ -96,7 +99,7 @@ Claude Code one-liner: `claude mcp add lyrashield -- npx -y @lyrashield/mcp`
     "lyrashield": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"]
+      "args": ["-y", "@lyrashield/mcp@0.2.12"]
     }
   }
 }
@@ -109,7 +112,7 @@ OpenAI Codex keeps MCP servers under the `[mcp_servers.<name>]` table. Explicit 
 ```toml
 [mcp_servers.lyrashield]
 command = "npx"
-args = ["-y", "@lyrashield/mcp"]
+args = ["-y", "@lyrashield/mcp@0.2.12"]
 ```
 
 For the API-key fallback, add explicit values under `[mcp_servers.lyrashield.env]` or use
@@ -119,30 +122,36 @@ Per-client config for OpenCode, Kilo Code, Cline, Zed and the cloud platforms li
 
 ### Supported-client boundary
 
-The integration registry contains 30 install entries resolving to 26 preferred client surfaces.
+The integration registry contains 51 install entries resolving to 48 preferred client surfaces.
 Entries are `COMPATIBLE`, `EXPERIMENTAL` or `DEPRECATED` and record either documentation,
 package-conformance or retained runtime evidence. Presence in the registry means LyraShield can
 render or guide that client's current config shape; it does not claim that every client release
 completed an authenticated runtime matrix.
 
-- Preferred Agent Plugin installs: Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro.
+- Preferred Agent Plugin registry entries: Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro.
+  Registry preference does not establish a vendor marketplace listing or authenticated runtime
+  acceptance. Use the direct MCP path below wherever a client-owned plugin install path is not
+  available or verified.
   Package-conformance checks cover the four generated shims; GitHub Copilot uses the portable root
   manifest and remains `EXPERIMENTAL` until a retained client-runtime receipt exists.
 - VS Code's reserved Agent Plugin entry is experimental and not preferred. Use its verified
   `.vscode/mcp.json` path.
 - Config or guided setup: VS Code, Zed, Gemini CLI, OpenCode, Kilo Code, Cline, JetBrains,
   Amp, Roo Code, MiMo Code, Codebuff, Oh-My-Pi, Copilot CLI, Goose, Aider, Devin CLI, Antigravity,
-  PiCode, OpenClaw, Hermes and Devin, subject to each registry entry's support tier.
+  Pi (legacy registry ID `picode`), OpenClaw, Hermes and Devin, subject to each registry entry's support tier.
 
-Run `lyrashield init` for detected clients or `lyrashield install <agent>` for one explicit target.
-Do not reuse a nearby client's JSON/TOML shape: root keys, transport names, credential interpolation
-and discovery locations differ.
+Follow the [client guides](https://lyrashieldai.com/docs/integrations/agent-plugins) with
+`@lyrashield/mcp@0.2.12` and `npx -y lyrashield@0.2.14 login --oauth`. The CLI provides documented
+config writers and shared-skill installation; use `npx -y lyrashield@0.2.14 install <agent>` and
+`npx -y lyrashield@0.2.14 skills install <agent>` where the selected client has a supported path.
+Do not install from a mutable marketplace preparation branch. Do not reuse a nearby client's
+JSON/TOML shape: root keys, transport names, credential interpolation and discovery locations differ.
 
 ### Credentials resolution
 
-The server gives `LYRASHIELD_API_KEY` or `LYRASHIELD_OAUTH_ACCESS_TOKEN` precedence over `~/.lyrashield/credentials.json`, the credentials file written by `lyrashield login` (with `0o600` permissions). `LYRASHIELD_API_URL` independently overrides the API origin without replacing a stored OAuth credential. This means `npx -y @lyrashield/mcp` works without any env credential after a single `lyrashield login`.
+The server gives `LYRASHIELD_API_KEY` or `LYRASHIELD_OAUTH_ACCESS_TOKEN` precedence over `~/.lyrashield/credentials.json`, the credentials file written by `lyrashield login` (with `0o600` permissions). `LYRASHIELD_API_URL` independently overrides the API origin without replacing a stored OAuth credential. `npx -y @lyrashield/mcp@0.2.12` works without any env credential after a single `npx -y lyrashield@0.2.14 login --oauth`.
 
-`@lyrashield/mcp` is an MCP stdio server, not a command-line scanner: start it with `npx -y @lyrashield/mcp` and let your MCP client call its tools. For pull-request CI, use the [LyraShield GitHub Action](../../README.md#use-it-from-your-coding-agent) instead.
+`@lyrashield/mcp` is an MCP stdio server, not a command-line scanner: start it with `npx -y @lyrashield/mcp@0.2.12` and let your MCP client call its tools. For pull-request CI, use the [LyraShield GitHub Action](../../README.md#use-it-from-your-coding-agent) instead.
 
 `lyrashield login --oauth` opens hosted consent using authorization code flow with PKCE and an issuer-bound loopback callback. It saves the selected workspace and tokens only after successful exchange and authenticated workspace discovery. Failed login preserves existing credentials. `lyrashield login` accepts an API key instead. `packages/credentials` owns storage, environment precedence, origin binding, refresh locking and atomic updates for both CLI and MCP.
 
@@ -189,7 +198,7 @@ The remote endpoint runs the same guard and tools as stdio. Hosted responses are
 
 - **New delegated OAuth connection:** Connect is the authorization. Matching hosted mutations require `idempotencyKey`; reuse it only for identical retries.
 - **Connection outside its grant:** the call fails closed. Reconnect to authorize the required access.
-- **API key or legacy token on the hosted endpoint:** one structured `connect_required` response naming the OAuth connect path. Nothing is queued and nothing executes — connect a client first.
+- **Hosted mutations using an API key or legacy token without a valid delegation:** one structured `connect_required` response naming the OAuth connect path. Nothing is queued and no mutation executes — connect an OAuth-capable client first. Read-only tools remain available to an authorized read-scoped API key.
 - **Local stdio with an API key:** the REST API enforces the credential's scope, current role, target authorization and budget without a second LyraShield prompt.
 - **Read-only credential:** mutations are denied.
 
@@ -197,10 +206,10 @@ Coding-agent hosts may impose their own tool permission dialogs. LyraShield cann
 
 ## Compatibility receipts
 
-- Package: `@lyrashield/mcp` 0.2.11; runtime: Node.js 24 or newer.
-- SDK lock: `@modelcontextprotocol/sdk` 1.30.1; stable protocol `2025-11-25`, with the older
+- Package: `@lyrashield/mcp@0.2.12`; runtime: Node.js 24 or newer.
+- SDK lock: `@modelcontextprotocol/sdk` 1.31.0; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
-- `pnpm --filter @lyrashield/mcp test` covers protocol negotiation for every SDK-supported
+- `pnpm --filter @lyrashield/mcp exec vitest run src` covers protocol negotiation for every SDK-supported
   version, fail-closed unknown-version and malformed-input handling, bounded request
   bodies/batches, stdio/HTTP transport, credentials, prompt-injection guards, schemas,
   structured results and approval policy — including a packed-tarball stdio handshake.

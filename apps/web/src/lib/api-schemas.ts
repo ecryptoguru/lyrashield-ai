@@ -227,10 +227,9 @@ const scanPollEventSchema = z
   })
   .passthrough()
 
-// Echoed by the API only when an incremental event window was actually applied
-// to the poll (see eventsAfter); lets the client prove the cursor took effect
-// before merging the tail into the full list.
-const eventsCursorAppliedSchema = z.string().optional()
+// A string identifies the applied eventsAfter cursor. A full window has a null
+// cursor, and older responses may omit the field.
+const eventsCursorAppliedSchema = z.string().nullable().optional()
 
 const scanPollCoverageReceiptSchema = z
   .object({
@@ -322,3 +321,9 @@ export const launchReadinessReportSchema = z
     recommendations: z.array(z.string()),
   })
   .passthrough()
+
+/** Opt-in bounded GitHub picker response; the unpaged API retains its array shape. */
+export const githubReposPageSchema = z.object({
+  items: githubReposSchema,
+  nextPage: z.number().int().positive().nullable(),
+})

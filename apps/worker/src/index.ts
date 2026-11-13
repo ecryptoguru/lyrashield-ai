@@ -1,3 +1,7 @@
+import {
+  assertColdDatabaseEpoch,
+  configureColdDatabaseEpochFailureHandler,
+} from "./cold-database-epoch"
 import { randomUUID } from "node:crypto"
 import { hostname } from "node:os"
 import { unlink, writeFile } from "node:fs/promises"
@@ -6,7 +10,7 @@ import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import { resolveDbPoolMax } from "@lyrashield/db"
 import {
-  registerScanWorker,
+  closeAiResultCacheRedis,
   unregisterScanWorker,
   SCAN_WORKER_HEARTBEAT_MS,
   WEBHOOK_TRACK_RETRY_QUEUE_NAME,
@@ -15,9 +19,9 @@ import {
 import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
 import { FIX_GENERATE_QUEUE_NAME, type FixGenerateJobData } from "@lyrashield/integrations"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
-import { processScanJob } from "./jobs/run-scan.job"
+import { processWorkerScanJob } from "./jobs/scan-job-processor"
 import { processWebhookTrackRetry } from "./jobs/webhook-track-retry.job"
-import { processFixGenerateJob, type FixGenerateJobResult } from "./jobs/fix-generate.job"
+import { processQueuedFixGenerateJob, type FixGenerateJobResult } from "./jobs/fix-generate.job"
 import { startScheduleRunner } from "./schedules"
 import { startBillingJobsScheduler } from "./billing-jobs-scheduler"
 import { startApprovalExpiryRunner } from "./approval-expiry"
@@ -37,9 +41,16 @@ import {
 import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
 import { drainArtifactDeletionTasks } from "@lyrashield/evidence-storage"
 import { assertEngineTempRootReady } from "./engine/workspace-path"
-import { reapStaleScanResources } from "./engine/stale-resource-reaper"
-import { assertWorkerDbPoolCapacity, observeWorkerRun } from "./worker-lifecycle"
+import { assertNoNativeScanResources, reapStaleScanResources } from "./engine/stale-resource-reaper"
+import {
+  assertWorkerDbPoolCapacity,
+  observeWorkerRun,
+  WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY,
+  FIX_GENERATE_WORKER_CONCURRENCY,
+} from "./worker-lifecycle"
 import { collectOperationalHealthSnapshot, evaluateOperationalHealth } from "./operational-health"
+import { startTerminalCostHealthSampler } from "./terminal-cost-health"
+import { registerRelayAwareWorker } from "./engine/relay-readiness"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let webhookTrackRetryWorker: Worker<WebhookTrackRetryJobData, void> | null = null
@@ -48,6 +59,7 @@ let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
 let workerHeartbeatController: WorkerHeartbeatController | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
+let terminalCostHealthTimer: NodeJS.Timeout | null = null
 let staleResourceReaperTimer: NodeJS.Timeout | null = null
 let billingJobsTimers: NodeJS.Timeout[] | null = null
 let approvalExpiryTimer: NodeJS.Timeout | null = null
@@ -63,6 +75,14 @@ export const MANAGED_REDIS_DRAIN_DELAY_SECONDS = 600
 export const MANAGED_REDIS_STALLED_INTERVAL_MS = 120_000
 export const MANAGED_REDIS_BULLMQ_WORKER_COUNT = 3
 export const MANAGED_REDIS_MONTHLY_COMMAND_BUDGET = 500_000
+
+function assertConfiguredWorkerDbPoolCapacity(): void {
+  assertWorkerDbPoolCapacity(
+    env.LYRASHIELD_WORKER_CONCURRENCY,
+    resolveDbPoolMax(),
+    WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY + FIX_GENERATE_WORKER_CONCURRENCY
+  )
+}
 
 export function advanceReconciliationTimestamp(currentMs: number, completedTickMs: number): number {
   return Math.max(currentMs, completedTickMs)
@@ -83,6 +103,9 @@ export function createWorkerHeartbeatController(
   return {
     heartbeat() {
       if (stopped) return Promise.resolve()
+      // Completion and interval callbacks share one probe/publication operation.
+      const running = inFlight.values().next().value
+      if (running) return running
       const operation = register().then(async () => {
         if (!stopped) await markReady()
       })
@@ -135,6 +158,17 @@ export async function emitOperationalHealthAlerts(
   for (const alert of evaluateOperationalHealth(snapshot)) {
     logger.warn("operator_alert", { ...alert })
   }
+}
+
+async function startOperationalHealthMonitoring(
+  reconciliation: QueueReconciliationResult
+): Promise<void> {
+  terminalCostHealthTimer = startTerminalCostHealthSampler()
+  await emitOperationalHealthAlerts(reconciliation).catch((error) => {
+    logger.warn("Operational health collection failed", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
 }
 
 export async function refreshWorkerReadiness(): Promise<void> {
@@ -214,6 +248,10 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
   if (reconciliationTimer) {
     clearInterval(reconciliationTimer)
     reconciliationTimer = null
+  }
+  if (terminalCostHealthTimer) {
+    clearInterval(terminalCostHealthTimer)
+    terminalCostHealthTimer = null
   }
   if (staleResourceReaperTimer) {
     clearInterval(staleResourceReaperTimer)
@@ -327,6 +365,8 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     })
   })
 
+  await closeAiResultCacheRedis()
+
   process.exit(forcedExit ? 1 : exitCode)
 }
 
@@ -343,8 +383,18 @@ export function assertWorkerStartupProvenance() {
   return resolveWorkerExecutionProvenance()
 }
 
+async function assertWorkerStartupResources(): Promise<void> {
+  if (env.NODE_ENV === "production") await assertNoNativeScanResources()
+  if (env.LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED === "1") {
+    await reapStaleScanResources({
+      minimumAgeMs: env.LYRASHIELD_STALE_RESOURCE_MIN_AGE_MINUTES * 60_000,
+      failOnError: true,
+    })
+  }
+}
+
 async function main(): Promise<void> {
-  assertWorkerDbPoolCapacity(env.LYRASHIELD_WORKER_CONCURRENCY, resolveDbPoolMax())
+  assertConfiguredWorkerDbPoolCapacity()
   await initSentry()
   // Gate readiness BEFORE the worker can claim anything: missing or malformed
   // provenance throws, main() rejects, and the process exits without ever
@@ -354,6 +404,12 @@ async function main(): Promise<void> {
   assertEvidenceStorageConfigured()
   assertRepositoryScanRuntimeConfigured()
   await assertEngineTempRootReady()
+  await assertWorkerStartupResources()
+
+  configureColdDatabaseEpochFailureHandler(() => {
+    void shutdown("COLD_WORKER_AUTHORITY_LOST", 1)
+  })
+  await assertColdDatabaseEpoch()
 
   worker = new Worker<ScanJobData, ScanJobResult>(
     SCAN_QUEUE_NAME,
@@ -363,7 +419,7 @@ async function main(): Promise<void> {
       markScanJobClaimed()
       await markWorkerActive(job.id ?? "unknown")
       try {
-        return await processScanJob(job)
+        return await processWorkerScanJob(job)
       } finally {
         await clearWorkerActive()
       }
@@ -390,7 +446,7 @@ async function main(): Promise<void> {
 
   await worker.waitUntilReady()
   const scanWorkerHeartbeat = createWorkerHeartbeatController(
-    () => registerScanWorker(workerId),
+    () => registerRelayAwareWorker(workerId),
     refreshWorkerReadiness
   )
   workerHeartbeatController = scanWorkerHeartbeat
@@ -429,7 +485,7 @@ async function main(): Promise<void> {
         url: env.REDIS_URL || "redis://localhost:6379",
         maxRetriesPerRequest: null,
       },
-      concurrency: 2,
+      concurrency: WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY,
       autorun: false,
       // Keep instant job pickup while avoiding BullMQ's five-second idle poll,
       // which alone exceeds a 500,000-command monthly managed Redis budget.
@@ -459,21 +515,13 @@ async function main(): Promise<void> {
   // engine-emitted structured fix and stores it for the approval-bound PR flow.
   fixGenerateWorker = new Worker<FixGenerateJobData, FixGenerateJobResult>(
     FIX_GENERATE_QUEUE_NAME,
-    async (job) => {
-      const result = await processFixGenerateJob(job.data)
-      logger.info("Fix generation job processed", {
-        jobId: job.id,
-        fixProposalId: job.data.fixProposalId,
-        status: result.status,
-      })
-      return result
-    },
+    processQueuedFixGenerateJob,
     {
       connection: {
         url: env.REDIS_URL || "redis://localhost:6379",
         maxRetriesPerRequest: null,
       },
-      concurrency: 2,
+      concurrency: FIX_GENERATE_WORKER_CONCURRENCY,
       autorun: false,
       drainDelay: MANAGED_REDIS_DRAIN_DELAY_SECONDS,
       stalledInterval: MANAGED_REDIS_STALLED_INTERVAL_MS,
@@ -517,11 +565,7 @@ async function main(): Promise<void> {
     })
   const startupReconciliation = await reconcileScanQueue()
   let lastReconciliationAtMs = Date.now()
-  await emitOperationalHealthAlerts(startupReconciliation).catch((error) => {
-    logger.warn("Operational health collection failed", {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  })
+  await startOperationalHealthMonitoring(startupReconciliation)
   reconciliationTimer = setInterval(() => {
     const now = new Date()
     void drainArtifactDeletionTasks()
@@ -575,11 +619,6 @@ async function main(): Promise<void> {
       })
       logger.info("Stale-resource reaper completed", { ...result })
     }
-    await reap().catch((error) => {
-      logger.warn("Stale-resource reaper failed", {
-        error: error instanceof Error ? error.message : String(error),
-      })
-    })
     staleResourceReaperTimer = setInterval(() => {
       void reap().catch((error) => {
         logger.warn("Stale-resource reaper failed", {

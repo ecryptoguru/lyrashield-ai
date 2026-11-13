@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { ScanWorkflowSchema } from "./scan-execution-plan"
+import { EngineBudgetCeilingUsdSchema, ScanWorkflowSchema } from "./scan-execution-plan"
 
 export * from "./ai-safety-tests"
 export * from "./agent-operations"
@@ -13,6 +13,16 @@ export const MAX_CONCURRENT_WORKSPACE_SCANS = 3
 
 /** Both-sided scorecard referral reward, denominated in agent minutes. */
 export const SCORECARD_REFERRAL_BONUS_MINUTES = 30
+
+/**
+ * The single source of truth for the stored result-manifest schema version.
+ * The producer (`apps/worker` result-integrity manifest writer) stamps this on
+ * every persisted manifest and the consumers (`@lyrashield/db` gate-assessment
+ * snapshot parsing) accept exactly this version — anything else is an
+ * unsupported manifest and fails closed. Bump deliberately; both sides move
+ * together.
+ */
+export const RESULT_MANIFEST_VERSION = 7
 
 export const WorkspaceModeSchema = z.enum(["VIBE", "TEAM", "ENTERPRISE"])
 export const WorkspacePlanSchema = z.enum([
@@ -306,6 +316,7 @@ export const CreateScanSchema = z.object({
   goal: ScanGoalSchema,
   mode: ScanModeSchema.default("SAFE"),
   policyId: z.string().optional(),
+  engineBudgetCeilingUsd: EngineBudgetCeilingUsdSchema.optional(),
   focus: ScanFocusSchema.optional(),
   // Optional workflow inputs. The server constructs and owns the immutable
   // execution plan — clients can never supply plans, hashes, internal
@@ -334,6 +345,13 @@ export const CreateScanSchema = z.object({
  * wrapper so CreateScanSchema stays a plain object for .pick()/JSON-schema
  * consumers (eligibility preflight, OpenAPI). */
 export const CreateScanInputSchema = CreateScanSchema.superRefine((data, ctx) => {
+  if (data.engineBudgetCeilingUsd !== undefined && data.workflow === "AUTHENTICATED_ASSESSMENT") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["engineBudgetCeilingUsd"],
+      message: "Authenticated assessments use fixed limits.",
+    })
+  }
   if ((data.baseRef || data.headRef) && data.workflow !== "REVIEW_CHANGES") {
     ctx.addIssue({
       code: "custom",
@@ -532,6 +550,10 @@ export const ReportTypeSchema = z.enum(["developer", "executive", "compliance"])
 export const CreateReportSchema = z.object({
   workspaceId: z.string().min(1),
   scanId: z.string().optional(),
+  // Scopes the report to a target: the route resolves the target's latest
+  // completed scan. It was accepted by POST /api/reports but absent from this
+  // shared copy, so the published spec never documented it (P2-8).
+  targetId: z.string().optional(),
   type: ReportTypeSchema.optional(),
   title: z.string().min(1).max(200),
 })
@@ -562,19 +584,60 @@ export const CreateRetestSchema = z.object({
 
 export type CreateRetestInput = z.infer<typeof CreateRetestSchema>
 
-export const PatchFindingSchema = z.object({
-  workspaceId: z.string().min(1),
-  action: z.enum(["false_positive", "accept_risk", "update_status"]),
-  status: FindingStatusSchema.optional(),
-  reason: z.string().max(1000).optional(),
-})
+export const FINDING_PATCH_ACTIONS = ["false_positive", "accept_risk", "update_status"] as const
+
+/**
+ * The statuses PATCH /api/findings/:id may set. Narrower than
+ * `FindingStatusSchema`: TICKET_CREATED is written by the ticket path, never by
+ * this endpoint. The published spec previously promised it because the shared
+ * copy listed every status while the route listed only these (P2-8).
+ */
+export const PATCHABLE_FINDING_STATUSES = [
+  "OPEN",
+  "FIX_READY",
+  "PR_OPENED",
+  "FIXED",
+  "FIXED_PENDING_RETEST",
+  "ACCEPTED_RISK",
+  "FALSE_POSITIVE",
+  "DUPLICATE",
+] as const
+
+export const PatchFindingSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    action: z.enum(FINDING_PATCH_ACTIONS),
+    status: z.enum(PATCHABLE_FINDING_STATUSES).optional(),
+    reason: z.string().max(1000).optional(),
+    canonicalFindingId: z.string().min(1).optional(),
+  })
+  .superRefine((value, context) => {
+    // Not expressible in JSON Schema, so the published spec states only the
+    // shape. The route still enforces it.
+    if (
+      (value.action === "false_positive" || value.action === "accept_risk") &&
+      !value.reason?.trim()
+    ) {
+      context.addIssue({ code: "custom", path: ["reason"], message: "reason is required" })
+    }
+  })
 
 export type PatchFindingInput = z.infer<typeof PatchFindingSchema>
 
-function isFiveFieldCron(cron: string) {
-  const parts = cron.trim().split(/\s+/)
-  return parts.length === 5
-}
+export const SCHEDULE_CRON_MESSAGE = "Use a five-field schedule like '0 0 * * 0' or '30 8 * * *'"
+
+/**
+ * The cron grammar the scheduler actually accepts. `@lyrashield/db`'s
+ * `getNextRunAt` requires exactly five whitespace-separated fields. Field 1 is
+ * minute 0-59 and field 2 is hour 0-23. Fields 3 and 4 must be a literal `*`
+ * (day-of-month and month). Field 5 is day-of-week 0-6. Any field may be `*`.
+ * Otherwise it is digits with any number of leading zeros. Expressed as a
+ * pattern rather than a refine because a refine is dropped silently by
+ * `z.toJSONSchema`, which left the published spec saying nothing about the
+ * accepted format (P2-8).
+ */
+export const SCHEDULE_CRON_PATTERN =
+  /^\s*(?:\*|0*[0-5]?[0-9])\s+(?:\*|0*(?:[01]?[0-9]|2[0-3]))\s+\*\s+\*\s+(?:\*|0*[0-6])\s*$/
 
 export const CreateScheduleSchema = z.object({
   workspaceId: z.string().min(1),
@@ -582,10 +645,7 @@ export const CreateScheduleSchema = z.object({
   cron: z
     .string()
     .min(1, "cron expression is required")
-    .refine(
-      (c) => isFiveFieldCron(c),
-      "Use a five-field schedule like '0 0 * * 0' or '30 8 * * *'"
-    ),
+    .regex(SCHEDULE_CRON_PATTERN, SCHEDULE_CRON_MESSAGE),
   goal: ScanGoalSchema,
   mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).default("SAFE"),
 })
@@ -594,11 +654,7 @@ export type CreateScheduleInput = z.infer<typeof CreateScheduleSchema>
 
 export const PatchScheduleSchema = z.object({
   workspaceId: z.string().min(1),
-  cron: z
-    .string()
-    .min(1)
-    .refine((c) => isFiveFieldCron(c), "Use a five-field schedule like '0 0 * * 0' or '30 8 * * *'")
-    .optional(),
+  cron: z.string().min(1).regex(SCHEDULE_CRON_PATTERN, SCHEDULE_CRON_MESSAGE).optional(),
   goal: ScanGoalSchema.optional(),
   mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).optional(),
   enabled: z.boolean().optional(),
@@ -612,6 +668,26 @@ export const CreatePRSchema = z.object({
 
 export type CreatePRInput = z.infer<typeof CreatePRSchema>
 
+export const FINDING_SEARCH_MAX_LENGTH = 120
+export const FINDING_SEARCH_MESSAGE = `Too big: expected string to have <=${FINDING_SEARCH_MAX_LENGTH} characters`
+
+/**
+ * `q` is trimmed and then bounded. Written as a pattern on the raw input rather
+ * than a transform plus `max()`, because the published spec is generated from
+ * this schema: a transform is not representable in JSON Schema and a bound
+ * applied after the trim would reject inputs the route accepts (P2-8). The
+ * pattern is exactly `value.trim().length <= 120` — leading and trailing
+ * whitespace is free, the trimmed core is bounded.
+ *
+ * The bound is one flat span between two whitespace runs. "The trimmed core is
+ * at most 120 characters" and "whitespace, then at most 120 characters, then
+ * whitespace" accept exactly the same strings, and the flat form has no
+ * quantifier inside a quantifier, so `security/detect-unsafe-regex` leaves it
+ * alone. The previous form nested a bounded repeat over an overlapping class
+ * and was flagged.
+ */
+export const FINDING_SEARCH_PATTERN = /^\s*[\s\S]{0,120}\s*$/
+
 export const FindingQuerySchema = z.object({
   workspaceId: z.string().min(1),
   targetId: z.string().min(1).optional(),
@@ -621,6 +697,13 @@ export const FindingQuerySchema = z.object({
   status: FindingStatusSchema.optional(),
   verified: z.enum(["true", "false"]).optional(),
   category: z.string().optional(),
+  // Bounded search: trimmed, at most 120 characters, matched against title,
+  // summary and CWE inside the caller's workspace only.
+  q: z
+    .string()
+    .transform((value) => value.trim())
+    .pipe(z.string().regex(FINDING_SEARCH_PATTERN, FINDING_SEARCH_MESSAGE))
+    .optional(),
   stats: z.enum(["true"]).optional(),
   cursor: z.string().optional(),
   limit: z.string().optional(),
@@ -637,3 +720,14 @@ export * from "./plain-language"
 // service imports it through the package root.
 export * from "./scan-attachments"
 export * from "./scan-quality"
+export * from "./setup-health"
+export * from "./release-packet"
+
+export {
+  resolveUrlReviewMode,
+  resolveUrlReviewAvailability,
+  TARGET_RELAY_UNAVAILABLE_MESSAGE,
+  URL_PROFILE_UNSUPPORTED_MESSAGE,
+  type UrlReviewMode,
+} from "./url-review-admission"
+export { DEPENDENCY_RESOLUTION_CAPABILITIES } from "./dependency-capabilities"

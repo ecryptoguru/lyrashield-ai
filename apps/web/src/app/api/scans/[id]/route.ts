@@ -1,6 +1,13 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
 import { createHash } from "crypto"
-import { getScanWithEvents, cancelScan, prisma, removeScan } from "@lyrashield/db"
+import {
+  getScanWithEvents,
+  cancelScan,
+  prisma,
+  removeScan,
+  withDelegatedReadAuthority,
+  type DelegatedReadAuthority,
+} from "@lyrashield/db"
 import { getScanQueuePosition } from "@lyrashield/integrations"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -12,7 +19,9 @@ import { z } from "zod"
 import { ScanIdSchema } from "@lyrashield/types"
 import { revalidateDashboardAggregates } from "../../../../lib/cache"
 import { recordedOperation } from "../../../../lib/recorded-operation"
+import { publicScanProvenance } from "../../../../lib/scan-provenance"
 import { filterDashboardScanEvents } from "@/lib/scan-event-visibility"
+import { delegatedReadPrincipal, delegatedScanAccess } from "@/lib/delegated-target-read-scope"
 
 function scanEtag(
   scan: NonNullable<Awaited<ReturnType<typeof getScanWithEvents>>>,
@@ -24,7 +33,9 @@ function scanEtag(
     id: scan.id,
     status: scan.status,
     updatedAt: scan.updatedAt,
+    executionPlanHash: publicScanProvenance(scan.executionPlan).executionPlanHash,
     queuePosition,
+    capacity: scan.capacity ?? null,
     eventsCount: events.length,
     lastEventAt: lastEvent?.createdAt,
     // Included so a cursor-scoped response can never collide with the full
@@ -32,6 +43,18 @@ function scanEtag(
     eventsCursorApplied: scan.eventsCursorApplied ?? null,
   })
   return `"${createHash("sha256").update(payload).digest("hex")}"`
+}
+
+function delegatedStatusResponse(scan: { id: string | null; status: string }) {
+  const payload = {
+    success: true,
+    data: { ...(scan.id ? { id: scan.id } : {}), status: scan.status },
+  }
+  const etag = `"${createHash("sha256").update(JSON.stringify(payload)).digest("hex")}"`
+  return NextResponse.json(payload, {
+    status: 200,
+    headers: { ETag: etag, "Cache-Control": "private, no-store" },
+  })
 }
 
 const WorkspaceSchema = z.string().min(1)
@@ -47,7 +70,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const workspaceId = parsedWorkspace.data
 
   try {
-    await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const principal = delegatedReadPrincipal(session, workspace)
     // Optional event-id cursor: when present, the service returns only events
     // strictly AFTER the cursor (keyset on createdAt+id), so the dashboard's
     // poll loop fetches the tail instead of the full 200-event window on every
@@ -58,10 +82,44 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       eventsAfterParam && ScanIdSchema.safeParse(eventsAfterParam).success
         ? eventsAfterParam
         : undefined
-    const scan = await getScanWithEvents(id, workspaceId, { eventsAfter })
-    if (!scan) {
+    const load = async (
+      client?: Parameters<typeof getScanWithEvents>[3],
+      authority?: DelegatedReadAuthority
+    ) => {
+      if (principal) {
+        const access = await delegatedScanAccess(session, workspace, id, client)
+        if (!access) return null
+        if (access.statusOnly) {
+          return delegatedStatusResponse({ id: access.scanId, status: access.status })
+        }
+        const scan = await getScanWithEvents(
+          id,
+          workspaceId,
+          {
+            eventsAfter,
+            requireActiveTarget: true,
+            allowedProfiles: authority?.allowedProfiles,
+          },
+          client
+        )
+        if (!scan) {
+          return delegatedStatusResponse({ id: access.scanId, status: access.status })
+        }
+        if (!session.oauth?.allTargets) assertOAuthDelegatedScope(session, scan.targetId)
+        return scan
+      }
+
+      const scan = await getScanWithEvents(id, workspaceId, { eventsAfter })
+      return scan
+    }
+    const loaded = principal
+      ? await withDelegatedReadAuthority(principal, (tx, authority) => load(tx, authority))
+      : await load()
+    if (!loaded) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
+    if (loaded instanceof Response) return loaded
+    const scan = loaded
 
     // Queue position can change without a scan row or event update.
     const queuePosition = scan.status === "QUEUED" ? await getScanQueuePosition(id) : null
@@ -79,9 +137,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           id: scan.id,
           workspaceId: scan.workspaceId,
           status: scan.status,
+          capacity: scan.capacity ?? null,
           goal: scan.goal,
           mode: scan.mode,
           triggerType: scan.triggerType,
+          ...publicScanProvenance(scan.executionPlan),
           startedAt: scan.startedAt,
           endedAt: scan.endedAt,
           summary: scan.summary,

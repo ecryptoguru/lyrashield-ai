@@ -107,6 +107,33 @@ describe("requestPayout provider ambiguity", () => {
     expect(prisma.payoutItem.deleteMany).not.toHaveBeenCalled()
   })
 
+  it("releases ordinary commission captures only after a confirmed rejection", async () => {
+    const result = await requestPayout({
+      affiliateId: "affiliate-1",
+      provider: "razorpayx",
+      sendFn: vi.fn().mockResolvedValue({
+        success: false,
+        rejected: true,
+        providerPayoutId: "pout_rejected",
+      }),
+    })
+
+    expect(result.success).toBe(false)
+    expect(prisma.payout.updateMany).toHaveBeenCalledWith({
+      where: { id: "payout-1", status: "PROCESSING" },
+      data: {
+        status: "FAILED",
+        failureCode: "PROVIDER_ERROR",
+        providerPayoutId: "pout_rejected",
+      },
+    })
+    expect(prisma.commission.updateMany).toHaveBeenLastCalledWith({
+      where: { id: { in: ["commission-1"] }, status: "RESERVED", affiliateId: "affiliate-1" },
+      data: { status: "AVAILABLE" },
+    })
+    expect(prisma.payoutItem.deleteMany).toHaveBeenCalledWith({ where: { payoutId: "payout-1" } })
+  })
+
   it("rejects non-INR or mixed-currency batches before reserving commissions", async () => {
     vi.mocked(prisma.commission.findMany).mockResolvedValue([
       { id: "commission-1", amount: new FakeDecimal("125"), currency: "INR" },
@@ -131,6 +158,11 @@ describe("requestPayout provider ambiguity", () => {
 
     await requestPayout({ affiliateId: "affiliate-1", provider: "razorpayx", sendFn })
 
-    expect(sendFn).toHaveBeenCalledWith("payout-1", "125.1200", "INR", { type: "bank" })
+    const payoutData = vi.mocked(prisma.payout.create).mock.calls[0]?.[0]?.data
+    expect(payoutData).not.toHaveProperty("id")
+    expect(payoutData?.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i)
+    expect(sendFn).toHaveBeenCalledWith("payout-1", payoutData?.idempotencyKey, "125.1200", "INR", {
+      type: "bank",
+    })
   })
 })

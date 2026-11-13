@@ -25,7 +25,9 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
       <p id="email-error" class="mt-2 hidden text-sm text-danger" aria-live="polite"></p>
     </div>
 
-    <div>
+    <details class="text-sm text-text-muted">
+      <summary class="min-h-11 cursor-pointer py-3 font-medium text-text">Add context (optional)</summary>
+    <div class="mt-3">
       <label for="role" class="block text-sm font-medium text-text">Role <span class="text-text-muted">(optional)</span></label>
       <select
         id="role"
@@ -52,6 +54,8 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
         placeholder="e.g. a Next.js SaaS, mostly AI-generated"
       />
     </div>
+
+    </details>
 
     <div class="visually-hidden" aria-hidden="true">
       <label for="website">Website</label>

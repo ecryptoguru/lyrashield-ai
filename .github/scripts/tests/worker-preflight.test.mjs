@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs"
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import assert from "node:assert/strict"
@@ -9,6 +9,22 @@ const runtimeWorkflow = readFileSync(".github/workflows/deploy-azure-runtime.yml
 const callerWorkflow = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
 const preflightScript = readFileSync(".github/scripts/deploy-azure-preflight.sh", "utf8")
 const rolloutScript = readFileSync(".github/scripts/deploy-azure-rollout.sh", "utf8")
+const aiResultCacheSyncArgs = [
+  ".github/scripts/deploy-azure-preflight.sh",
+  "sync-ai-result-cache-secrets-to-worker-key-vault",
+]
+
+// worker-env.sh requires signed SBOM coverage evidence for the pinned
+// sandbox image; fixtures that run the real loader must carry valid values.
+const sbomEvidenceLines =
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n"
 
 const workflowStepBody = (script, slug) => {
   const marker = `step_${slug}() {\n`
@@ -36,6 +52,7 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
   }
   assert.match(scannerDeploy, /REDIS_URL=secretref:bullmq-redis-url/)
   assert.match(scannerDeploy, /UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token/)
+  assert.doesNotMatch(scannerDeploy, /LYRASHIELD_AI_(?:RESULT_CACHE|CACHE_)/)
 
   const workerRedisSync = workflowStepBody(
     preflightScript,
@@ -114,6 +131,29 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
     /--secrets[^\n]*GITHUB_APP_(?:ID|SLUG|PRIVATE_KEY|CLIENT_ID|CLIENT_SECRET)/
   )
 
+  const resultCacheSync = preflightScript
+    .split("step_sync-ai-result-cache-secrets-to-worker-key-vault() {\n")[1]
+    ?.split("\n# Workflow step: Sync BullMQ Redis secret to Container Apps")[0]
+  assert.ok(resultCacheSync)
+  assert.match(resultCacheSync, /off\)[\s\S]*\n  if \[ "\$mode" != "off" \]/)
+  assert.match(resultCacheSync, /azure_keyvault_sync_env_group "\$AZURE_KEY_VAULT_NAME"/)
+  assert.match(resultCacheSync, /worker-ai-result-cache-mode:LYRASHIELD_AI_RESULT_CACHE_MODE/)
+  assert.match(resultCacheSync, /worker-ai-cache-url:LYRASHIELD_AI_CACHE_REDIS_URL/)
+  assert.match(resultCacheSync, /worker-ai-cache-key:LYRASHIELD_AI_CACHE_KEY_SECRET/)
+  assert.match(resultCacheSync, /cache Redis host must be separate from BullMQ/)
+  assert.match(resultCacheSync, /cache Redis host must be separate from rate-limit Redis/)
+  assert.doesNotMatch(resultCacheSync, /--value\s+"\$LYRASHIELD_AI_CACHE/)
+
+  const cacheWorkflowStep = runtimeWorkflow
+    .split("      - name: Sync isolated AI result-cache secrets to worker and app Key Vaults\n")[1]
+    ?.split("\n      - name:")[0]
+  assert.ok(cacheWorkflowStep)
+  assert.match(
+    cacheWorkflowStep,
+    /LYRASHIELD_AI_RESULT_CACHE_MODE: \$\{\{ vars\.LYRASHIELD_AI_RESULT_CACHE_MODE \|\| 'off' \}\}/
+  )
+  assert.match(cacheWorkflowStep, /sync-ai-result-cache-secrets-to-worker-key-vault/)
+
   const cleanup = workflowStepBody(rolloutScript, "remove-excess-scanner-secrets")
   for (const secret of [
     "github-app-id",
@@ -124,6 +164,157 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
     "github-app-client-secret",
   ]) {
     assert.match(cleanup, new RegExp(secret))
+  }
+})
+
+test("exact result-cache deployment provisions isolated worker and app purge credentials", () => {
+  const secretUrl = "rediss://default:cache-url-secret-sentinel@cache.example:6379"
+  const secretKey = "cache-key-secret-sentinel-0123456789"
+  const activeEnv = {
+    ...process.env,
+    LYRASHIELD_AI_RESULT_CACHE_MODE: "observe",
+    LYRASHIELD_AI_CACHE_REDIS_URL: secretUrl,
+    LYRASHIELD_AI_CACHE_KEY_SECRET: secretKey,
+    LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT: "a".repeat(64),
+    BULLMQ_REDIS_URL: "rediss://default:queue-secret-sentinel@queue.example:6379",
+    UPSTASH_REDIS_REST_URL: "https://rate.example",
+    AZURE_KEY_VAULT_NAME: "lyrashieldprodsecrets",
+    AZURE_APP_SECRET_KEY_VAULT_NAME: "app-only-vault",
+    AZURE_APP_CONTAINER_APP_NAME: "lyrashield-app",
+    AZURE_SCANNER_CONTAINER_APP_NAME: "lyrashield-scanner",
+    AZURE_RESOURCE_GROUP: "rg",
+  }
+  for (const [name, value, expectedMessage] of [
+    [
+      "BullMQ",
+      activeEnv.BULLMQ_REDIS_URL.replace("queue.example", "cache.example"),
+      "separate from BullMQ",
+    ],
+    [
+      "rate limit",
+      activeEnv.UPSTASH_REDIS_REST_URL.replace("rate.example", "cache.example"),
+      "separate from rate-limit Redis",
+    ],
+  ]) {
+    const result = spawnSync("bash", aiResultCacheSyncArgs, {
+      encoding: "utf8",
+      env: {
+        ...activeEnv,
+        BULLMQ_REDIS_URL: "rediss://default:queue-secret-sentinel@queue.example:6379",
+        ...(name === "BullMQ" ? { BULLMQ_REDIS_URL: value } : { UPSTASH_REDIS_REST_URL: value }),
+      },
+    })
+    const output = `${result.stdout}${result.stderr}`
+    assert.notEqual(result.status, 0, `${name} host collision must fail`)
+    assert.match(output, new RegExp(expectedMessage))
+    assert.doesNotMatch(
+      output,
+      /cache-url-secret-sentinel|cache-key-secret-sentinel|queue-secret-sentinel/
+    )
+  }
+
+  const temp = mkdtempSync(path.join(tmpdir(), "lyra-ai-cache-sync-"))
+  const azStub = path.join(temp, "az")
+  const timeoutStub = path.join(temp, "timeout")
+  const azLog = path.join(temp, "az-args.log")
+  writeFileSync(
+    azStub,
+    `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "$AZ_FAKE_LOG"
+case "$*" in
+  *"--query id --output tsv"*) printf '/subscriptions/test/resourceGroups/test/providers/Microsoft.KeyVault/vaults/shared-vault\\n' ;;
+  *"--query properties.enableRbacAuthorization --output tsv"*) printf 'true\\n' ;;
+  *"--query identity.principalId --output tsv"*) printf '00000000-0000-0000-0000-000000000001\\n' ;;
+  *roleDefinitionName*length*) printf '1\\n' ;;
+esac
+`
+  )
+  writeFileSync(
+    timeoutStub,
+    `#!/usr/bin/env bash
+set -euo pipefail
+while [ "$#" -gt 0 ] && [ "$1" != "az" ]; do shift; done
+[ "$#" -gt 0 ] || exit 2
+exec "$@"
+`
+  )
+  chmodSync(azStub, 0o700)
+  chmodSync(timeoutStub, 0o700)
+  try {
+    const off = spawnSync("bash", aiResultCacheSyncArgs, {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        LYRASHIELD_AI_RESULT_CACHE_MODE: "off",
+        AZURE_KEY_VAULT_NAME: "lyrashieldprodsecrets",
+        PATH: `${temp}:${process.env.PATH}`,
+        AZ_FAKE_LOG: azLog,
+      },
+    })
+    assert.equal(off.status, 0, `${off.stdout}${off.stderr}`)
+    const offArgs = readFileSync(azLog, "utf8")
+    assert.equal((offArgs.match(/keyvault secret set/g) ?? []).length, 1)
+    assert.match(offArgs, /--name worker-ai-result-cache-mode/)
+    assert.doesNotMatch(offArgs, /worker-ai-cache-(?:fingerprint|url|key)/)
+
+    writeFileSync(azLog, "")
+    const success = spawnSync("bash", aiResultCacheSyncArgs, {
+      encoding: "utf8",
+      env: {
+        ...activeEnv,
+        PATH: `${temp}:${process.env.PATH}`,
+        AZ_FAKE_LOG: azLog,
+      },
+    })
+    assert.equal(success.status, 0, `${success.stdout}${success.stderr}`)
+    const azureArgs = readFileSync(azLog, "utf8")
+    assert.equal((azureArgs.match(/keyvault secret set/g) ?? []).length, 6)
+    assert.match(azureArgs, /--vault-name app-only-vault --name ai-cache-url/)
+    assert.match(azureArgs, /--vault-name app-only-vault --name ai-cache-key/)
+    assert.match(
+      azureArgs,
+      /containerapp secret set[^\n]*--name lyrashield-app[^\n]*ai-cache-url=keyvaultref:https:\/\/app-only-vault\.vault\.azure\.net\/secrets\/ai-cache-url,identityref:system/
+    )
+    assert.doesNotMatch(azureArgs, /lyrashield-scanner|role assignment create/)
+    for (const cacheUrl of [secretUrl.replace("default:", ":")]) {
+      writeFileSync(azLog, "")
+      const passwordOnly = spawnSync("bash", aiResultCacheSyncArgs, {
+        encoding: "utf8",
+        env: {
+          ...activeEnv,
+          LYRASHIELD_AI_CACHE_REDIS_URL: cacheUrl,
+          PATH: `${temp}:${process.env.PATH}`,
+          AZ_FAKE_LOG: azLog,
+        },
+      })
+      assert.equal(passwordOnly.status, 0, `${passwordOnly.stdout}${passwordOnly.stderr}`)
+    }
+    const sharedVault = spawnSync("bash", aiResultCacheSyncArgs, {
+      encoding: "utf8",
+      env: {
+        ...activeEnv,
+        AZURE_APP_SECRET_KEY_VAULT_NAME: "lyrashieldprodsecrets",
+        PATH: `${temp}:${process.env.PATH}`,
+        AZ_FAKE_LOG: azLog,
+      },
+    })
+    assert.notEqual(sharedVault.status, 0)
+    assert.match(`${sharedVault.stdout}${sharedVault.stderr}`, /app-only Key Vault distinct/)
+    assert.match(azureArgs, /--name worker-ai-result-cache-mode/)
+    assert.match(azureArgs, /--name worker-ai-cache-fingerprint/)
+    assert.match(azureArgs, /--name worker-ai-cache-url/)
+    assert.match(azureArgs, /--name worker-ai-cache-key/)
+    assert.doesNotMatch(
+      azureArgs,
+      /cache-url-secret-sentinel|cache-key-secret-sentinel|queue-secret-sentinel/
+    )
+    assert.doesNotMatch(
+      `${success.stdout}${success.stderr}`,
+      /cache-url-secret-sentinel|cache-key-secret-sentinel/
+    )
+  } finally {
+    rmSync(temp, { recursive: true, force: true })
   }
 })
 
@@ -166,6 +357,10 @@ const preflightEnvFile = [
 ].join("\n")
 
 const installPreflightSecretRefresher = (directory) => {
+  writeFileSync(
+    path.join(directory, "egress-pins"),
+    "redis.internal 13.200.201.38 6379\nredis.internal 13.234.196.111 6379\npostgres.internal 13.200.110.68 5432\n"
+  )
   writeFileSync(
     path.join(directory, "timeout"),
     '#!/bin/sh\nset -eu\ncase "$1 $2" in\n  "--kill-after=10s 120s"|"--kill-after=5s 10s") ;;\n  *) exit 1 ;;\nesac\nshift 2\nexec "$@"\n',
@@ -225,7 +420,8 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     writeFileSync(
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
-        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n" +
+        sbomEvidenceLines
     )
     writeFileSync(envFile, preflightEnvFile)
     const empty = {
@@ -245,6 +441,7 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
           MOCK_LIVE_DATABASE_URL: "postgres://worker:other@postgres.internal:5432/lyrashield",
           LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
           LYRASHIELD_WORKER_ENV_FILE: envFile,
+          LYRASHIELD_EGRESS_PIN_FILE: path.join(directory, "egress-pins"),
           LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
           LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
         },
@@ -258,6 +455,12 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     assert.equal(env.TMPDIR, "/tmp")
     assert.ok(tokens.includes("/tmp:rw,nosuid,nodev,noexec,size=64m"))
     assert.ok(!tokens.includes("--mount"))
+    const hosts = tokens.flatMap((token, i) => (token === "--add-host" ? [tokens[i + 1]] : []))
+    assert.deepEqual(hosts, [
+      "redis.internal:13.200.201.38",
+      "redis.internal:13.234.196.111",
+      "postgres.internal:13.200.110.68",
+    ])
     const passedNames = new Set()
     for (let i = 0; i < tokens.length; i++) {
       if (tokens[i] === "--env") passedNames.add(tokens[i + 1].split("=")[0])
@@ -283,6 +486,26 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     ]) {
       assert.throws(() => run(state))
     }
+    for (const pins of [
+      "",
+      "bad;host 13.200.201.38 6379\n",
+      "redis.internal bad:address 6379\n",
+      "redis.internal 13.200.201.38 6379 extra\n",
+    ]) {
+      writeFileSync(path.join(directory, "egress-pins"), pins)
+      const before = readFileSync(dockerLog, "utf8")
+        .split("\n")
+        .filter((line) => line.startsWith("run ")).length
+      assert.throws(() => run(JSON.stringify(empty)))
+      assert.equal(
+        readFileSync(dockerLog, "utf8")
+          .split("\n")
+          .filter((line) => line.startsWith("run ")).length,
+        before
+      )
+    }
+    rmSync(path.join(directory, "egress-pins"))
+    assert.throws(() => run(JSON.stringify(empty)))
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -307,7 +530,8 @@ test("worker preflight reports a stale worker environment without printing endpo
     writeFileSync(
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
-        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n" +
+        sbomEvidenceLines
     )
     writeFileSync(envFile, preflightEnvFile)
     const empty = {
@@ -327,6 +551,7 @@ test("worker preflight reports a stale worker environment without printing endpo
           MOCK_LIVE_DATABASE_URL: liveDatabaseUrl,
           LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
           LYRASHIELD_WORKER_ENV_FILE: envFile,
+          LYRASHIELD_EGRESS_PIN_FILE: path.join(directory, "egress-pins"),
           LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
           LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
         },
@@ -374,7 +599,7 @@ test("worker preflight reports a stale worker environment without printing endpo
   }
 })
 
-test("preflight environment loads @lyrashield/config in production and matches the worker launcher", () => {
+function verifyPreflightEnvironment(controls) {
   const directory = mkdtempSync(path.join(tmpdir(), "worker-preflight-env-"))
   try {
     const dockerLog = path.join(directory, "docker.log")
@@ -393,7 +618,11 @@ test("preflight environment loads @lyrashield/config in production and matches t
     writeFileSync(
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
-        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n" +
+        sbomEvidenceLines +
+        Object.entries(controls)
+          .map(([name, value]) => `${name}=${value}\n`)
+          .join("")
     )
     writeFileSync(envFile, preflightEnvFile)
     const empty = {
@@ -412,6 +641,7 @@ test("preflight environment loads @lyrashield/config in production and matches t
         MOCK_LIVE_DATABASE_URL: "postgres://worker:other@postgres.internal:5432/lyrashield",
         LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
         LYRASHIELD_WORKER_ENV_FILE: envFile,
+        LYRASHIELD_EGRESS_PIN_FILE: path.join(directory, "egress-pins"),
         LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
         LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
       },
@@ -441,13 +671,34 @@ test("preflight environment loads @lyrashield/config in production and matches t
     // worker-side names come from ops/worker/worker-env.sh, which both call.
     const workerNames = new Set()
     for (const file of ["ops/worker/worker-env.sh", "ops/worker/run-worker.sh"]) {
-      let text = ""
-      try {
-        text = readFileSync(file, "utf8")
-      } catch {
-        continue
+      let text = readFileSync(file, "utf8")
+      // The separately qualified Go capsule has its own minimal environment;
+      // these variables must never become worker/preflight environment settings.
+      if (file === "ops/worker/run-worker.sh") {
+        text = text.replace(
+          /# BEGIN GO RESOLVER QUALIFICATION[\s\S]*?# END GO RESOLVER QUALIFICATION/,
+          ""
+        )
       }
-      for (const match of text.matchAll(/--env ([A-Z_]+)=/g)) workerNames.add(match[1])
+      for (const match of text.matchAll(/--env ([A-Z][A-Z0-9_]*)=/g)) workerNames.add(match[1])
+    }
+    // Both writer flags are always explicit. Endpoint overrides are conditional:
+    // an absent dedupe mode inherits the main policy in the engine.
+    for (const name of ["LYRASHIELD_RUN_RECORD_V1_1", "LYRASHIELD_PENDING_HTTP_EVIDENCE"]) {
+      assert.equal(env[name], controls[name] ?? "0", name)
+    }
+    for (const name of ["LLM_API_MODE", "DEDUPE_LLM_API_MODE"]) {
+      assert.equal(env[name], controls[name], name)
+      if (!Object.hasOwn(controls, name)) workerNames.delete(name)
+    }
+    // The held publication record and legacy coverage inputs are alternative
+    // configured evidence paths, with the same selection in both consumers.
+    const publicationPath = "LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH"
+    assert.equal(env[publicationPath], controls[publicationPath])
+    if (!Object.hasOwn(controls, publicationPath)) workerNames.delete(publicationPath)
+    else {
+      for (const name of workerNames)
+        if (name.startsWith("LYRASHIELD_SANDBOX_SBOM_COVERAGE_")) workerNames.delete(name)
     }
     const passedNames = new Set()
     for (let i = 0; i < tokens.length; i++) {
@@ -457,7 +708,25 @@ test("preflight environment loads @lyrashield/config in production and matches t
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
-})
+}
+
+for (const [mode, controls] of Object.entries({
+  defaults: {},
+  "main mode with inherited dedupe": { LYRASHIELD_RUN_RECORD_V1_1: "1", LLM_API_MODE: "responses" },
+  "explicit writer and endpoint controls": {
+    LYRASHIELD_RUN_RECORD_V1_1: "1",
+    LYRASHIELD_PENDING_HTTP_EVIDENCE: "1",
+    LLM_API_MODE: "responses",
+    DEDUPE_LLM_API_MODE: "chat_completions",
+  },
+  "held publication path": {
+    LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH: "/etc/lyrashield/sandbox-publication-record.json",
+  },
+})) {
+  test(`preflight environment loads @lyrashield/config in production and matches the worker launcher: ${mode}`, () => {
+    verifyPreflightEnvironment(controls)
+  })
+}
 
 for (const failure of ["busy-queue", "vm-error"]) {
   test(`workflow recovers ingress and candidates after ${failure}`, () => {

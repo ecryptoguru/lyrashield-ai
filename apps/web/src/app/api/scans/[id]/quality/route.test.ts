@@ -11,10 +11,66 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@lyrashield/db", () => ({
   getScanQualitySurface: vi.fn(),
+  withDelegatedReadAuthority: async (
+    params: { targetId?: string; allTargets?: boolean; allowedTargetIds?: string[] },
+    run: (tx: unknown, authority: { targetIds: string[]; allowedProfiles: string[] }) => unknown
+  ) =>
+    run(
+      {},
+      {
+        targetIds: params.targetId
+          ? [params.targetId]
+          : params.allTargets
+            ? ["target-1"]
+            : (params.allowedTargetIds ?? []),
+        allowedProfiles: ["STANDARD"],
+      }
+    ),
+  withWorkspaceRLS: (workspaceId: string, callback: (tx: unknown) => unknown) =>
+    withWorkspaceRLSMock(workspaceId, callback),
 }))
+
+const scanFindFirstMock = vi.fn()
+const delegatedScanAccessMock = vi.hoisted(() => vi.fn())
+const withWorkspaceRLSMock = vi.fn((workspaceId: string, callback: (tx: unknown) => unknown) =>
+  callback({ scan: { findFirst: scanFindFirstMock } })
+)
+const assertOAuthDelegatedScopeMock = vi.fn(
+  (
+    session: {
+      oauth?: {
+        connectionId?: string
+        scopes?: string[]
+        allTargets?: boolean
+        allowedTargetIds?: string[]
+      }
+    },
+    targetId: string | null | undefined
+  ) => {
+    const connection = session.oauth
+    if (
+      connection?.connectionId &&
+      !connection.allTargets &&
+      (!targetId || !connection.allowedTargetIds?.includes(targetId))
+    ) {
+      throw new Error("FORBIDDEN")
+    }
+  }
+)
 
 vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
+  assertOAuthDelegatedScope: (
+    session: {
+      oauth?: {
+        connectionId?: string
+        scopes?: string[]
+        allTargets?: boolean
+        allowedTargetIds?: string[]
+      }
+    },
+    targetId: string | null | undefined
+  ) => assertOAuthDelegatedScopeMock(session, targetId),
 }))
 
 vi.mock("@lyrashield/auth", () => ({
@@ -25,6 +81,30 @@ vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
   setRequestIdResolver: vi.fn(),
   logger: { error: vi.fn() },
+}))
+vi.mock("@/lib/delegated-target-read-scope", () => ({
+  delegatedReadPrincipal: (session: {
+    userId?: string
+    oauth?: {
+      connectionId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+    }
+  }) =>
+    session.oauth?.connectionId
+      ? {
+          workspaceId: "ws-1",
+          userId: session.userId ?? "user-1",
+          memberId: "member-1",
+          memberRole: "OWNER",
+          memberUpdatedAt: new Date("2026-11-05T10:00:00Z"),
+          connectionId: session.oauth.connectionId,
+          authorizationVersion: 2,
+          allTargets: session.oauth.allTargets,
+          allowedTargetIds: session.oauth.allowedTargetIds ?? [],
+        }
+      : null,
+  delegatedScanAccess: (...args: unknown[]) => delegatedScanAccessMock(...args),
 }))
 
 import { GET } from "./route"
@@ -41,7 +121,24 @@ function request(workspaceId?: string) {
 }
 
 describe("/api/scans/[id]/quality", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    delegatedScanAccessMock.mockImplementation(async (session, _workspace, scanId) => {
+      const typed = session as {
+        oauth?: { connectionId?: string; workspaceId?: string }
+      }
+      if (!typed.oauth?.connectionId) return null
+      const workspaceId = typed.oauth.workspaceId ?? "ws-1"
+      await withWorkspaceRLSMock(workspaceId, (tx: unknown) => tx)
+      const scan = await scanFindFirstMock({
+        where: { id: scanId, workspaceId, deletedAt: null },
+        select: { targetId: true },
+      })
+      if (!scan) return null
+      assertOAuthDelegatedScopeMock(typed as never, scan.targetId)
+      return { scanId, status: "COMPLETED", statusOnly: false }
+    })
+  })
 
   it("returns the measured quality surface for a workspace scan", async () => {
     vi.mocked(getScanQualitySurface).mockResolvedValue({
@@ -90,6 +187,105 @@ describe("/api/scans/[id]/quality", () => {
     expect(body.data.estimates.verifiedFindingRatio.kind).toBe("heuristic")
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:view")
     expect(getScanQualitySurface).toHaveBeenCalledWith("scan-1", "ws-1")
+    expect(withWorkspaceRLSMock).not.toHaveBeenCalled()
+  })
+
+  it("resolves the scan target and permits a connection scoped to that target", async () => {
+    const session = {
+      userId: "user-1",
+      oauth: {
+        connectionId: "connection-1",
+        scopes: ["lyrashield.read", "lyrashield.write"],
+        allTargets: false,
+        allowedTargetIds: ["target-1"],
+      },
+    }
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session } as never)
+    scanFindFirstMock.mockResolvedValue({ targetId: "target-1" })
+    vi.mocked(getScanQualitySurface).mockResolvedValueOnce({
+      version: "lyrashield-scan-quality/1.0.0",
+      surfaceChecksum: "delegated-surface",
+    } as never)
+
+    const res = await GET(request("ws-1"), routeParams)
+
+    expect(res.status).toBe(200)
+    expect(withWorkspaceRLSMock).toHaveBeenCalled()
+    expect(scanFindFirstMock).toHaveBeenCalledWith({
+      where: { id: "scan-1", workspaceId: "ws-1", deletedAt: null },
+      select: { targetId: true },
+    })
+    expect(assertOAuthDelegatedScopeMock).toHaveBeenCalledWith(session, "target-1")
+    expect(getScanQualitySurface).toHaveBeenCalledWith(
+      "scan-1",
+      "ws-1",
+      {},
+      {
+        requireActiveTarget: true,
+        allowedProfiles: ["STANDARD"],
+      }
+    )
+  })
+
+  it("denies a connection-scoped caller when the resolved scan target is outside its grant", async () => {
+    const session = {
+      userId: "user-1",
+      oauth: {
+        connectionId: "connection-1",
+        scopes: ["lyrashield.read", "lyrashield.write"],
+        allTargets: false,
+        allowedTargetIds: ["target-allowed"],
+      },
+    }
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session } as never)
+    scanFindFirstMock.mockResolvedValueOnce({ targetId: "target-forbidden" })
+
+    const res = await GET(request("ws-1"), routeParams)
+
+    expect(res.status).toBe(403)
+    expect(assertOAuthDelegatedScopeMock).toHaveBeenCalledWith(session, "target-forbidden")
+    expect(getScanQualitySurface).not.toHaveBeenCalled()
+  })
+
+  it("does not reveal a cross-workspace or missing scan to a connection-bound caller", async () => {
+    const session = {
+      userId: "user-1",
+      oauth: {
+        connectionId: "connection-1",
+        scopes: ["lyrashield.read", "lyrashield.write"],
+        allTargets: false,
+        allowedTargetIds: ["target-1"],
+      },
+    }
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session } as never)
+    scanFindFirstMock.mockResolvedValueOnce(null)
+
+    const res = await GET(request("ws-1"), routeParams)
+
+    expect(res.status).toBe(404)
+    expect(assertOAuthDelegatedScopeMock).not.toHaveBeenCalled()
+    expect(getScanQualitySurface).not.toHaveBeenCalled()
+  })
+
+  it("denies read-only OAuth quality access with an empty target grant", async () => {
+    const session = {
+      userId: "user-1",
+      oauth: {
+        connectionId: "read-only-connection",
+        scopes: ["lyrashield.read"],
+        allTargets: false,
+        allowedTargetIds: [],
+      },
+    }
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session } as never)
+    scanFindFirstMock.mockResolvedValue({ targetId: "target-1" })
+
+    const res = await GET(request("ws-1"), routeParams)
+
+    expect(res.status).toBe(403)
+    expect(withWorkspaceRLSMock).toHaveBeenCalled()
+    expect(assertOAuthDelegatedScopeMock).toHaveBeenCalledWith(session, "target-1")
+    expect(getScanQualitySurface).not.toHaveBeenCalled()
   })
 
   it("rejects a missing workspaceId", async () => {
@@ -109,5 +305,25 @@ describe("/api/scans/[id]/quality", () => {
     const res = await GET(request("ws-1"), routeParams)
     expect([401, 403, 500]).toContain(res.status)
     expect(getScanQualitySurface).not.toHaveBeenCalled()
+  })
+
+  it("returns an ETag on 200 and a bodyless 304 for a matching If-None-Match (W2.4)", async () => {
+    vi.mocked(getScanQualitySurface).mockResolvedValue({
+      version: "lyrashield-scan-quality/1.0.0",
+      surfaceChecksum: "deadbeef",
+    } as never)
+
+    const first = await GET(request("ws-1"), routeParams)
+    expect(first.status).toBe(200)
+    const etag = first.headers.get("ETag")
+    expect(etag).toMatch(/^"[0-9a-f]{64}"$/)
+
+    const conditional = new Request("http://localhost/api/scans/scan-1/quality?workspaceId=ws-1", {
+      headers: { "If-None-Match": etag! },
+    })
+    const second = await GET(conditional, routeParams)
+    expect(second.status).toBe(304)
+    expect(second.headers.get("ETag")).toBe(etag)
+    expect(await second.text()).toBe("")
   })
 })

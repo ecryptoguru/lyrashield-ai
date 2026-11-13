@@ -150,6 +150,21 @@ const httpExchangeIdSchema = z
   .string()
   .regex(/^[0-9]{1,128}$/, "http_exchange_ids entries must be numeric ASCII ids")
 
+/** Raw 1.2 positive export outcome; exclusions must never be repaired/truncated. */
+export const httpExchangeOutcomeV12Schema = z
+  .object({
+    status: z.enum(["exported", "partial"]),
+    exchanges: z.number().int().min(1).max(MAX_HTTP_EXCHANGE_ENTRIES),
+    artifact: z.literal("http_exchanges.json"),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    missing_request_ids: z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_ENTRIES).optional(),
+    capacity_omitted_request_ids: z
+      .array(httpExchangeIdSchema)
+      .max(MAX_HTTP_EXCHANGE_ENTRIES)
+      .optional(),
+  })
+  .strip()
+
 /**
  * dependency_metadata carries flat provenance strings plus structured
  * contextual-CVSS members (score, vector, per-metric breakdown, advisory
@@ -207,6 +222,8 @@ export const engineVulnerabilitySchema = z
     contextual_cvss_reasoning: z.string().max(MAX_EVIDENCE_FIELD_CHARS).optional(),
     advisory_cvss: advisoryCvssSchema.optional(),
     http_exchange_ids: z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_IDS).optional(),
+    /** 1.2: unresolved claims, separately bounded; never verified refs or receipts. */
+    pending_http_exchange_ids: z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_IDS).optional(),
     /**
      * Set when the engine declared exchange references that could not be
      * verified against this scan's exported exchange evidence (unknown id, or
@@ -446,6 +463,9 @@ export const httpExchangeExportSchema = z
         run_name: nullableBoundedString,
         targets: z.array(z.unknown()).max(64).optional(),
         report_artifacts_revision: z.number().int().min(0).nullable().optional(),
+        finding_revisions: z
+          .record(z.string().max(256), z.number().int().min(0).max(MAX_FINDING_REVISIONS))
+          .optional(),
         findings: z
           .record(z.string().max(256), z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_IDS))
           .optional(),
@@ -454,6 +474,10 @@ export const httpExchangeExportSchema = z
       .optional(),
     exchanges: z.array(httpExchangeEntrySchema).max(MAX_HTTP_EXCHANGE_ENTRIES),
     missing_request_ids: z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_ENTRIES).optional(),
+    capacity_omitted_request_ids: z
+      .array(httpExchangeIdSchema)
+      .max(MAX_HTTP_EXCHANGE_ENTRIES)
+      .optional(),
     truncated: z
       .object({
         exchange_limit: z.number().int().min(0).optional(),
@@ -505,7 +529,9 @@ export const promptCacheReceiptSchema = z
     enabled: z.boolean(),
     routing_enabled: z.boolean(),
     routing: z.literal("stable-prompt-v2").nullable(),
-    mode: z.enum(["explicit", "implicit"]).nullable(),
+    // `explicit` remains readable for legacy engine receipts. Current engines
+    // report the effective policy posture instead of the provider API mode.
+    mode: z.enum(["stable", "hybrid", "off", "explicit", "implicit"]).nullable(),
     ttl: z.literal("30m").nullable(),
   })
   .strip()
@@ -578,6 +604,10 @@ export const engineRunRecordSchema = z
         status: z.enum(["exported", "partial", "skipped", "failed"]).optional(),
         reason: boundedString,
         exchanges: z.number().int().min(0).optional(),
+        capacity_omitted_request_ids: z
+          .array(httpExchangeIdSchema)
+          .max(MAX_HTTP_EXCHANGE_ENTRIES)
+          .optional(),
         missing_request_ids: z
           .array(httpExchangeIdSchema)
           .max(MAX_HTTP_EXCHANGE_ENTRIES)

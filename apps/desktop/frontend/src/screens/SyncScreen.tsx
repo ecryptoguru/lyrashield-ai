@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react"
-import type { Finding, ScanSummary, SyncConnection, SyncResult } from "../lib/types"
+import type {
+  Finding,
+  ScanHistoryCursor,
+  ScanSummary,
+  SyncConnection,
+  SyncResult,
+} from "../lib/types"
+import { appendScanHistory } from "../lib/scan-history"
 import {
   connectWorkspace,
-  listScans,
+  listScanPage,
   getScanDetail,
   disconnectSync,
   getSyncState,
@@ -18,6 +25,9 @@ interface Props {
 export function SyncScreen({ onBack }: Props) {
   const mounted = useRef(true)
   const [scans, setScans] = useState<ScanSummary[]>([])
+  const [scanCursor, setScanCursor] = useState<ScanHistoryCursor | null>(null)
+  const [loadingMoreScans, setLoadingMoreScans] = useState(false)
+  const [loadMoreScansError, setLoadMoreScansError] = useState<string | null>(null)
   const [scanId, setScanId] = useState("")
   const [findings, setFindings] = useState<Finding[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -44,12 +54,14 @@ export function SyncScreen({ onBack }: Props) {
 
   useEffect(() => {
     let disposed = false
-    void Promise.all([getSyncState(), hasSyncApiKey(), listScans()])
-      .then(([saved, hasKey, history]) => {
+    void Promise.all([getSyncState(), hasSyncApiKey(), listScanPage()])
+      .then(([saved, hasKey, historyPage]) => {
         if (disposed) return
+        const history = historyPage.scans
         setConnection(saved)
         setHasApiKey(hasKey)
         setScans(history)
+        setScanCursor(historyPage.nextCursor)
         if (history.length === 0) setDetailLoading(false)
         setScanId((current) => current || history[0]?.scanId || "")
       })
@@ -81,6 +93,22 @@ export function SyncScreen({ onBack }: Props) {
       disposed = true
     }
   }, [scanId, retry])
+
+  async function loadMoreScans() {
+    if (!scanCursor || loadingMoreScans) return
+    setLoadingMoreScans(true)
+    setLoadMoreScansError(null)
+    try {
+      const page = await listScanPage(scanCursor)
+      if (!mounted.current) return
+      setScans((current) => appendScanHistory(current, page.scans))
+      setScanCursor(page.nextCursor)
+    } catch (e) {
+      if (mounted.current) setLoadMoreScansError(String(e))
+    } finally {
+      if (mounted.current) setLoadingMoreScans(false)
+    }
+  }
 
   const back = (
     <button onClick={onBack} className="text-sm text-muted-foreground hover:text-foreground">
@@ -259,6 +287,24 @@ export function SyncScreen({ onBack }: Props) {
               </option>
             ))}
           </select>
+          {scanCursor && (
+            <div className="space-y-2">
+              {loadMoreScansError && (
+                <p role="alert">Could not load more scans: {loadMoreScansError}</p>
+              )}
+              <button
+                onClick={() => void loadMoreScans()}
+                disabled={loadingMoreScans || syncing}
+                className="text-sm underline disabled:opacity-50"
+              >
+                {loadingMoreScans
+                  ? "Loading more scans…"
+                  : loadMoreScansError
+                    ? "Retry loading more"
+                    : "Load more scans"}
+              </button>
+            </div>
+          )}
           <p className="text-sm text-muted-foreground">
             Select the findings to send to your workspace. Nothing is selected by default.
           </p>

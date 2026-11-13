@@ -12,9 +12,25 @@ import {
   Button,
   Badge,
   buttonVariants,
+  EmptyState,
 } from "@lyrashield/ui"
 import type { PublicControlEvidenceItem } from "@/lib/ai-assurance"
 import { apiPost } from "@/lib/api-client"
+
+function MissingAssuranceTarget() {
+  return (
+    <EmptyState
+      icon={FileText}
+      title="Choose a target for AI assurance"
+      description="AI assurance evidence belongs to a target. Open Targets to add one, then return here to manage its evidence."
+      action={
+        <Link href="/dashboard/targets?add=1" className={buttonVariants()}>
+          Manage targets
+        </Link>
+      }
+    />
+  )
+}
 import { AssuranceInventory, type AssuranceInventoryProps } from "./assurance-inventory"
 import { LocalTime } from "@/components/local-time"
 
@@ -207,13 +223,7 @@ export function AiAssuranceClient({
   }
 
   if (!targetId) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-muted-foreground">No targets available in this workspace.</p>
-        </CardContent>
-      </Card>
-    )
+    return <MissingAssuranceTarget />
   }
 
   return (
@@ -222,7 +232,7 @@ export function AiAssuranceClient({
         <label className="grid gap-2">
           <span className="text-sm font-medium">Target</span>
           <select
-            className="h-11 rounded-md border bg-background px-3 text-sm"
+            className="h-11 rounded-md border bg-background px-3 text-base md:text-sm"
             value={targetId}
             onChange={(e) => {
               const id = e.target.value
@@ -240,7 +250,7 @@ export function AiAssuranceClient({
         <Link
           href={`/dashboard/reports?targetId=${encodeURIComponent(targetId)}`}
           className={buttonVariants({ variant: "outline", size: "sm" })}
-          aria-label="Generate an assurance report"
+          aria-label="Generate report for AI assurance"
         >
           <FileText className="mr-2 h-4 w-4" aria-hidden="true" />
           Generate report

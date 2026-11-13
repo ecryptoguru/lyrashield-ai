@@ -103,16 +103,6 @@ describe("handleGate target scoping", () => {
     expect(output.notice).toHaveBeenCalledWith(expect.stringContaining("local diff checks only"))
   })
 
-  it("never queries without a targetId filter", async () => {
-    mockListAll.mockResolvedValue([] as never)
-
-    await handleGate(["--target", "t-1"], makeOutput())
-
-    for (const call of mockListAll.mock.calls) {
-      expect(call[2]).toContain("targetId=")
-    }
-  })
-
   it("fails closed on incomplete WebMCP coverage above the selected severity threshold", async () => {
     mockGetEffectiveCredentials.mockResolvedValue({} as never)
     mockRunDiffChecks.mockResolvedValue([

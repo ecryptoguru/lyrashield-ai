@@ -46,11 +46,11 @@ export interface DiffAdvisoryRule {
  *
  * - `hardcoded-secret` keeps ruleId/severity; its keyword set is the union of
  *   both copies (`passwd`, `bearer`, `api-key` came from the MCP copy).
- * - `eval` (MCP) is folded into `eval-exec` (CLI): `eval(`/`exec(` added calls
+ * - `eval` (MCP) is folded into `eval-exec` (CLI), so direct eval and exec calls
  *   report once under `eval-exec` at HIGH; member calls like `re.exec()` stay
  *   unflagged by both rule families — a deliberate false-positive guard.
  * - `child-process` keeps ruleId/severity for the `child_process` token; the
- *   MCP regex also matched bare `exec(`, which `eval-exec` already reports —
+ *   MCP regex also matched bare exec calls, which `eval-exec` already reports —
  *   deduplicated here to avoid double findings.
  * - `private-key`, `aws-key`, `dangerous-html`, `sql-concat` keep MCP ruleIds
  *   and gain severities (they were severity-free labels in the MCP output).

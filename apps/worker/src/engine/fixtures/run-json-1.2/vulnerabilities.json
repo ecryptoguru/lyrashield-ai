@@ -1,0 +1,20 @@
+[
+  {
+    "id": "vuln-0001",
+    "title": "Reflected input",
+    "severity": "high",
+    "timestamp": "2026-11-02 13:55:12 UTC",
+    "description": "HTML injection",
+    "target": "https://example.test",
+    "evidence": "Observed response",
+    "finding_class": "dynamic",
+    "pending_http_exchange_ids": [
+      "18"
+    ],
+    "verification_state": "unverified",
+    "http_exchange_ids": [
+      "17"
+    ],
+    "evidence_contract_version": "1.2"
+  }
+]

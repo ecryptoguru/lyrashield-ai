@@ -16,8 +16,6 @@ import {
 } from "@lyrashield/security/webmcp"
 import { WEBMCP_FREE_LIMITS } from "./webmcp-config"
 
-export { WEBMCP_FREE_LIMITS } from "./webmcp-config"
-
 const SUPPORTED_EXTENSIONS = new Set([
   ".js",
   ".jsx",
@@ -414,7 +412,7 @@ export function exportWebMcpSarif(
   )
 }
 
-export interface WebMcpAnalyzeResult {
+interface WebMcpAnalyzeResult {
   inventory: WebMcpToolInventory
   signals: WebMcpSignal[]
   coverage: WebMcpCoverageSummary

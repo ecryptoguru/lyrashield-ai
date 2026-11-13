@@ -1,3 +1,4 @@
+#[cfg(test)]
 pub mod golden_vectors;
 pub mod store;
 pub mod types;
@@ -6,9 +7,11 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use ed25519_dalek::{Signature, VerifyingKey};
 use std::collections::BTreeMap;
+#[cfg(test)]
 use std::sync::{Mutex, OnceLock};
 use types::{LicenseFile, LicenseRevalidationReceipt, LicenseVerificationResult};
 
+#[cfg(test)]
 pub static TEST_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 /// Produce a deterministic JSON string for signing.
@@ -102,6 +105,7 @@ fn build_signing_input(file: &LicenseFile) -> serde_json::Value {
 /// Returns the decoded payload bytes (for re-verification) and the signature
 /// bytes. The desktop must verify the exact received payload bytes and must
 /// not re-serialize.
+#[cfg(test)]
 pub fn decode_blob(blob: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
     let parts: Vec<&str> = blob.splitn(2, '.').collect();
     if parts.len() != 2 {
@@ -457,6 +461,7 @@ pub async fn ensure_license_operational(
 const OFFLINE_GRACE_DAYS: i64 = 7;
 const CLOCK_SKEW_MINUTES: i64 = 5;
 
+#[cfg(test)]
 fn offline_grace_valid(
     stored: &types::StoredLicense,
     public_key_pem: &str,
@@ -477,21 +482,6 @@ fn offline_grace_remaining_seconds(
         public_key_pem,
         now,
     )
-}
-
-/// Check eligibility for a specific build version under the operational license.
-pub async fn ensure_update_installable(
-    api_url: Option<String>,
-    public_key_pem: &str,
-    target_version: &str,
-) -> Result<types::StoredLicense, String> {
-    let operational = ensure_license_operational(api_url, public_key_pem)
-        .await
-        .map_err(|error| error.to_string())?;
-    if !is_build_installable(&operational.stored.license, target_version) {
-        return Err("target build is outside this license's update eligibility".into());
-    }
-    Ok(operational.stored)
 }
 
 /// Simple semver comparison: returns -1, 0, or 1.

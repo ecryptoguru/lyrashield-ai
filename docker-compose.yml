@@ -205,7 +205,7 @@ services:
       # the immutable digest emitted by the engine's publish-sandbox workflow.
       LYRASHIELD_IMAGE: "${LYRASHIELD_IMAGE:-lyrashieldai-sandbox:local}"
       LYRASHIELD_TELEMETRY: "${LYRASHIELD_TELEMETRY:-0}"
-      # GPT-5.6 explicit prompt cache reads/writes; unsupported models ignore the breakpoint fields.
+      # GPT-6 explicit prompt cache reads/writes; unsupported models ignore breakpoint fields.
       LYRASHIELD_PROMPT_CACHE_EXPLICIT: "${LYRASHIELD_PROMPT_CACHE_EXPLICIT:-1}"
       LYRASHIELD_PROMPT_CACHE: "${LYRASHIELD_PROMPT_CACHE:-1}"
       LYRASHIELD_ENGINE_PATH: "${LYRASHIELD_ENGINE_PATH:-lyrashield}"

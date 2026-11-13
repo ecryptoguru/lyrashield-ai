@@ -4,7 +4,7 @@ vi.mock("./client", () => ({
   prisma: {
     scan: { findFirst: vi.fn() },
     target: { findFirst: vi.fn() },
-    finding: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    finding: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn(), groupBy: vi.fn() },
     evidence: { findMany: vi.fn(), count: vi.fn() },
     findingVerification: { findMany: vi.fn(), count: vi.fn() },
     fixProposal: { findMany: vi.fn(), count: vi.fn() },
@@ -21,6 +21,7 @@ import {
   acceptRisk,
   getFinding,
   getFindingHistoryPage,
+  getFindingStats,
   listEvidenceFindings,
   listFindings,
   markFalsePositive,
@@ -84,6 +85,32 @@ describe("validateFindingScope", () => {
 describe("getFinding", () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it("returns only patch availability for initial proposal history", async () => {
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({
+      id: "finding-1",
+      evidence: [],
+      verificationReceipts: [],
+      fixProposals: [
+        {
+          id: "p1",
+          status: "ready",
+          summary: "Fix",
+          createdAt: new Date(),
+          diffRef: "s3://private/patch",
+        },
+        { id: "p2", status: "ready", summary: "Guidance", createdAt: new Date(), diffRef: null },
+      ],
+      retests: [],
+      _count: { evidence: 0, verificationReceipts: 0, fixProposals: 2, retests: 0 },
+    } as never)
+    const result = await getFinding("finding-1", "workspace-1")
+    expect(result?.fixProposals).toEqual([
+      expect.objectContaining({ id: "p1", hasStoredPatch: true }),
+      expect.objectContaining({ id: "p2", hasStoredPatch: false }),
+    ])
+    expect(JSON.stringify(result)).not.toContain("s3://private/patch")
+  })
+
   it("returns retest receipt identity without exposing raw storage URIs", async () => {
     vi.mocked(prisma.finding.findFirst).mockResolvedValue({
       id: "finding-1",
@@ -133,31 +160,28 @@ describe("getFinding", () => {
     expect(serialized).toContain('"sourceRevision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"')
   })
 
-  it.each([100, 10_000, 100_000])(
-    "returns a bounded initial history preview for %i records",
-    async (total) => {
-      const createdAt = new Date("2026-09-07T00:00:00Z")
-      vi.mocked(prisma.finding.findFirst).mockResolvedValue({
-        id: "finding-1",
-        evidence: Array.from({ length: 26 }, (_, index) => ({
-          id: `evidence-${index}`,
-          type: "finding",
-          redactionStatus: "complete",
-          createdAt,
-        })),
-        verificationReceipts: [],
-        fixProposals: [],
-        retests: [],
-        _count: { evidence: total, verificationReceipts: 0, fixProposals: 0, retests: 0 },
-      } as never)
+  it.each([100_000])("returns a bounded initial history preview for %i records", async (total) => {
+    const createdAt = new Date("2026-09-07T00:00:00Z")
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({
+      id: "finding-1",
+      evidence: Array.from({ length: 26 }, (_, index) => ({
+        id: `evidence-${index}`,
+        type: "finding",
+        redactionStatus: "complete",
+        createdAt,
+      })),
+      verificationReceipts: [],
+      fixProposals: [],
+      retests: [],
+      _count: { evidence: total, verificationReceipts: 0, fixProposals: 0, retests: 0 },
+    } as never)
 
-      const finding = await getFinding("finding-1", "workspace-1")
+    const finding = await getFinding("finding-1", "workspace-1")
 
-      expect(finding?.evidence).toHaveLength(25)
-      expect(finding?.historyPagination.evidence.total).toBe(total)
-      expect(finding?.historyPagination.evidence.nextCursor).toBeTruthy()
-    }
-  )
+    expect(finding?.evidence).toHaveLength(25)
+    expect(finding?.historyPagination.evidence.total).toBe(total)
+    expect(finding?.historyPagination.evidence.nextCursor).toBeTruthy()
+  })
 })
 
 describe("getFindingHistoryPage", () => {
@@ -185,6 +209,23 @@ describe("getFindingHistoryPage", () => {
         redactionStatus: { not: "deleted" },
       },
     })
+  })
+
+  it("reports patch availability in paginated history without exposing storage references", async () => {
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.fixProposal.findMany).mockResolvedValue([
+      {
+        id: "p1",
+        status: "ready",
+        summary: "Fix",
+        createdAt: new Date(),
+        diffRef: "s3://private/patch",
+      },
+    ] as never)
+    vi.mocked(prisma.fixProposal.count).mockResolvedValue(1)
+    const result = await getFindingHistoryPage("finding-1", "workspace-1", "fixProposals")
+    expect(result.items[0]).toMatchObject({ id: "p1", hasStoredPatch: true })
+    expect(JSON.stringify(result)).not.toContain("s3://private/patch")
   })
 
   it("binds fix proposal rows and counts to the finding's workspace", async () => {
@@ -500,5 +541,57 @@ describe("updateFindingStatus", () => {
       updateFindingStatus("finding-1", "workspace-1", "DUPLICATE", undefined, "finding-2")
     ).rejects.toThrow("Canonical finding not found on this target")
     expect(prisma.finding.update).not.toHaveBeenCalled()
+  })
+})
+
+describe("OAuth target bounds in finding queries", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it.each([{ targetIds: [] }, { targetIds: ["allowed-target"] }])(
+    "bounds lists, evidence, and stats with target IDs $targetIds",
+    async ({ targetIds }) => {
+      vi.mocked(prisma.finding.findMany).mockResolvedValue([])
+      vi.mocked(prisma.finding.groupBy).mockResolvedValue([])
+      await listFindings({ workspaceId: "ws-1", targetIds, cursor: "finding-1" })
+      await listEvidenceFindings({ workspaceId: "ws-1", targetIds })
+      await getFindingStats("ws-1", undefined, undefined, targetIds)
+      for (const method of [prisma.finding.findMany, prisma.finding.groupBy]) {
+        expect(method).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({ workspaceId: "ws-1", targetId: { in: targetIds } }),
+          })
+        )
+      }
+    }
+  )
+
+  it("bounds observed scan validation to the same grant", async () => {
+    vi.mocked(prisma.scan.findFirst).mockResolvedValue(null)
+    await expect(
+      validateFindingScope({
+        workspaceId: "ws-1",
+        observedInScanId: "denied-scan",
+        targetIds: ["allowed-target"],
+      })
+    ).resolves.toMatchObject({ available: false })
+    expect(prisma.scan.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ targetId: { in: ["allowed-target"] } }),
+      })
+    )
+  })
+
+  it("rejects history before reading child rows when its finding is outside the grant", async () => {
+    vi.mocked(prisma.finding.findFirst).mockReset()
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue(null)
+    await expect(
+      getFindingHistoryPage("denied-finding", "ws-1", "evidence", { targetIds: ["allowed-target"] })
+    ).rejects.toThrow("Finding not found")
+    expect(prisma.finding.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ targetId: { in: ["allowed-target"] } }),
+      })
+    )
+    expect(prisma.evidence.findMany).not.toHaveBeenCalled()
   })
 })

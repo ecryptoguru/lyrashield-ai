@@ -1,4 +1,4 @@
-import { clearOptionalTrackingCookies } from "@/lib/analytics-preference"
+import { clearOptionalTrackingCookies } from "@/lib/analytics-cookies"
 import {
   isPublicOriginAllowed,
   publicCorsHeaders,

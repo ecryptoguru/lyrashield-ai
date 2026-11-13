@@ -1,10 +1,11 @@
 "use client"
 
+import { GitHubConnectionRecovery } from "@/components/github-connection-recovery"
 import { useState } from "react"
 import Link from "next/link"
 import { Check, RefreshCw, Plus, ChevronRight } from "lucide-react"
-import { Button, Badge, Spinner, GithubIcon } from "@lyrashield/ui"
-import { githubReposSchema, idSchema, installUrlSchema } from "@/lib/api-schemas"
+import { Button, Badge, Spinner, GithubIcon, Input } from "@lyrashield/ui"
+import { githubReposPageSchema, idSchema, installUrlSchema } from "@/lib/api-schemas"
 import { apiGet, apiPost } from "@/lib/api-client"
 
 interface Repo {
@@ -22,7 +23,11 @@ export function GithubIntegration({
   workspaceId,
   connected,
   accountLogin,
+  githubStatus,
+  canManage = false,
 }: {
+  githubStatus?: string
+  canManage?: boolean
   workspaceId: string
   connected: boolean
   accountLogin: { accountLogin?: string } | null
@@ -30,11 +35,13 @@ export function GithubIntegration({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [repos, setRepos] = useState<Repo[]>([])
+  const [nextPage, setNextPage] = useState<number | null>(1)
+  const [search, setSearch] = useState("")
   const [reposLoaded, setReposLoaded] = useState(false)
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
   const [targetCreated, setTargetCreated] = useState(false)
 
-  async function handleConnect() {
+  async function handleConnect(mode: "existing" | "install-new" = "existing") {
     setLoading(true)
     setError(null)
     try {
@@ -42,6 +49,7 @@ export function GithubIntegration({
         "/api/integrations/github/install",
         {
           workspaceId,
+          mode,
         },
         { schema: installUrlSchema }
       )
@@ -53,14 +61,19 @@ export function GithubIntegration({
   }
 
   async function loadRepos() {
+    if (loading || !canManage || nextPage === null) return
     setLoading(true)
     setError(null)
     try {
-      const data = await apiGet<Repo[]>(
-        `/api/integrations/github/repos?workspaceId=${workspaceId}`,
-        { schema: githubReposSchema }
+      const data = await apiGet(
+        `/api/integrations/github/repos?workspaceId=${encodeURIComponent(workspaceId)}&page=${nextPage}`,
+        { schema: githubReposPageSchema }
       )
-      setRepos(data)
+      setRepos((current) => [
+        ...current,
+        ...data.items.filter((repo) => !current.some((existing) => existing.id === repo.id)),
+      ])
+      setNextPage(data.nextPage)
       setReposLoaded(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load repos")
@@ -99,30 +112,19 @@ export function GithubIntegration({
 
   return (
     <div className="bg-card rounded-xl border p-4 shadow-sm sm:p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-4">
-          <div className="bg-foreground text-background flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
-            <GithubIcon className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold">GitHub</h2>
-            <p className="text-muted-foreground text-sm">
-              Connect your GitHub repositories for scanning.
-            </p>
-          </div>
-        </div>
-        {connected ? (
-          <Badge variant="success">
-            <Check className="h-3 w-3" aria-hidden="true" />
-            Connected{accountLogin?.accountLogin ? ` as ${accountLogin.accountLogin}` : ""}
-          </Badge>
-        ) : (
-          <Button onClick={handleConnect} disabled={loading} className="gap-2">
-            {loading ? <Spinner /> : <GithubIcon className="h-4 w-4" aria-hidden="true" />}
-            Connect GitHub
-          </Button>
-        )}
-      </div>
+      <GitHubConnectionHeader
+        connected={connected}
+        accountLogin={accountLogin}
+        loading={loading}
+        onConnect={canManage ? handleConnect : undefined}
+      />
+
+      <GitHubConnectActions
+        status={githubStatus}
+        loading={loading}
+        connected={connected}
+        onConnect={canManage ? handleConnect : undefined}
+      />
 
       {error && (
         <div
@@ -133,7 +135,7 @@ export function GithubIntegration({
         </div>
       )}
 
-      {connected && !reposLoaded && (
+      {connected && canManage && !reposLoaded && (
         <div className="mt-4">
           <Button onClick={loadRepos} disabled={loading} variant="secondary">
             {loading ? <Spinner /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
@@ -143,62 +145,226 @@ export function GithubIntegration({
       )}
 
       {reposLoaded && (
-        <div className="mt-4 space-y-3">
-          <h3 className="text-sm font-medium">Select a repository to add as a scan target:</h3>
-          <div className="max-h-64 space-y-1 overflow-y-auto">
-            {repos.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                No repositories found. Make sure the GitHub App has access to repos.
-              </p>
-            ) : (
-              repos.map((repo) => (
-                <button
-                  type="button"
-                  key={repo.id}
-                  onClick={() => setSelectedRepo(repo)}
-                  className={`focus-visible:ring-ring flex w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none ${
-                    selectedRepo?.id === repo.id ? "border-primary bg-primary/5" : "hover:bg-accent"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <GithubIcon className="text-muted-foreground h-4 w-4" aria-hidden="true" />
-                    <span className="font-medium">{repo.fullName}</span>
-                    {repo.private && (
-                      <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs">
-                        private
-                      </span>
-                    )}
-                  </div>
-                  {selectedRepo?.id === repo.id && (
-                    <Check className="text-primary h-4 w-4" aria-hidden="true" />
+        <GitHubRepositoryPicker
+          repos={repos}
+          search={search}
+          setSearch={setSearch}
+          loading={loading}
+          nextPage={nextPage}
+          loadRepos={loadRepos}
+          selectedRepo={selectedRepo}
+          setSelectedRepo={setSelectedRepo}
+          targetCreated={targetCreated}
+          setTargetCreated={setTargetCreated}
+          handleCreateTarget={handleCreateTarget}
+        />
+      )}
+    </div>
+  )
+}
+
+function GitHubRepositoryPicker({
+  repos,
+  search,
+  setSearch,
+  loading,
+  nextPage,
+  loadRepos,
+  selectedRepo,
+  setSelectedRepo,
+  targetCreated,
+  setTargetCreated,
+  handleCreateTarget,
+}: {
+  repos: Repo[]
+  search: string
+  setSearch: (value: string) => void
+  loading: boolean
+  nextPage: number | null
+  loadRepos: () => Promise<void>
+  selectedRepo: Repo | null
+  setSelectedRepo: (repo: Repo | null) => void
+  targetCreated: boolean
+  setTargetCreated: (value: boolean) => void
+  handleCreateTarget: () => Promise<void>
+}) {
+  return (
+    <div className="mt-4 space-y-3">
+      <h3 className="text-sm font-medium">Select a repository to add as a scan target:</h3>
+      <label className="block space-y-1 text-sm">
+        <span>Search loaded repositories</span>
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Filter repositories loaded so far"
+        />
+      </label>
+      <p className="text-muted-foreground text-xs">
+        Searching {repos.length} loaded repositories. Load more to include additional results.
+      </p>
+      <div className="max-h-64 space-y-1 overflow-y-auto">
+        {repos.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            No repositories found. Make sure the GitHub App has access to repos.
+          </p>
+        ) : (
+          repos
+            .filter((repo) => repo.fullName.toLowerCase().includes(search.trim().toLowerCase()))
+            .map((repo) => (
+              <button
+                type="button"
+                key={repo.id}
+                disabled={loading}
+                onClick={() => {
+                  setSelectedRepo(repo)
+                  setTargetCreated(false)
+                }}
+                aria-pressed={selectedRepo?.id === repo.id}
+                className={`focus-visible:ring-ring flex w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none ${
+                  selectedRepo?.id === repo.id ? "border-primary bg-primary/5" : "hover:bg-accent"
+                }`}
+              >
+                <div className="min-w-0 flex items-center gap-2">
+                  <GithubIcon
+                    className="text-muted-foreground h-4 w-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 break-all font-medium">{repo.fullName}</span>
+                  {repo.private && (
+                    <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs">
+                      private
+                    </span>
                   )}
-                </button>
-              ))
-            )}
-          </div>
-          {selectedRepo && !targetCreated && (
-            <Button onClick={handleCreateTarget} disabled={loading}>
-              {loading ? <Spinner /> : <Plus className="h-4 w-4" aria-hidden="true" />}
-              Add &ldquo;{selectedRepo.fullName}&rdquo; as target
+                </div>
+                {selectedRepo?.id === repo.id && (
+                  <Check className="text-primary h-4 w-4 shrink-0" aria-hidden="true" />
+                )}
+              </button>
+            ))
+        )}
+      </div>
+      {repos.length > 0 &&
+        !repos.some((repo) =>
+          repo.fullName.toLowerCase().includes(search.trim().toLowerCase())
+        ) && (
+          <p role="status" className="text-muted-foreground text-sm">
+            No matching loaded repositories.
+          </p>
+        )}
+      {nextPage !== null && (
+        <Button type="button" variant="secondary" disabled={loading} onClick={loadRepos}>
+          {loading ? "Loading repositories…" : "Load more repositories"}
+        </Button>
+      )}
+      {selectedRepo && !targetCreated && (
+        <Button
+          onClick={handleCreateTarget}
+          disabled={loading}
+          aria-label={`Add “${selectedRepo.fullName}” as target`}
+        >
+          {loading ? <Spinner /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+          Add selected repository
+        </Button>
+      )}
+      {targetCreated && (
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            setTargetCreated(false)
+            setSelectedRepo(null)
+            setSearch("")
+          }}
+        >
+          Add another repository
+        </Button>
+      )}
+      {targetCreated && (
+        <div
+          className="border-primary/30 bg-primary/5 flex items-center gap-2 rounded-md border p-3 text-sm"
+          role="status"
+        >
+          <Check className="text-primary h-4 w-4 shrink-0" aria-hidden="true" />
+          Target created successfully. You can now scan this repository.
+          <Link
+            href="/dashboard/targets"
+            className="text-primary ml-auto flex items-center gap-1 hover:underline"
+          >
+            View targets <ChevronRight className="h-3 w-3" aria-hidden="true" />
+          </Link>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GitHubConnectActions({
+  status,
+  loading,
+  connected,
+  onConnect,
+}: {
+  status?: string
+  loading: boolean
+  connected: boolean
+  onConnect?: (mode?: "existing" | "install-new") => void
+}) {
+  return (
+    <>
+      <GitHubConnectionRecovery status={status} />
+      {onConnect && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {connected && (
+            <Button variant="outline" disabled={loading} onClick={() => onConnect()}>
+              Reconnect GitHub
             </Button>
           )}
-          {targetCreated && (
-            <div
-              className="border-primary/30 bg-primary/5 flex items-center gap-2 rounded-md border p-3 text-sm"
-              role="status"
-            >
-              <Check className="text-primary h-4 w-4" aria-hidden="true" />
-              Target created successfully. You can now scan this repository.
-              <Link
-                href="/dashboard/targets"
-                className="text-primary ml-auto flex items-center gap-1 hover:underline"
-              >
-                View targets <ChevronRight className="h-3 w-3" aria-hidden="true" />
-              </Link>
-            </div>
+          {status !== "workspace_already_connected" && (
+            <Button variant="ghost" disabled={loading} onClick={() => onConnect("install-new")}>
+              Install on another account
+            </Button>
           )}
         </div>
       )}
+    </>
+  )
+}
+
+function GitHubConnectionHeader({
+  connected,
+  accountLogin,
+  loading,
+  onConnect,
+}: {
+  connected: boolean
+  accountLogin: { accountLogin?: string } | null
+  loading: boolean
+  onConnect?: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex items-start gap-4">
+        <div className="bg-foreground text-background flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+          <GithubIcon className="h-5 w-5" aria-hidden="true" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold">GitHub</h2>
+          <p className="text-muted-foreground text-sm">
+            Connect your GitHub repositories for scanning.
+          </p>
+        </div>
+      </div>
+      {connected ? (
+        <Badge variant="success">
+          <Check className="h-3 w-3" aria-hidden="true" />
+          Connected{accountLogin?.accountLogin ? ` as ${accountLogin.accountLogin}` : ""}
+        </Badge>
+      ) : onConnect ? (
+        <Button onClick={() => onConnect()} disabled={loading} className="gap-2">
+          {loading ? <Spinner /> : <GithubIcon className="h-4 w-4" aria-hidden="true" />}
+          Connect GitHub
+        </Button>
+      ) : null}
     </div>
   )
 }

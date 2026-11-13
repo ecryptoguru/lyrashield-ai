@@ -1,3 +1,4 @@
+import { resolveOAuthReadScope } from "../../../../../../packages/auth/src/oauth-read-scope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -13,6 +14,7 @@ vi.mock("@/lib/launch-readiness-server", () => ({
   getGateReadinessTargets: mocks.getGateReadinessTargets,
 }))
 vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
   requirePermission: vi.fn().mockResolvedValue({
     session: { userId: "user-1" },
     workspace: { role: "OWNER", member: {} },
@@ -27,6 +29,7 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import { GET } from "./route"
+import { GET as V1GET } from "../v1/launch-readiness/route"
 import { requirePermission } from "@lyrashield/auth/server"
 import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
@@ -68,6 +71,45 @@ describe("GET /api/launch-readiness — release check contract", () => {
     })
   })
 
+  it("returns a continuation and never claims workspace readiness from a partial page", async () => {
+    mocks.getGateReadinessTargets.mockResolvedValue(
+      Object.assign([READY_TARGET], { partial: true, nextCursor: "target-1" })
+    )
+    const response = await GET(request("workspaceId=ws-1"))
+    const body = await response.json()
+    expect(body.data).toMatchObject({
+      state: "INSUFFICIENT_EVIDENCE",
+      nextCursor: "target-1",
+      partial: true,
+      targets: [{ targetId: "target-1", targetName: "API" }],
+    })
+  })
+
+  it("does not auto-select a single target from a partial page", async () => {
+    mocks.getGateReadinessTargets.mockResolvedValue(
+      Object.assign([READY_TARGET], { partial: true, nextCursor: "target-1" })
+    )
+    const response = await GET(request(`workspaceId=ws-1&commit=${COMMIT_A}`))
+    const body = await response.json()
+    expect(body.data.releaseCheck).toBeNull()
+    expect(body.data.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(body.data.nextCursor).toBe("target-1")
+    expect(mocks.getGateReadinessTargets).toHaveBeenCalledTimes(1)
+  })
+
+  it("accepts a continuation cursor and rejects repeated or malformed cursors", async () => {
+    const response = await GET(request("workspaceId=ws-1&cursor=target-1"))
+    expect(response.status).toBe(200)
+    expect(mocks.getGateReadinessTargets).toHaveBeenCalledWith(
+      "ws-1",
+      undefined,
+      expect.any(Object),
+      "target-1"
+    )
+    expect((await GET(request("workspaceId=ws-1&cursor=a&cursor=b"))).status).toBe(400)
+    expect((await GET(request("workspaceId=ws-1&cursor=%20"))).status).toBe(400)
+  })
+
   it("reports a matching commit for a target-scoped check", async () => {
     const response = await GET(request(`workspaceId=ws-1&targetId=target-1&commit=${COMMIT_A}`))
     expect(response.status).toBe(200)
@@ -80,6 +122,25 @@ describe("GET /api/launch-readiness — release check contract", () => {
       match: "match",
       targetId: "target-1",
       assessed: { kind: "COMMIT", value: COMMIT_A },
+    })
+  })
+
+  it("returns current page metadata alongside a scoped release check", async () => {
+    mocks.getGateReadinessTargets.mockResolvedValueOnce([READY_TARGET]).mockResolvedValueOnce(
+      Object.assign([{ ...READY_TARGET, targetId: "target-2", targetName: "Worker" }], {
+        partial: true,
+        nextCursor: "target-2",
+      })
+    )
+    const response = await GET(request(`workspaceId=ws-1&targetId=target-1&commit=${COMMIT_A}`))
+    expect((await response.json()).data).toMatchObject({
+      releaseCheck: { targetId: "target-1", match: "match" },
+      partial: true,
+      nextCursor: "target-2",
+      targets: [
+        { targetId: "target-2", targetName: "Worker" },
+        { targetId: "target-1", targetName: "API" },
+      ],
     })
   })
 
@@ -227,4 +288,60 @@ describe("GET /api/launch-readiness — release check contract", () => {
     )
     expect(mocks.getGateReadinessTargets).not.toHaveBeenCalled()
   })
+})
+
+describe("OAuth readiness read scope", () => {
+  it.each(["", "&targetId=target-2"])("rejects missing or ungranted target %s", async (query) => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          allTargets: false,
+          allowedTargetIds: ["target-1"],
+        },
+      },
+    } as never)
+    const response = await GET(request(`workspaceId=ws-1${query}`))
+    expect(response.status).toBe(403)
+  })
+})
+
+it("applies selected-target readiness denial through the v1 alias", async () => {
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: {
+      userId: "user-1",
+      oauth: {
+        connectionId: "conn-1",
+        allTargets: false,
+        allowedTargetIds: ["target-1"],
+      },
+    },
+  } as never)
+  const response = await V1GET(request("workspaceId=ws-1"))
+  expect(response.status).toBe(403)
+})
+
+it("reads an explicitly allowed readiness target and limits aggregates to it", async () => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: {
+      userId: "user-1",
+      oauth: {
+        connectionId: "conn-1",
+        allTargets: false,
+        allowedTargetIds: ["target-1"],
+      },
+    },
+  } as never)
+  mocks.groupBy.mockResolvedValue([])
+  mocks.getGateReadinessTargets.mockResolvedValue([READY_TARGET])
+  const response = await V1GET(request("workspaceId=ws-1&targetId=target-1"))
+  expect(response.status).toBe(200)
+  expect(mocks.getGateReadinessTargets).toHaveBeenCalledTimes(1)
+  expect(mocks.groupBy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: { workspaceId: "ws-1", targetId: "target-1", deletedAt: null },
+    })
+  )
 })

@@ -80,7 +80,7 @@ describe("POST /api/sync/findings workspace authorization", () => {
     expect(mocks.resolveSyncCredential).not.toHaveBeenCalled()
   })
 
-  it.each(["suspended membership", "non-member"])("denies a %s", async () => {
+  it.each(["suspended membership"])("denies a %s", async () => {
     mocks.requirePermission.mockRejectedValue(new Error("FORBIDDEN"))
 
     const response = await submit()

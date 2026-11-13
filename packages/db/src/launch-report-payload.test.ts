@@ -4,7 +4,7 @@ import {
   buildLaunchReportPayload,
   computeLaunchReportChecksum,
   NEUTRAL_APP_LABEL,
-  LAUNCH_REPORT_PAYLOAD_VERSION,
+  LEGACY_LAUNCH_REPORT_PAYLOAD_VERSION,
   type LaunchReportSource,
 } from "./launch-report-payload"
 
@@ -191,7 +191,7 @@ describe("buildLaunchReportPayload — the disclosure allowlist", () => {
   it("records the standard and payload versions", () => {
     const payload = buildLaunchReportPayload(verdict())
     expect(payload.standardVersion).toBe("lyrashield-gate/1.0.0")
-    expect(payload.payloadVersion).toBe(LAUNCH_REPORT_PAYLOAD_VERSION)
+    expect(payload.payloadVersion).toBe(LEGACY_LAUNCH_REPORT_PAYLOAD_VERSION)
   })
 })
 

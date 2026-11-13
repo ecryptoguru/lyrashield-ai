@@ -18,8 +18,17 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
     },
   }
 })
-vi.mock("../../auth/src/server", () => ({
-  requirePermission: vi.fn().mockResolvedValue(undefined),
+vi.mock("../../auth/src/server", async () => ({
+  ...(await vi.importActual("../../auth/src/oauth-read-scope")),
+  requirePermission: vi.fn().mockResolvedValue({
+    session: {
+      userId: "rls-browser-user",
+      userEmail: "rls-browser@example.test",
+      userName: "RLS browser fixture",
+      userImage: null,
+      sessionId: "rls-browser-session",
+    },
+  }),
 }))
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -65,6 +74,15 @@ let evidenceStorageUri = ""
 let attachmentStorageUri = ""
 let attachmentId = ""
 let restricted: PrismaClient
+type RlsModule = typeof import("./rls")
+type FixProposalServiceModule = typeof import("./fix-proposal-service")
+type DashboardOverviewModule = typeof import("../../../apps/web/src/lib/dashboard-overview")
+type LaunchReadinessRouteModule =
+  typeof import("../../../apps/web/src/app/api/launch-readiness/route")
+let rlsModule: RlsModule | undefined
+let fixProposalServiceModule: FixProposalServiceModule | undefined
+let dashboardOverviewModule: DashboardOverviewModule | undefined
+let launchReadinessRouteModule: LaunchReadinessRouteModule | undefined
 
 describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
   beforeAll(async () => {
@@ -160,6 +178,19 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       },
     })
     attachmentId = attachment.id
+
+    // Import the application surfaces in the suite setup budget, not the 5s
+    // test assertion budget. These cold Next/server imports can be slow in CI.
+    const [rls, fixProposals, dashboard, launchReadiness] = await Promise.all([
+      import("./rls"),
+      import("./fix-proposal-service"),
+      import("../../../apps/web/src/lib/dashboard-overview"),
+      import("../../../apps/web/src/app/api/launch-readiness/route"),
+    ])
+    rlsModule = rls
+    fixProposalServiceModule = fixProposals
+    dashboardOverviewModule = dashboard
+    launchReadinessRouteModule = launchReadiness
   })
 
   afterAll(async () => {
@@ -242,8 +273,15 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     }
     const forcedSystemOnlyTables = {
       billing_reconciliation_state: "Singleton billing reconciliation checkpoint, system-owned",
+      WebhookEventRejection:
+        "Bounded authentic catalog-rejection receipts, system-owned, no tenant access",
     }
-    const accountTables = ["account_acquisitions", "account_preferences"]
+    const accountTables = [
+      "account_acquisitions",
+      "account_preferences",
+      "ScanCapacityReservation",
+      "UserScanSlot",
+    ]
     // Myra support-agent tables (20260915000000_myra_support_agent): dual-owner
     // (accountId/publicSessionId) tables plus child/append-only/system tables.
     // All FORCE RLS like account/tenant tables — unbound is the trusted path.
@@ -269,10 +307,27 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
       FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')`
+    const authorityTables = [
+      "ScanAuthorityEpoch",
+      "ScanWorkerInstanceGrant",
+      "ScanDispatchOperation",
+      "ScanQueueOutbox",
+      "ScanDispatchAttempt",
+      "ScanDispatchOutbox",
+      "ScanDispatchStart",
+      "ScanSupervisorReceipt",
+      "ScanPhysicalExecution",
+      "ScanPhysicalExecutionTransition",
+      "ScanDispatchReleaseReceipt",
+      "ScanExecutionActionIntent",
+      "ScanExecutionInvocationGuard",
+      "ScanExecutionInvocationResolution",
+    ]
     const physicalTableNames: Record<string, string> = {
       AgentConnection: "agent_connections",
       AgentOperation: "agent_operations",
       LoopClosure: "loop_closures",
+      DelegatedScanProvenance: "delegated_scan_provenance",
     }
     const tenantTables = [...WORKSPACE_SCOPED_MODELS, ...children, ...Object.keys(explicit)].map(
       (model) => physicalTableNames[model] ?? model
@@ -287,6 +342,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         ...tenantTables,
         ...accountTables,
         ...myraTables,
+        ...authorityTables,
         ...Object.keys(systemOnly),
         ...Object.keys(forcedSystemOnlyTables),
       ].sort()
@@ -304,6 +360,12 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       ).toMatchObject({ relrowsecurity: true, relforcerowsecurity: false })
     }
     for (const table of Object.keys(forcedSystemOnlyTables)) {
+      expect(
+        rows.find((row) => row.relname === table),
+        table
+      ).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true })
+    }
+    for (const table of authorityTables) {
       expect(
         rows.find((row) => row.relname === table),
         table
@@ -330,10 +392,18 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
   })
 
   it("executes dashboard, readiness route and fix listing against the restricted application client", async () => {
-    const { withWorkspaceRLS } = await import("./rls")
-    const { listFixProposals } = await import("./fix-proposal-service")
-    const { getDashboardOverview } = await import("../../../apps/web/src/lib/dashboard-overview")
-    const { GET } = await import("../../../apps/web/src/app/api/launch-readiness/route")
+    if (
+      !rlsModule ||
+      !fixProposalServiceModule ||
+      !dashboardOverviewModule ||
+      !launchReadinessRouteModule
+    ) {
+      throw new Error("RLS application modules were not loaded during suite setup")
+    }
+    const { withWorkspaceRLS } = rlsModule
+    const { listFixProposals } = fixProposalServiceModule
+    const { getDashboardOverview } = dashboardOverviewModule
+    const { GET } = launchReadinessRouteModule
     const { receipt, proposal } = await withWorkspaceRLS(workspaceId, async (tx) => ({
       receipt: await tx.scanCoverageReceipt.create({
         data: { scanId, scanner: "runtime-app", controlId: `app-${suffix}`, status: "COMPLETED" },
@@ -368,6 +438,12 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       )
       expect(foreign.status).toBe(200)
       expect((await foreign.json()).data.verdict).toBe("NOT_EVALUATED")
+      const { requirePermission } = await import("../../auth/src/server")
+      vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN"))
+      const forbidden = await GET(
+        new Request(`http://localhost/api/launch-readiness?workspaceId=${workspaceId}`)
+      )
+      expect(forbidden.status).toBe(403)
       // A missing transaction wrapper must still fail closed for child rows.
       expect(await applicationPrisma.scanCoverageReceipt.count({ where: { id: receipt.id } })).toBe(
         0

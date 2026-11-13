@@ -1,6 +1,7 @@
 import {
   computeLaunchReportChecksum,
   LAUNCH_REPORT_PAYLOAD_VERSION,
+  LEGACY_LAUNCH_REPORT_PAYLOAD_VERSION,
   type LaunchReportShareablePayload,
 } from "./launch-report-payload"
 
@@ -17,7 +18,11 @@ export function isLaunchReportShareablePayload(
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   const payload = value as Partial<LaunchReportShareablePayload>
   const shapeValid =
-    payload.payloadVersion === LAUNCH_REPORT_PAYLOAD_VERSION &&
+    (payload.payloadVersion === LEGACY_LAUNCH_REPORT_PAYLOAD_VERSION
+      ? payload.identityCommitment === undefined
+      : payload.payloadVersion === LAUNCH_REPORT_PAYLOAD_VERSION &&
+        typeof payload.identityCommitment === "string" &&
+        /^[a-f0-9]{64}$/.test(payload.identityCommitment)) &&
     typeof payload.verdictLabel === "string" &&
     VERDICT_LABELS.has(payload.verdictLabel) &&
     typeof payload.standardVersion === "string" &&
@@ -63,9 +68,13 @@ export function isLaunchReportShareablePayload(
   }
 }
 
-export function generateLaunchReportHTML(payload: LaunchReportShareablePayload): string {
+export function generateLaunchReportHTML(
+  payload: LaunchReportShareablePayload,
+  options: { historical?: boolean } = {}
+): string {
   const expiresAt = payload.expiresAt ? new Date(payload.expiresAt).getTime() : Number.NaN
-  const historical = payload.stale || !Number.isFinite(expiresAt) || expiresAt <= Date.now()
+  const historical =
+    options.historical || payload.stale || !Number.isFinite(expiresAt) || expiresAt <= Date.now()
   const count = (value: number | null) => (value === null ? "Not evaluated" : String(value))
   const coverage =
     payload.coverageStatement.length > 0

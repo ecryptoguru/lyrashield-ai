@@ -16,6 +16,8 @@ const claimOrGetAgentOperationMock = vi.fn()
 const completeAgentOperationMock = vi.fn()
 const failAgentOperationMock = vi.fn()
 const callToolMock = vi.fn()
+const getAgentConnectionMock = vi.fn()
+const retainUnknownAgentOperationResultMock = vi.fn()
 
 vi.mock("@lyrashield/db", () => ({
   TOOL_OPERATION_MAP: {
@@ -37,6 +39,9 @@ vi.mock("@lyrashield/db", () => ({
   claimOrGetAgentOperation: (...args: unknown[]) => claimOrGetAgentOperationMock(...args),
   completeAgentOperation: (...args: unknown[]) => completeAgentOperationMock(...args),
   failAgentOperation: (...args: unknown[]) => failAgentOperationMock(...args),
+  getAgentConnection: (...args: unknown[]) => getAgentConnectionMock(...args),
+  retainUnknownAgentOperationResult: (...args: unknown[]) =>
+    retainUnknownAgentOperationResultMock(...args),
   toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   hashOperationInput: vi.fn().mockReturnValue("op-hash"),
   checkDelegatedOperationAuthorization: vi
@@ -126,7 +131,13 @@ vi.mock("../../../lib/rate-limit", () => ({
   checkApprovalCreateRateLimit: vi.fn().mockResolvedValue({ limited: false, retryAfter: 0 }),
 }))
 
+import { McpToolResultSchema } from "@lyrashield/mcp"
 import { makeRemoteApprovalGate as createRemoteApprovalGate } from "./remote-approval-gate"
+// The real canonical-input hasher — a pure module, so it can be imported
+// directly without the mocked @lyrashield/db surface or a Prisma client. A
+// faithful unit ledger must apply the same hashing the Postgres claim path
+// does so a changed input under one idempotency key conflicts.
+import { hashOperationInput as realHashOperationInput } from "@lyrashield/db/src/agent-operation-hash"
 
 function makeRemoteApprovalGate(options: Parameters<typeof createRemoteApprovalGate>[0]) {
   if (options.oauthContext || !options.connection) return createRemoteApprovalGate(options)
@@ -162,6 +173,14 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    requireOAuthPermissionMock.mockReset().mockImplementation((...args: unknown[]) => {
+      const [oauth, permission] = args as [{ workspaceId: string }, string]
+      return requirePermissionMock(oauth.workspaceId, permission)
+    })
+    getAgentConnectionMock.mockReset()
+    retainUnknownAgentOperationResultMock.mockReset()
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
+    failAgentOperationMock.mockResolvedValue({ status: "FAILED" })
     claimOrGetAgentOperationMock.mockReset()
   })
 
@@ -313,6 +332,140 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
     })
   })
 
+  it.each(["returned", "thrown"])(
+    "retains an ambiguous %s handler error without completing or retrying",
+    async (kind) => {
+      const connection = {
+        id: "conn-1",
+        workspaceId: "ws-1",
+        status: "ACTIVE" as const,
+        authorizationVersion: 1,
+        allowedOperations: ["scan.create"],
+        allowedTargetIds: [],
+        allTargets: true,
+        allowedProfiles: ["STANDARD"],
+        expiresAt: null,
+      }
+      const errorResult = {
+        content: [{ type: "text", text: '{"error":"response lost after submission"}' }],
+        isError: true,
+        structuredContent: { error: "response lost after submission" },
+      }
+      claimOrGetAgentOperationMock.mockResolvedValueOnce({
+        status: "NEW",
+        operation: { id: "op-error" },
+      })
+      if (kind === "returned") callToolMock.mockResolvedValueOnce(errorResult)
+      else callToolMock.mockRejectedValueOnce(new Error("response lost after submission"))
+      const gate = makeRemoteApprovalGate({ apiKeyInfo, toolContext, connection })
+      const args = { targetId: "target-1", mode: "STANDARD", idempotencyKey: "caller-outer-key" }
+      const result = await gate("lyrashield_scan_target", args)
+
+      expect(result).toMatchObject({
+        approved: true,
+        result: {
+          isError: true,
+          structuredContent: { operationId: "op-error" },
+        },
+      })
+      expect(completeAgentOperationMock).not.toHaveBeenCalled()
+      expect(failAgentOperationMock).toHaveBeenCalledWith(
+        "op-error",
+        "ws-1",
+        expect.objectContaining({
+          error: "OPERATION_OUTCOME_UNKNOWN",
+          result: expect.objectContaining({
+            isError: true,
+            structuredContent: expect.objectContaining({ operationId: "op-error" }),
+          }),
+        })
+      )
+      claimOrGetAgentOperationMock.mockResolvedValueOnce({
+        status: "FAILED",
+        operation: { id: "op-error" },
+      })
+      expect(await gate("lyrashield_scan_target", args)).toMatchObject({ approved: false })
+      expect(callToolMock).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it("does not rerun after success when retaining the outer result fails", async () => {
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      authorizationVersion: 1,
+      allowedOperations: ["scan.create"],
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["STANDARD"],
+      expiresAt: null,
+    }
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "NEW",
+      operation: { id: "op-unretained" },
+    })
+    callToolMock.mockResolvedValueOnce({
+      content: [],
+      structuredContent: { scan: { id: "scan-persisted" } },
+    })
+    completeAgentOperationMock.mockRejectedValueOnce(new Error("Ledger write failed"))
+    const gate = makeRemoteApprovalGate({ apiKeyInfo, toolContext, connection })
+    const args = { targetId: "target-1", mode: "STANDARD", idempotencyKey: "same-action" }
+    await expect(gate("lyrashield_scan_target", args)).rejects.toThrow("Ledger write failed")
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "IN_PROGRESS",
+      operation: { id: "op-unretained", status: "EXECUTING" },
+    })
+    expect(await gate("lyrashield_scan_target", args)).toMatchObject({
+      approved: true,
+      result: {
+        structuredContent: { operationId: "op-unretained", status: "EXECUTING" },
+      },
+    })
+    expect(callToolMock).toHaveBeenCalledTimes(1)
+    expect(failAgentOperationMock).not.toHaveBeenCalled()
+  })
+
+  it("uses a stable internal execution key while stripping caller control arguments from the input hash", async () => {
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "NEW",
+      operation: { id: "op-internal" },
+    })
+    callToolMock.mockResolvedValueOnce({ content: [], structuredContent: {} })
+    const gate = makeRemoteApprovalGate({
+      apiKeyInfo,
+      toolContext,
+      connection: {
+        id: "conn-1",
+        workspaceId: "ws-1",
+        status: "ACTIVE",
+        authorizationVersion: 1,
+        allowedOperations: ["scan.create"],
+        allowedTargetIds: [],
+        allTargets: true,
+        allowedProfiles: ["STANDARD"],
+        expiresAt: null,
+      },
+    })
+    await gate("lyrashield_scan_target", {
+      targetId: "target-1",
+      mode: "STANDARD",
+      idempotencyKey: "caller-outer-key",
+    })
+    expect(claimOrGetAgentOperationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: { targetId: "target-1", mode: "STANDARD" },
+        idempotencyKey: "caller-outer-key",
+      })
+    )
+    expect(callToolMock).toHaveBeenCalledWith("lyrashield_scan_target", {
+      targetId: "target-1",
+      mode: "STANDARD",
+      idempotencyKey: "op-internal",
+    })
+  })
+
   it("replays stored result for duplicate idempotent requests without re-executing tool", async () => {
     const connection = {
       id: "conn-1",
@@ -455,6 +608,88 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
       reason: expect.stringContaining("Idempotency conflict"),
     })
     expect(callToolMock).not.toHaveBeenCalled()
+  })
+
+  it("denies a changed input under the same idempotency key — real hashing, untouched ledger", async () => {
+    // A minimal in-memory ledger that applies the REAL hashOperationInput so
+    // this unit test exercises the same hash comparison the restricted-role
+    // Postgres proof (remote-approval-gate.runtime.test.ts) runs against the
+    // live ledger. Denial must leave the stored row — and the tool — untouched.
+    const ledger = new Map<string, { inputHash: string; status: string }>()
+    claimOrGetAgentOperationMock.mockImplementation(
+      async (params: {
+        connectionId?: string
+        operationName: string
+        idempotencyKey: string
+        input: Record<string, unknown>
+      }) => {
+        const ledgerKey = `${params.connectionId}:${params.operationName}:${params.idempotencyKey}`
+        const inputHash = realHashOperationInput(params.operationName, params.input)
+        const existing = ledger.get(ledgerKey)
+        if (existing) {
+          return existing.inputHash === inputHash
+            ? { status: "REPLAY", operation: { id: "op-hash-1", result: null } }
+            : {
+                status: "CONFLICT",
+                message:
+                  "Idempotency key was already used for this operation with different input arguments",
+              }
+        }
+        ledger.set(ledgerKey, { inputHash, status: "EXECUTING" })
+        return { status: "NEW", operation: { id: "op-hash-1" } }
+      }
+    )
+    callToolMock.mockResolvedValueOnce({
+      content: [{ type: "text", text: '{"scanId":"scan-1"}' }],
+      structuredContent: { scanId: "scan-1" },
+    })
+
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      authorizationVersion: 1,
+      allowedOperations: ["scan.create"],
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["STANDARD", "DEEP"],
+      expiresAt: null,
+    }
+    const gate = makeRemoteApprovalGate({ apiKeyInfo, connection, toolContext })
+
+    const first = await gate("lyrashield_scan_target", {
+      targetId: "target-1",
+      mode: "STANDARD",
+      goal: "TEST_APP",
+      idempotencyKey: "idem-hash-1",
+    })
+    expect(first.approved).toBe(true)
+    // The stored hash is of the stripped tool input — the idempotencyKey
+    // control arg is never part of the hashed operation input.
+    const originalHash = realHashOperationInput("scan.create", {
+      targetId: "target-1",
+      mode: "STANDARD",
+      goal: "TEST_APP",
+    })
+    expect(ledger.get("conn-1:scan.create:idem-hash-1")?.inputHash).toBe(originalHash)
+
+    const second = await gate("lyrashield_scan_target", {
+      targetId: "target-1",
+      mode: "DEEP",
+      goal: "TEST_APP",
+      idempotencyKey: "idem-hash-1",
+    })
+
+    expect(second).toMatchObject({
+      approved: false,
+      reason: expect.stringContaining("Idempotency conflict"),
+    })
+    // Ledger untouched and no tool action: the row still carries the first
+    // input's hash, no completion/failure write occurred for the denied call.
+    expect(ledger.get("conn-1:scan.create:idem-hash-1")?.inputHash).toBe(originalHash)
+    expect(callToolMock).toHaveBeenCalledTimes(1)
+    expect(completeAgentOperationMock).toHaveBeenCalledTimes(1)
+    expect(failAgentOperationMock).not.toHaveBeenCalled()
   })
 
   it("requires an explicit scan.cancel grant — a scan.create grant alone does not authorize cancel", async () => {
@@ -605,7 +840,211 @@ describe("makeRemoteApprovalGate - attachment + fix-PR tools (D2)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    requireOAuthPermissionMock.mockReset().mockImplementation((...args: unknown[]) => {
+      const [oauth, permission] = args as [{ workspaceId: string }, string]
+      return requirePermissionMock(oauth.workspaceId, permission)
+    })
+    getAgentConnectionMock.mockReset()
+    retainUnknownAgentOperationResultMock.mockReset()
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
+    failAgentOperationMock.mockResolvedValue({ status: "FAILED" })
   })
+
+  it("retains a scan reference returned with a tool error without completing the operation", async () => {
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "NEW",
+      operation: { id: "op-error-reference" },
+    })
+    callToolMock.mockResolvedValueOnce(
+      McpToolResultSchema.parse({
+        content: [
+          { type: "text", text: '{"error":"response incomplete","scan":{"id":"scan-existing"}}' },
+        ],
+        isError: true,
+        structuredContent: { error: "response incomplete", scan: { id: "scan-existing" } },
+      })
+    )
+    const gate = makeRemoteApprovalGate({
+      apiKeyInfo,
+      toolContext,
+      connection: connectionWith(["scan.create"]),
+    })
+    const decision = await gate("lyrashield_scan_target", {
+      targetId: "target-1",
+      mode: "STANDARD",
+      idempotencyKey: "error-with-scan",
+    })
+    expect(decision).toMatchObject({
+      approved: true,
+      result: {
+        isError: true,
+        structuredContent: { scan: { id: "scan-existing" }, operationId: "op-error-reference" },
+      },
+    })
+    expect(failAgentOperationMock).toHaveBeenCalledWith(
+      "op-error-reference",
+      "ws-1",
+      expect.objectContaining({
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        resultReference: "scan-existing",
+        result: expect.objectContaining({ isError: true }),
+      })
+    )
+    expect(completeAgentOperationMock).not.toHaveBeenCalled()
+  })
+
+  it.each(["IN_PROGRESS", "FAILED"])(
+    "recovers a %s execution claim without invoking the handler",
+    async (status) => {
+      claimOrGetAgentOperationMock.mockResolvedValueOnce({
+        status,
+        operation: {
+          id: "outer-op",
+          status: status === "FAILED" ? "FAILED" : "EXECUTING",
+          error: status === "FAILED" ? "OPERATION_OUTCOME_UNKNOWN" : null,
+          result: null,
+        },
+      })
+      const gate = makeRemoteApprovalGate({
+        apiKeyInfo,
+        toolContext,
+        connection: connectionWith(["scan.create"]),
+      })
+      const before = Date.now()
+      const decision = await gate("lyrashield_scan_target", {
+        targetId: "target-1",
+        mode: "STANDARD",
+        idempotencyKey: "same-key",
+      })
+      expect(claimOrGetAgentOperationMock).toHaveBeenCalledWith(
+        expect.objectContaining({ staleExecutingBefore: expect.any(Date) })
+      )
+      const cutoff = claimOrGetAgentOperationMock.mock.calls[0]![0].staleExecutingBefore as Date
+      expect(cutoff.getTime()).toBeGreaterThanOrEqual(before - 60 * 60_000)
+      expect(cutoff.getTime()).toBeLessThanOrEqual(Date.now() - 60 * 60_000)
+      expect(decision).toMatchObject({
+        approved: true,
+        result: { structuredContent: { operationId: "outer-op" } },
+      })
+      if (status === "FAILED")
+        expect(decision).toMatchObject({
+          result: {
+            isError: true,
+            structuredContent: {
+              status: "FAILED",
+              code: "OPERATION_OUTCOME_UNKNOWN",
+            },
+          },
+        })
+      expect(callToolMock).not.toHaveBeenCalled()
+      expect(completeAgentOperationMock).not.toHaveBeenCalled()
+      expect(failAgentOperationMock).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    "authorized",
+    "revoked",
+    "lost-permission",
+    "scope-changed",
+    "version-changed",
+    "read-only",
+    "foreign-user",
+  ])(
+    "retains late scan results after expiry only under current authorization (%s)",
+    async (kind) => {
+      const original = new Date("2026-10-02T09:00:00Z")
+      claimOrGetAgentOperationMock.mockResolvedValueOnce({
+        status: "NEW",
+        operation: {
+          id: "expired-outer",
+          workspaceId: "ws-1",
+          connectionId: "conn-1",
+          principalType: "OAUTH_CONNECTION",
+          principalId: "conn-1",
+          operationName: "scan.create",
+          idempotencyKey: "same-key",
+          inputHash: "hash-1",
+          status: "EXECUTING",
+          authorizationVersion: 1,
+          updatedAt: original,
+        },
+      })
+      callToolMock.mockResolvedValueOnce({
+        content: [],
+        structuredContent: { scan: { id: "scan-existing" } },
+      })
+      const expiredAt = new Date("2026-10-02T11:00:00Z")
+      completeAgentOperationMock.mockResolvedValueOnce({
+        status: "FAILED",
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        updatedAt: expiredAt,
+        result: null,
+      })
+      getAgentConnectionMock.mockResolvedValueOnce({
+        ...connectionWith(["scan.create"]),
+        userId: kind === "foreign-user" ? "user-other" : "user-1",
+        scopes: kind === "read-only" ? ["read"] : ["write"],
+        status: kind === "revoked" ? "REVOKED" : "ACTIVE",
+        authorizationVersion: kind === "version-changed" ? 2 : 1,
+        allowedOperations: kind === "scope-changed" ? [] : ["scan.create"],
+      })
+      if (kind === "lost-permission")
+        requireOAuthPermissionMock
+          .mockImplementationOnce(async () => ({}))
+          .mockRejectedValueOnce(new Error("FORBIDDEN"))
+      retainUnknownAgentOperationResultMock.mockResolvedValueOnce({
+        status: "FAILED",
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        resultReference: "scan-existing",
+        result: { content: [], structuredContent: { scan: { id: "scan-existing" } } },
+      })
+      const gate = makeRemoteApprovalGate({
+        apiKeyInfo,
+        toolContext,
+        connection: connectionWith(["scan.create"]),
+      })
+      expect(
+        await gate("lyrashield_scan_target", {
+          targetId: "target-1",
+          mode: "STANDARD",
+          idempotencyKey: "same-key",
+        })
+      ).toMatchObject({
+        approved: true,
+        result: {
+          isError: true,
+          structuredContent: {
+            status: "FAILED",
+            code: "OPERATION_OUTCOME_UNKNOWN",
+            operationId: "expired-outer",
+          },
+        },
+      })
+      expect(completeAgentOperationMock).toHaveBeenCalledWith(
+        "expired-outer",
+        "ws-1",
+        expect.objectContaining({ expectedUpdatedAt: original })
+      )
+      expect(failAgentOperationMock).not.toHaveBeenCalled()
+      expect(callToolMock).toHaveBeenCalledOnce()
+      if (kind === "authorized") {
+        expect(retainUnknownAgentOperationResultMock).toHaveBeenCalledWith(
+          expect.objectContaining({ id: "expired-outer", authorizationVersion: 1 }),
+          "ws-1",
+          expect.objectContaining({
+            terminalUpdatedAt: expiredAt,
+            resultReference: "scan-existing",
+            result: expect.objectContaining({
+              structuredContent: expect.objectContaining({ scan: { id: "scan-existing" } }),
+            }),
+            currentAuthorizationVersion: 1,
+            userId: "user-1",
+          })
+        )
+      } else expect(retainUnknownAgentOperationResultMock).not.toHaveBeenCalled()
+    }
+  )
 
   it("executes an attachment upload claim under an explicit scan_attachment.upload grant", async () => {
     claimOrGetAgentOperationMock.mockResolvedValueOnce({
@@ -641,7 +1080,7 @@ describe("makeRemoteApprovalGate - attachment + fix-PR tools (D2)", () => {
     )
     expect(callToolMock).toHaveBeenCalledWith(
       "lyrashield_upload_scan_attachment",
-      expect.objectContaining({ filename: "notes.txt" })
+      expect.objectContaining({ filename: "notes.txt", idempotencyKey: "op-up" })
     )
   })
 

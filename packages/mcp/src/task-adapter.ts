@@ -42,6 +42,14 @@ export const MCP_TASK_ID_PREFIX = "lst_"
  */
 export const MCP_TASK_TTL_MS = 24 * 60 * 60 * 1000
 
+/**
+ * Outer hosted handler inactivity bound: 20 target GET pages can each take
+ * three 30-second attempts plus two 30-second waits (50 minutes), followed
+ * by target/scan POSTs. One hour leaves margin. Scan runtime is independent;
+ * AgentOperation has no heartbeat or execution lease to renew.
+ */
+export const MCP_DELEGATED_EXECUTION_STALE_MS = 60 * 60 * 1000
+
 /** Poll cadence advertised on Task and used by the SDK's tasks/result wait. */
 export const MCP_TASK_POLL_INTERVAL_MS = 5000
 
@@ -215,33 +223,72 @@ export function operationMatchesPrincipal(
 }
 
 /**
+ * Resolve a status-only delegated task from the authoritative operation
+ * projection. A null scan is intentional here and must not be converted into
+ * a synthetic failure. Protocol timestamps and status are retained; no scan id
+ * or target-derived detail is introduced.
+ */
+export function resolveOperationStatusTaskView(status: {
+  status: string
+  updatedAt: string
+}): TaskView {
+  if (status.status === "PENDING" || status.status === "EXECUTING") {
+    return { status: "working", lastUpdatedAt: status.updatedAt }
+  }
+  if (status.status === "COMPLETED") {
+    return { status: "completed", lastUpdatedAt: status.updatedAt }
+  }
+  return {
+    status: "failed",
+    statusMessage: "The recorded operation did not complete successfully.",
+    lastUpdatedAt: status.updatedAt,
+  }
+}
+
+/**
  * Resolve the task state from the durable operation + scan rows. This is the
  * ONLY status computation; recovery paths never re-execute the tool handler.
  */
 export function resolveTaskView(params: {
   operation: TaskOperationRecord
   scan: TaskScanRecord | null
+  now?: Date
 }): TaskView {
   const { operation, scan } = params
   const lastUpdatedAt = (scan?.updatedAt ?? operation.updatedAt).toISOString()
 
+  if (
+    operation.status === "EXECUTING" &&
+    operation.updatedAt.getTime() <
+      (params.now?.getTime() ?? Date.now()) - MCP_DELEGATED_EXECUTION_STALE_MS
+  ) {
+    // Read-only derivation. An authorized same-key call performs the durable CAS.
+    return {
+      status: "failed",
+      lastUpdatedAt,
+      statusMessage:
+        "The recorded operation outcome is unknown. Inspect its durable status before starting another request.",
+    }
+  }
   if (operation.status === "PENDING" || operation.status === "EXECUTING") {
     return { status: "working", lastUpdatedAt }
   }
   if (operation.status === "FAILED" || operation.status === "CONFLICT") {
     return {
       status: "failed",
-      statusMessage: "The recorded operation failed before a result could be retained.",
+      statusMessage:
+        operation.error === "OPERATION_OUTCOME_UNKNOWN"
+          ? "The recorded operation outcome is unknown. Inspect its durable status before starting another request."
+          : "The recorded operation failed. Inspect its durable status before starting another request.",
       lastUpdatedAt,
     }
   }
-  // COMPLETED: the recorded tool result decides. An isError result means the
-  // delegated call ran but produced no durable work.
+  // A returned error does not prove whether durable work was submitted.
   const stored = toolResultEnvelopeSchema.safeParse(operation.result)
   if (stored.success && stored.data.isError === true) {
     return {
       status: "failed",
-      statusMessage: "The recorded call did not produce a scan.",
+      statusMessage: "The recorded call returned an error; its submission outcome is unknown.",
       lastUpdatedAt,
     }
   }

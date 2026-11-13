@@ -1,23 +1,33 @@
 import { prisma } from "./client"
-import { createHash, randomBytes } from "crypto"
+import { createHash } from "crypto"
 
 const SHARE_TOKEN_PATTERN = /^[a-f0-9]{64}$/i
 import { logger } from "@lyrashield/logger"
 import type { Report } from "./generated/prisma"
 import { gatherReportData, parseWebMcpAssurance } from "./report-generator"
 import { getSystemPrisma } from "./system-client"
-import { withWorkspaceRLS } from "./rls"
-import {
-  parseLaunchReportProvenance,
-  type LaunchReportProvenance,
-} from "./launch-report-provenance"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
+import { parseLaunchReportProvenance } from "./launch-report-provenance"
+import { isLaunchReportShareablePayload } from "./launch-report-html"
+import { lockActiveTargetForDerivedWrite } from "./target-write-lock"
+
+export {
+  generateShareToken,
+  generateReleasePacketShareToken,
+  revokeShareToken,
+  revokeReleasePacketShareToken,
+} from "./report-share-tokens"
 
 export interface CreateReportParams {
   workspaceId: string
   scanId?: string
+  targetId?: string
+  requireActiveTarget?: boolean
   type?: string
   title: string
   createdById: string
+  /** Caller already holds `withDelegatedReadAuthority` for this target. */
+  client?: ScopedTransaction
 }
 
 export interface ShareableReport {
@@ -171,6 +181,31 @@ function getSnapshotWebMcpAssurance(contentJson: unknown): ShareableReport["webM
   return parseWebMcpAssurance(snapshot.webMcpAssurance)
 }
 
+/**
+ * A report's persisted scan link is the authorization source. A snapshot that
+ * names a different scan must never be returned through that link, even when
+ * the snapshot itself otherwise parses. Historical rows without an explicit
+ * scanInfo binding remain readable through their separately validated scan link.
+ */
+export function reportSnapshotScanBindingMatches(
+  contentJson: unknown,
+  scanId: string | null,
+  type: string,
+  options: { requireExplicit?: boolean; launchPayloadValid?: boolean } = {}
+): boolean {
+  if (type === "launch_readiness") {
+    return options.launchPayloadValid ?? true
+  }
+  if (contentJson === null || contentJson === undefined) return !options.requireExplicit
+  if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return false
+  if (!Object.hasOwn(contentJson, "scanInfo")) return !options.requireExplicit
+  const scanInfo = (contentJson as Record<string, unknown>).scanInfo
+  if (scanInfo === null) return !options.requireExplicit && scanId === null
+  if (!scanInfo || typeof scanInfo !== "object" || Array.isArray(scanInfo)) return false
+  const snapshotScanId = (scanInfo as Record<string, unknown>).scanId
+  return typeof snapshotScanId === "string" && snapshotScanId === scanId
+}
+
 function getSnapshotScanSummary(contentJson: unknown): ShareableReport["scanSummary"] | undefined {
   if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson))
     return undefined
@@ -211,13 +246,14 @@ export async function createReport(
 ): Promise<Report & { snapshotReused?: boolean }> {
   const type =
     params.type === "executive" || params.type === "compliance" ? params.type : "developer"
+  const db = params.client ?? prisma
 
   // W3-05: one private snapshot per scan+type. Duplicate completion events or
   // a retried creation return the existing snapshot instead of gathering a
   // second one — and never touch the scan, so a retry can never replay or
   // re-enqueue billable work.
-  if (params.scanId) {
-    const existing = await prisma.report.findFirst({
+  if (params.scanId && !params.requireActiveTarget) {
+    const existing = await db.report.findFirst({
       where: { workspaceId: params.workspaceId, scanId: params.scanId, type, deletedAt: null },
       orderBy: { createdAt: "asc" },
     })
@@ -230,7 +266,7 @@ export async function createReport(
     }
   }
 
-  const contentJson = await gatherReportData(params.workspaceId, params.scanId, type)
+  const contentJson = await gatherReportData(params.workspaceId, params.scanId, type, params.client)
   const persist = (client: Pick<typeof prisma, "report">) =>
     client.report.create({
       data: {
@@ -244,58 +280,61 @@ export async function createReport(
         contentJson,
       },
     })
-  const report = params.scanId
-    ? await withWorkspaceRLS(params.workspaceId, async (tx) => {
-        // Serialize snapshot writers without deleting historical duplicates.
-        // ponytail: concurrent callers can duplicate bounded gathering. Keep its pooled
-        // reads outside the lock; coalesce only after profiling shows contention.
-        const identity = JSON.stringify([params.workspaceId, params.scanId, type])
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${identity}, 0))`
-        const existing = await tx.report.findFirst({
-          where: { workspaceId: params.workspaceId, scanId: params.scanId, type, deletedAt: null },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  const persistInTransaction = async (tx: ScopedTransaction) => {
+    if (params.requireActiveTarget) {
+      const targetExists = params.client
+        ? Boolean(
+            params.targetId &&
+            (await tx.target.findFirst({
+              where: {
+                id: params.targetId,
+                workspaceId: params.workspaceId,
+                deletedAt: null,
+              },
+              select: { id: true },
+            }))
+          )
+        : Boolean(
+            params.targetId &&
+            (await lockActiveTargetForDerivedWrite(tx, params.workspaceId, params.targetId))
+          )
+      if (!targetExists) {
+        throw new Error("FORBIDDEN")
+      }
+      if (params.scanId) {
+        const scan = await tx.scan.findFirst({
+          where: {
+            id: params.scanId,
+            workspaceId: params.workspaceId,
+            targetId: params.targetId,
+            deletedAt: null,
+            target: { workspaceId: params.workspaceId, deletedAt: null },
+          },
+          select: { id: true },
         })
-        return existing ? { ...existing, snapshotReused: true } : persist(tx)
+        if (!scan) throw new Error("SCAN_NOT_FOUND")
+      }
+    }
+    if (params.scanId) {
+      // Serialize snapshot writers without deleting historical duplicates.
+      const identity = JSON.stringify([params.workspaceId, params.scanId, type])
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${identity}, 0))`
+      const existing = await tx.report.findFirst({
+        where: { workspaceId: params.workspaceId, scanId: params.scanId, type, deletedAt: null },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       })
-    : await persist(prisma)
+      if (existing) return { ...existing, snapshotReused: true }
+    }
+    return persist(tx)
+  }
+  const report = params.client
+    ? await persistInTransaction(params.client)
+    : params.scanId || params.requireActiveTarget
+      ? await withWorkspaceRLS(params.workspaceId, persistInTransaction)
+      : await persist(prisma)
 
   logger.info("Report created", { reportId: report.id, workspaceId: params.workspaceId })
   return report
-}
-
-export async function generateShareToken(
-  reportId: string,
-  workspaceId: string
-): Promise<{ token: string; tokenHash: string; expiresAt: Date }> {
-  const token = randomBytes(32).toString("hex")
-  const tokenHash = createHash("sha256").update(token).digest("hex")
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-
-  await withWorkspaceRLS(workspaceId, (tx) =>
-    tx.report.update({
-      where: { id: reportId },
-      data: {
-        shareTokenHash: tokenHash,
-        shareExpiresAt: expiresAt,
-        revokedAt: null,
-      },
-    })
-  )
-
-  return { token, tokenHash, expiresAt }
-}
-
-export async function revokeShareToken(reportId: string, workspaceId: string): Promise<Date> {
-  const revokedAt = new Date()
-  await withWorkspaceRLS(workspaceId, (tx) =>
-    tx.report.update({
-      where: { id: reportId },
-      data: {
-        revokedAt,
-      },
-    })
-  )
-  return revokedAt
 }
 
 export async function getReportByShareToken(
@@ -320,9 +359,80 @@ export async function getReportByShareToken(
   return report
 }
 
+/** A locator grants no access: bind capability and DB time to the content SELECT. */
+export async function readActiveSharedReport(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  reportId: string,
+  token: string
+): Promise<Report | null> {
+  const tokenHash = createHash("sha256").update(token).digest("hex")
+  const rows = await tx.$queryRaw<Report[]>`
+    SELECT * FROM "Report"
+    WHERE "id" = ${reportId} AND "workspaceId" = ${workspaceId}
+      AND "shareTokenHash" = ${tokenHash} AND "revokedAt" IS NULL AND "deletedAt" IS NULL
+      AND ("shareExpiresAt" IS NULL OR "shareExpiresAt" > (statement_timestamp() AT TIME ZONE 'UTC'))
+    LIMIT 1`
+  return rows[0] ?? null
+}
+
+/** Compare the private snapshot without carrying its raw contents beyond an RLS read. */
+export function sharedReportSnapshotBinding(
+  report: Pick<Report, "type" | "scanId" | "contentJson" | "provenanceJson">
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify([report.type, report.scanId, report.contentJson, report.provenanceJson]))
+    .digest("hex")
+}
+
+/** Fresh READ COMMITTED capability check immediately before returning a public result. */
+export async function sharedReportStillActive(
+  workspaceId: string,
+  reportId: string,
+  token: string,
+  snapshotBinding: string
+): Promise<boolean> {
+  return withWorkspaceRLS(
+    workspaceId,
+    async (tx) => {
+      const current = await readActiveSharedReport(tx, workspaceId, reportId, token)
+      return current !== null && sharedReportSnapshotBinding(current) === snapshotBinding
+    },
+    { isolationLevel: "ReadCommitted" }
+  )
+}
+
 export async function getShareableReport(
   reportId: string,
-  workspaceId: string
+  workspaceId: string,
+  options: {
+    requireExplicitSnapshotBinding?: boolean
+    allowedProfiles?: string[]
+    client?: ScopedTransaction
+  } = {}
+): Promise<ShareableReport | null> {
+  return readShareableReport(reportId, workspaceId, undefined, false, options)
+}
+
+/** Revalidate the public capability in the same transaction as the content read. */
+export async function getShareableReportByToken(
+  reportId: string,
+  workspaceId: string,
+  token: string
+): Promise<ShareableReport | null> {
+  return readShareableReport(reportId, workspaceId, token, true)
+}
+
+async function readShareableReport(
+  reportId: string,
+  workspaceId: string,
+  shareToken?: string,
+  allowLaunchMetadata = false,
+  options: {
+    requireExplicitSnapshotBinding?: boolean
+    allowedProfiles?: string[]
+    client?: ScopedTransaction
+  } = {}
 ): Promise<ShareableReport | null> {
   // Public share path: no request-scoped workspace context is set, so the Prisma
   // extension does not inject RLS context on its own. "Report", "Scan" and
@@ -330,12 +440,44 @@ export async function getShareableReport(
   // policy the real isolation boundary — the explicit workspaceId predicates
   // below are defence-in-depth, not a substitute. Wrapping the whole read
   // sequence keeps `SET LOCAL` and every query on one connection. (S4)
-  const result = await withWorkspaceRLS(workspaceId, async (tx) => {
-    const report = await tx.report.findFirst({
-      where: { id: reportId, workspaceId, deletedAt: null },
-    })
+  const read = async (tx: ScopedTransaction) => {
+    const report = shareToken
+      ? await readActiveSharedReport(tx, workspaceId, reportId, shareToken)
+      : await tx.report.findFirst({ where: { id: reportId, workspaceId, deletedAt: null } })
 
-    if (!report) return null
+    // Release packets have their own permission-checked readers; never project
+    // their linked scan or snapshot into a generic report, even with a valid token.
+    if (!report || report.type === "release_packet") return null
+    if (
+      !reportSnapshotScanBindingMatches(report.contentJson, report.scanId, report.type, {
+        requireExplicit: options.requireExplicitSnapshotBinding,
+        launchPayloadValid:
+          options.requireExplicitSnapshotBinding && report.type === "launch_readiness"
+            ? isLaunchReportShareablePayload(report.contentJson)
+            : undefined,
+      })
+    ) {
+      return null
+    }
+    if (options.requireExplicitSnapshotBinding && report.scanId) {
+      const activeBinding = await tx.scan.findFirst({
+        where: {
+          id: report.scanId,
+          workspaceId,
+          deletedAt: null,
+          target: { workspaceId, deletedAt: null },
+          ...(options.allowedProfiles !== undefined
+            ? { mode: { in: options.allowedProfiles as never[] } }
+            : {}),
+        },
+        select: { id: true },
+      })
+      if (!activeBinding) return null
+    }
+    // A malformed launch payload cannot fall back to the generic share view.
+    if (shareToken && report.type === "launch_readiness") {
+      if (!allowLaunchMetadata || !isLaunchReportShareablePayload(report.contentJson)) return null
+    }
 
     let scanSummary: ShareableReport["scanSummary"] =
       getSnapshotScanSummary(report.contentJson) ?? null
@@ -379,109 +521,148 @@ export async function getShareableReport(
       }
     }
 
-    return { report, scanSummary }
-  })
+    const shareable: ShareableReport = {
+      id: report.id,
+      title:
+        report.type === "launch_readiness"
+          ? "LyraShield Launch Readiness Report"
+          : "LyraShield Security Assurance Report",
+      type: report.type,
+      status: report.status,
+      format: report.format,
+      shareUrl: report.shareTokenHash ? `/reports/shared/${report.id}` : null,
+      shareExpiresAt: report.shareExpiresAt,
+      revokedAt: report.revokedAt,
+      createdAt: report.createdAt,
+      scanSummary,
+      assurance: getSnapshotAssurance(report.contentJson),
+      webMcpAssurance: getSnapshotWebMcpAssurance(report.contentJson),
+    }
+    return { shareable, binding: shareToken ? sharedReportSnapshotBinding(report) : null }
+  }
+  const result = options.client
+    ? await read(options.client)
+    : await withWorkspaceRLS(
+        workspaceId,
+        read,
+        shareToken ? { isolationLevel: "RepeatableRead" } : undefined
+      )
 
   if (!result) return null
-  const { report, scanSummary } = result
-
-  return {
-    id: report.id,
-    title:
-      report.type === "launch_readiness"
-        ? "LyraShield Launch Readiness Report"
-        : "LyraShield Security Assurance Report",
-    type: report.type,
-    status: report.status,
-    format: report.format,
-    shareUrl: report.shareTokenHash ? `/reports/shared/${report.id}` : null,
-    shareExpiresAt: report.shareExpiresAt,
-    revokedAt: report.revokedAt,
-    createdAt: report.createdAt,
-    scanSummary,
-    assurance: getSnapshotAssurance(report.contentJson),
-    webMcpAssurance: getSnapshotWebMcpAssurance(report.contentJson),
-  }
+  if (
+    shareToken &&
+    (!result.binding ||
+      !(await sharedReportStillActive(workspaceId, reportId, shareToken, result.binding)))
+  )
+    return null
+  return result.shareable
 }
 
 /**
- * List-view projection for a report row. `contentJson` holds the entire
- * generated report body (assurance data, score trends, finding summaries) and
- * `storageUri` is only needed on download — neither is rendered in the list, so
- * projecting them away keeps this request from moving hundreds of KB per page
- * load. Single-report reads go through getShareableReport/generateReport.
+ * Resolve the persisted target a report is bound to, for delegated-scope
+ * authorization (W0.3). Returns:
+ * - `null` when the report does not exist in the workspace (callers 404),
+ * - `{ targetId }` when the persisted binding resolves to one target,
+ * - `{ targetId: null }` when no single persisted target can be proven —
+ *   workspace-wide scans, deleted scan/target rows, legacy launch reports
+ *   without parseable provenance, and provenance contradicted by the stored
+ *   verdict all land here. Callers MUST treat that as "requires an
+ *   all-targets grant", never as "no check": assertOAuthDelegatedScope
+ *   already denies unbound targets for narrowed connections.
+ *
+ * The request body is never consulted — attribution comes only from stored
+ * rows (the linked scan's target, or the launch report's provenance-verified
+ * gate verdict), so a caller cannot steer the check toward a covered target.
+ *
+ * Pass `client` to resolve the binding inside an existing RLS transaction so
+ * the authorization check and the content read share one snapshot. Pass
+ * `withProfile` when the caller also enforces profile-scoped grants.
  */
-const REPORT_LIST_SELECT = {
-  id: true,
-  title: true,
-  type: true,
-  status: true,
-  format: true,
-  scanId: true,
-  shareTokenHash: true,
-  shareExpiresAt: true,
-  revokedAt: true,
-  createdAt: true,
-  // Private issue-time provenance — small JSON, launch_readiness rows only.
-  // This list endpoint is authenticated-only; the shared/public readers never
-  // touch it.
-  provenanceJson: true,
-} as const
-
-export type ReportListItem = Pick<
-  Report,
-  | "id"
-  | "title"
-  | "type"
-  | "status"
-  | "format"
-  | "scanId"
-  | "shareTokenHash"
-  | "shareExpiresAt"
-  | "revokedAt"
-  | "createdAt"
-> & {
-  /**
-   * Parsed private provenance for launch_readiness reports (null for other
-   * types or when the stored record predates the binding / is unparseable).
-   * Authenticated consumers only.
-   */
-  provenance: LaunchReportProvenance | null
-}
-
-export async function listReports(
+export async function resolveReportDelegationTarget(
+  reportId: string,
   workspaceId: string,
-  cursor?: string,
-  limit?: number
-): Promise<{
-  items: ReportListItem[]
-  nextCursor: string | null
-}> {
-  const lim = Math.min(Math.max(limit ?? 50, 1), 100)
-
-  // "Report" is under FORCE ROW LEVEL SECURITY, so the transaction-local context
-  // is the isolation boundary — the workspaceId predicate alone is not.
-  const reports = await withWorkspaceRLS(workspaceId, (tx) =>
-    tx.report.findMany({
-      where: { workspaceId, deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      take: lim + 1,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      select: REPORT_LIST_SELECT,
+  options: {
+    requireExplicitSnapshotBinding?: boolean
+    allowedProfiles?: string[]
+    client?: ScopedTransaction
+    withProfile?: boolean
+  } = {}
+): Promise<{ targetId: string | null; profile?: string | null } | null> {
+  // Same isolation boundary as getShareableReport: Report/Scan/GateVerdict are
+  // under FORCE ROW LEVEL SECURITY, so the transaction-local workspace context
+  // is the real boundary and the explicit predicates are defence-in-depth.
+  const read = async (tx: ScopedTransaction) => {
+    const report = await tx.report.findFirst({
+      where: { id: reportId, workspaceId, deletedAt: null },
+      select: { id: true, scanId: true, type: true, provenanceJson: true, contentJson: true },
     })
-  )
+    if (!report) return null
 
-  const hasMore = reports.length > lim
-  const rows = hasMore ? reports.slice(0, lim) : reports
-  const items: ReportListItem[] = rows.map((report) => {
-    const { provenanceJson, ...rest } = report
-    return {
-      ...rest,
-      provenance:
-        report.type === "launch_readiness" ? parseLaunchReportProvenance(provenanceJson) : null,
+    if (report.scanId) {
+      if (
+        !reportSnapshotScanBindingMatches(report.contentJson, report.scanId, report.type, {
+          requireExplicit: options.requireExplicitSnapshotBinding,
+        })
+      ) {
+        return null
+      }
+      const scan = await tx.scan.findFirst({
+        where: {
+          id: report.scanId,
+          workspaceId,
+          deletedAt: null,
+          ...(options.allowedProfiles !== undefined
+            ? { mode: { in: options.allowedProfiles as never[] } }
+            : {}),
+        },
+        select: { targetId: true, ...(options.withProfile ? { mode: true } : {}) },
+      })
+      // Deleted scan, or a workspace-wide scan with no persisted target:
+      // unattributable → all-targets only.
+      const target = scan as { targetId: string | null; mode?: string | null } | null
+      return options.withProfile
+        ? { targetId: target?.targetId ?? null, profile: target?.mode ?? null }
+        : { targetId: target?.targetId ?? null }
     }
-  })
-  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
 
-  return { items, nextCursor }
+    if (report.type === "launch_readiness") {
+      if (
+        !reportSnapshotScanBindingMatches(report.contentJson, null, report.type, {
+          requireExplicit: options.requireExplicitSnapshotBinding,
+          launchPayloadValid: isLaunchReportShareablePayload(report.contentJson),
+        })
+      ) {
+        return null
+      }
+      // Launch reports bind a target only through issue-time provenance, and
+      // only when the stored verdict still carries the recorded checksum — a
+      // contradiction means the binding cannot be proven.
+      const provenance = parseLaunchReportProvenance(report.provenanceJson)
+      if (!provenance)
+        return options.withProfile ? { targetId: null, profile: null } : { targetId: null }
+      const verdict = await tx.gateVerdict.findFirst({
+        where: {
+          id: provenance.gateVerdictId,
+          workspaceId,
+          ...(options.requireExplicitSnapshotBinding
+            ? { target: { workspaceId, deletedAt: null } }
+            : {}),
+        },
+        select: { targetId: true, verdictChecksum: true },
+      })
+      if (!verdict || verdict.verdictChecksum !== provenance.verdictChecksum) {
+        return options.withProfile ? { targetId: null, profile: null } : { targetId: null }
+      }
+      return options.withProfile
+        ? { targetId: verdict.targetId, profile: null }
+        : { targetId: verdict.targetId }
+    }
+
+    // No scan link and not a launch report: provenance on other report types
+    // is not a delegation binding.
+    return options.withProfile ? { targetId: null, profile: null } : { targetId: null }
+  }
+  return options.client ? read(options.client) : withWorkspaceRLS(workspaceId, read)
 }
+
+export { listReports, type ReportListItem } from "./report-list-service"

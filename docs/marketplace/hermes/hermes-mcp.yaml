@@ -1,0 +1,4 @@
+mcp_servers:
+  lyrashield:
+    url: https://app.lyrashieldai.com/api/mcp
+    auth: oauth

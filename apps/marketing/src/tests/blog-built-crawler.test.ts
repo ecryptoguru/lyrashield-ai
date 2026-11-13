@@ -80,6 +80,18 @@ describe("built blog crawler helpers", () => {
     expect(facts.tagUrls).toEqual(["http://localhost:8787/blog/tags/verification"])
   })
 
+  it("extracts explicit primary membership separately from related topic links", () => {
+    const html = articleHtml()
+      .replace("<main>", '<main><article data-blog-primary-topic="verification">')
+      .replace(
+        "</main>",
+        '</article><a href="/blog/tags/web-security">Related web guides</a></main>'
+      )
+    const facts = inspectHtml(html, articleUrl)
+    expect(facts.primaryTopic).toBe("verification")
+    expect(facts.tagUrls).toHaveLength(2)
+  })
+
   it("finds structural, anchor, schema, and draft regressions", () => {
     const html = articleHtml(`
       <h1>Second title</h1>

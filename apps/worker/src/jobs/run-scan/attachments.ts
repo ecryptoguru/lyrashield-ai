@@ -1,24 +1,19 @@
 import { createHash } from "node:crypto"
 import { constants } from "node:fs"
-import { lstat, mkdir, open, readFile } from "node:fs/promises"
-import { join } from "node:path"
-import { resolveScanAttachments } from "@lyrashield/db"
+import { lstat, mkdir, mkdtemp, open, rename, rm, rmdir } from "node:fs/promises"
+import { dirname, join } from "node:path"
+import { addScanEvent, resolveScanAttachments, ScanAttachmentError } from "@lyrashield/db"
 import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
-import { scanAttachmentStagingName } from "@lyrashield/types"
+import { scanAttachmentStagingName, SCAN_ATTACHMENT_MAX_TOTAL_BYTES } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
+import type { ScanJobResult } from "../../types"
 import { engineWorkspacePath } from "../../engine/workspace-path"
 
 /**
- * Scan attachment staging — resolve the plan's `attachmentIds` to the stored,
- * workspace-scoped objects, verify each object's sha256 against the recorded
- * checksum, and stage byte-identical copies read-only under a dedicated
- * `attachments/` input directory inside the engine workspace. A manifest the
- * engine consumes (`manifest.json`) binds every staged file to its artifact
- * identity; the engine mounts this directory read-only (engine-side contract
- * is coordinated separately — the worker never injects attachment content
- * into instructions, scope, credentials, model routing, or budget).
+ * Verify plan-bound attachment bytes in private worker memory. After paid
+ * admission, publish the complete input tree and manifest for the engine’s
+ * read-only mount. Attachment content never configures the scan or its budget.
  */
-
 export const SCAN_ATTACHMENT_MANIFEST_VERSION = "lyrashield-scan-attachments/1.0.0"
 export const SCAN_ATTACHMENT_DIR = "attachments"
 
@@ -35,7 +30,7 @@ export class ScanAttachmentStagingError extends Error {
   }
 }
 
-export interface StagedAttachmentEntry {
+interface StagedAttachmentEntry {
   /** ScanAttachment row id — the artifact identity the plan recorded. */
   id: string
   /** Original uploader filename (validated at upload; not used as a path). */
@@ -53,61 +48,16 @@ export interface StagedScanAttachments {
   manifestChecksum: string
   entries: StagedAttachmentEntry[]
   totalBytes: number
+  publish(): Promise<void>
+  handoff(): void
+  [Symbol.asyncDispose](): Promise<void>
 }
 
 function sha256Hex(content: Buffer): string {
   return createHash("sha256").update(content).digest("hex")
 }
 
-/**
- * Write bytes to `path` read-only, refusing symlink targets and never
- * overwriting. On EEXIST (a retried staging attempt) the existing file is
- * accepted only when its content hash matches the verified bytes exactly.
- */
-async function writeReadOnlyVerified(path: string, content: Buffer, expectedSha: string) {
-  let handle
-  try {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- staging path is derived from the artifact id, not caller input
-    handle = await open(
-      path,
-      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-      0o400
-    )
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code
-    if (code === "EEXIST") {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- staging path is derived from the artifact id, not caller input
-      const existing = await readFile(path)
-      if (sha256Hex(existing) !== expectedSha) {
-        throw new ScanAttachmentStagingError(
-          "SCAN_ATTACHMENT_CHECKSUM_MISMATCH",
-          "Staged attachment already exists with different content"
-        )
-      }
-      return
-    }
-    if (code === "ELOOP") {
-      throw new ScanAttachmentStagingError(
-        "SCAN_ATTACHMENT_STAGING",
-        "Refusing to stage attachment over a symlink"
-      )
-    }
-    throw error
-  }
-  try {
-    await handle.writeFile(content)
-  } finally {
-    await handle.close()
-  }
-}
-
-/**
- * Resolve and stage the recorded attachments for a scan. Throws
- * ScanAttachmentError (deleted/cross-workspace/over-limit rows) or
- * ScanAttachmentStagingError (checksum mismatch, unsafe staging path). The
- * caller maps these to a named failed result — a scan whose inputs cannot be
- * verified must not run against a different input set than the plan recorded.
- */
+/** Returns an attempt-private, bounded plaintext resource. Disk publication belongs to the paid owner. */
 export async function stageScanAttachments(params: {
   scanId: string
   workspaceId: string
@@ -115,80 +65,200 @@ export async function stageScanAttachments(params: {
 }): Promise<StagedScanAttachments | null> {
   const ids = [...new Set(params.attachmentIds)]
   if (ids.length === 0) return null
-
+  const workspace = engineWorkspacePath(params.scanId)
+  const dir = join(workspace, SCAN_ATTACHMENT_DIR)
   const rows = await resolveScanAttachments(params.workspaceId, ids)
+  const entries: StagedAttachmentEntry[] = []
+  const files = new Map<string, Buffer>()
+  let totalBytes = 0
+  const wipe = () => {
+    for (const content of files.values()) content.fill(0)
+    files.clear()
+  }
+  try {
+    for (const row of rows) {
+      const { content, checksum } = await readEncryptedArtifact(row.storageUri, params.workspaceId)
+      const stagedAs = scanAttachmentStagingName(row.id, row.filename)
+      if (dirname(join(dir, stagedAs)) !== dir || stagedAs.includes("..") || files.has(stagedAs)) {
+        throw new ScanAttachmentStagingError(
+          "SCAN_ATTACHMENT_STAGING",
+          "Invalid attachment staging name"
+        )
+      }
+      totalBytes += content.byteLength
+      if (
+        totalBytes > SCAN_ATTACHMENT_MAX_TOTAL_BYTES ||
+        content.byteLength !== row.byteLength ||
+        checksum !== row.checksum ||
+        sha256Hex(content) !== row.checksum
+      ) {
+        throw new ScanAttachmentStagingError(
+          "SCAN_ATTACHMENT_CHECKSUM_MISMATCH",
+          `Attachment ${row.id} content does not match its recorded checksum`
+        )
+      }
+      // Keep a private copy: disposing one delivery must not mutate another reader's buffer.
+      files.set(stagedAs, Buffer.from(content))
+      entries.push({
+        id: row.id,
+        filename: row.filename,
+        stagedAs,
+        sha256: row.checksum,
+        byteLength: row.byteLength,
+        mediaType: row.mediaType,
+      })
+    }
+    const manifest = Buffer.from(
+      JSON.stringify(
+        {
+          version: SCAN_ATTACHMENT_MANIFEST_VERSION,
+          scanId: params.scanId,
+          readOnly: true,
+          entries,
+        },
+        null,
+        2
+      )
+    )
+    const manifestChecksum = sha256Hex(manifest)
+    files.set("manifest.json", manifest)
+    let discardPublication: (() => Promise<void>) | undefined
+    let publicationStarted = false
+    return {
+      dir,
+      manifestPath: join(dir, "manifest.json"),
+      manifestChecksum,
+      entries,
+      totalBytes,
+      async publish() {
+        if (publicationStarted || !files.size)
+          throw new ScanAttachmentStagingError(
+            "SCAN_ATTACHMENT_STAGING",
+            "Prepared attachment bytes are unavailable"
+          )
+        publicationStarted = true
+        try {
+          discardPublication = await publishVerifiedDirectory(workspace, dir, files)
+        } finally {
+          wipe()
+        }
+      },
+      handoff() {
+        discardPublication = undefined
+      },
+      async [Symbol.asyncDispose]() {
+        wipe()
+        const discard = discardPublication
+        discardPublication = undefined
+        await discard?.()
+      },
+    }
+  } catch (error) {
+    wipe()
+    throw error
+  }
+}
 
-  const dir = join(engineWorkspacePath(params.scanId), SCAN_ATTACHMENT_DIR)
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a validated scan id, not caller input
-  await mkdir(dir, { recursive: true })
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is derived from a validated scan id, not caller input
-  const dirStat = await lstat(dir)
-  if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) {
+async function publishVerifiedDirectory(
+  workspace: string,
+  dir: string,
+  files: Map<string, Buffer>
+) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- validated engine workspace
+  const created = await mkdir(workspace, { recursive: true })
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- capture parent identity before publication
+  const parent = await lstat(workspace)
+  if (!parent.isDirectory())
     throw new ScanAttachmentStagingError(
       "SCAN_ATTACHMENT_STAGING",
-      "Attachment staging path is not a real directory"
+      "Invalid engine workspace directory"
     )
+  const removeEmptyParent = async () => {
+    if (!created || !(await sameDirectory(workspace, parent))) return
+    // Remove only an empty directory created by this attempt.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- verified parent inode
+    await rmdir(workspace).catch((error: NodeJS.ErrnoException) => {
+      if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code ?? "")) throw error
+    })
   }
-
-  const entries: StagedAttachmentEntry[] = []
-  let totalBytes = 0
-  for (const row of rows) {
-    const artifact = await readEncryptedArtifact(row.storageUri, params.workspaceId)
-    if (artifact.checksum !== row.checksum || artifact.content.byteLength !== row.byteLength) {
-      throw new ScanAttachmentStagingError(
-        "SCAN_ATTACHMENT_CHECKSUM_MISMATCH",
-        `Attachment ${row.id} content does not match its recorded checksum`
-      )
-    }
-    const stagedAs = scanAttachmentStagingName(row.id, row.filename)
-    const targetPath = join(dir, stagedAs)
-    // Defense in depth: the staging name is derived from a validated basename,
-    // but never trust it — the resolved path must stay inside `dir`.
-    if (!targetPath.startsWith(dir + "/") || targetPath.includes("..")) {
+  let temp: string | undefined
+  try {
+    // No existing input tree belongs to this attempt.
+    if (await statIfPresent(dir))
       throw new ScanAttachmentStagingError(
         "SCAN_ATTACHMENT_STAGING",
-        "Attachment staging name escapes the input directory"
+        "Attachment directory already exists"
       )
+    temp = await mkdtemp(join(workspace, ".attachments-"))
+    for (const [name, content] of files) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- validated basename in attempt-private directory
+      const handle = await open(
+        join(temp, name),
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+        0o400
+      )
+      try {
+        await handle.writeFile(content)
+      } finally {
+        await handle.close()
+      }
     }
-    await writeReadOnlyVerified(targetPath, artifact.content, row.checksum)
-    entries.push({
-      id: row.id,
-      filename: row.filename,
-      stagedAs,
-      sha256: row.checksum,
-      byteLength: row.byteLength,
-      mediaType: row.mediaType,
-    })
-    totalBytes += row.byteLength
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- capture identity before publication
+    const identity = await lstat(temp)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- atomic same-filesystem handoff of the complete tree
+    await rename(temp, dir)
+    return async () => {
+      if (await sameDirectory(dir, identity)) await rm(dir, { recursive: true, force: true })
+      await removeEmptyParent()
+    }
+  } catch (error) {
+    if (temp) await rm(temp, { recursive: true, force: true })
+    await removeEmptyParent()
+    throw error
   }
+}
 
-  const manifest = {
-    version: SCAN_ATTACHMENT_MANIFEST_VERSION,
-    scanId: params.scanId,
-    // The engine mounts this directory read-only; `readOnly` documents that
-    // contract inside the manifest itself.
-    readOnly: true,
-    entries,
-  }
-  const manifestContent = JSON.stringify(manifest, null, 2)
-  const manifestPath = join(dir, "manifest.json")
-  await writeReadOnlyVerified(
-    manifestPath,
-    Buffer.from(manifestContent, "utf8"),
-    sha256Hex(Buffer.from(manifestContent, "utf8"))
-  )
-
-  const staged: StagedScanAttachments = {
-    dir,
-    manifestPath,
-    manifestChecksum: sha256Hex(Buffer.from(manifestContent, "utf8")),
-    entries,
-    totalBytes,
-  }
-  logger.info("Staged scan attachments", {
-    scanId: params.scanId,
-    count: entries.length,
-    totalBytes,
+async function statIfPresent(path: string) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- caller supplies a validated workspace path
+  return lstat(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error
   })
-  return staged
+}
+
+async function sameDirectory(path: string, owned: { dev: number; ino: number }): Promise<boolean> {
+  const current = await statIfPresent(path)
+  return Boolean(current && current.dev === owned.dev && current.ino === owned.ino)
+}
+
+export async function attachmentFailure(
+  scanId: string,
+  workspaceId: string,
+  error: unknown
+): Promise<{ ok: false; result: ScanJobResult }> {
+  const known = error instanceof ScanAttachmentError || error instanceof ScanAttachmentStagingError
+  const code = known ? error.code : "SCAN_ATTACHMENT_UNAVAILABLE"
+  logger.warn("Scan attachment staging failed", { scanId, workspaceId, code })
+  try {
+    await addScanEvent(
+      scanId,
+      "attachments_failed",
+      "error",
+      "A supporting file could not be verified or is no longer available",
+      { code }
+    )
+  } catch (eventErr) {
+    logger.warn("Failed to persist attachments_failed event", {
+      scanId,
+      error: eventErr instanceof Error ? eventErr.name : "UNKNOWN",
+    })
+  }
+  return {
+    ok: false,
+    result: {
+      status: "failed",
+      errorCategory: code,
+      errorMessage:
+        "A supporting file could not be verified or is no longer available. Re-upload it and start a new scan.",
+    },
+  }
 }

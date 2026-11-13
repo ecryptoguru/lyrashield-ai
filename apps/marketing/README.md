@@ -5,10 +5,25 @@ Astro 7 marketing site for LyraShield AI. Lives at `apps/marketing` in the monor
 ## Public claim boundary
 
 - Position LyraShield AI as evidence-backed release assurance for AI-built software, not as a generic AI scanner.
-- Distinguish detected risks, independently verified findings, and retest-confirmed fixes.
+- Distinguish detected risks, retest-confirmed fixes and inconclusive results.
 - Describe scanner coverage and limitations explicitly; do not imply every control ran or every finding was verified.
 - PR execution remains fail-closed until a server-generated patch can be bound to an exact approval.
 - The public route set includes `/methodology`, which is the canonical explanation of evidence states, coverage, and non-claims. Keep homepage, tools, blog, and social copy aligned with it.
+
+## Product differentiators for copy
+
+The eight approved USPs (owner: `docs/whitepaper.md` §2.0; keep the three lists in step when one changes):
+
+1. Evidence states, not confidence scores — the three shipped states are DETECTED / VALIDATED / INCONCLUSIVE. VERIFIED is a future-only status and is not produced today.
+2. Built for AI-built software — AI-Built Failure Taxonomy, AI App Security (AI-01–AI-08, OWASP LLM Top 10 2025), WebMCP controls on the agent tool surface.
+3. Agent-native — CLI, MCP server (21 tools, hosted OAuth), Agent Plugin, 51-entry registry / 48 preferred client surfaces, account-less GitHub Action.
+4. Approval-gated fix loop that closes itself — server-generated patch, explicit human approval, never auto-merges, automatic retest on merge.
+5. A launch verdict anyone can verify — versioned Launch Gate plus ed25519-signed reports with a public verify endpoint.
+6. Honest coverage accounting — Vibe Security 50 per-control receipts; "no finding" is never "passed".
+7. Two modes, one loop — Cloud subscription and BYOK Local/Desktop.
+8. Fail-closed trust architecture — RLS tenancy, untrusted engine output, provenance-bound manifests.
+
+Copy rule: state each as a design commitment, never as a detection, benchmark or guarantee claim.
 
 ## Environment
 
@@ -99,9 +114,9 @@ node apps/marketing/scripts/crawl-built-blog.mjs --origin http://localhost:8787
 
 The crawler validates local blog URLs and sitemap membership, 200 responses, unique canonicals, titles and descriptions, one H1 and main landmark, internal anchors, images, parseable JSON-LD, draft exclusion, RSS membership, and tag-archive membership. Error reports strip query strings and fragments. Every subsequent release still requires the complete release gate, local approval, focused PR, green CI, guarded deployment, and live verification.
 
-The deployed motion media is immutable R2 content at `https://media.lyrashieldai.com/assurance-world/v2/65fc3ecb6416b366/`. The bucket permits only `GET`/`HEAD` CORS from `https://lyrashieldai.com`, serves range requests, and uses `public, max-age=31536000, immutable` object caching.
+The Motion V3 release media is immutable R2 content at `https://media.lyrashieldai.com/assurance-world/v3/74787c7fe35196b2/`. The bucket permits only `GET`/`HEAD` CORS from `https://lyrashieldai.com`, serves range requests, and uses `public, max-age=31536000, immutable` object caching.
 
-Motion V2 serves one continuous H.264 track per aspect ratio. The runtime coalesces and serializes direct range seeks, reveals only decoded frames, ignores height-only mobile viewport changes, and falls back to chapter posters for reduced motion, Save-Data, or media errors. Desktop and portrait browser QA must cover rapid and reverse scrolling, width/orientation changes, fallbacks, no JavaScript, cinematic exit, console errors, and horizontal overflow. The approved creative pipeline remains Codex-generated source artwork plus HyperFrames/Three.js; Higgsfield is not used.
+Motion V2 serves one continuous H.264 track per aspect ratio. The runtime coalesces and serializes direct range seeks, reveals only decoded frames, ignores height-only mobile browser-chrome changes while the selected media variant remains unchanged, and falls back to chapter posters for reduced motion, Save-Data, or media errors. Desktop and portrait browser QA must cover rapid and reverse scrolling, width/orientation changes, fallbacks, no JavaScript, cinematic exit, console errors, and horizontal overflow. The approved creative pipeline remains Codex-generated source artwork plus HyperFrames/Three.js; Higgsfield is not used.
 
 ## Manual deploy (Cloudflare Workers)
 
@@ -198,7 +213,7 @@ plaintext in production regardless.
 
 ## Automatic production deploy (GitHub Actions)
 
-The `deploy-marketing` job in `.github/workflows/ci.yml` runs only for a push to `main` that changes `apps/marketing` or a root dependency/build input. It waits for the repository security and release gates, builds the Worker, applies remote D1 migrations, deploys Astro's generated `dist/server/wrangler.json`, and then smoke-checks the canonical routes, API 404 boundary, and `www` redirect. A failed gate, migration, deployment, or smoke check fails the job.
+Protected-main pull requests pass the repository's security and release checks before merge. On a main push, `.github/workflows/release-production.yml` classifies the unshipped change gap and calls the reusable `.github/workflows/deploy-marketing.yml` workflow when marketing changes are pending. The deploy workflow checks that its source SHA is still current `main`, builds the Worker, applies remote D1 migrations, deploys Astro's generated `dist/server/wrangler.json`, and smoke-checks canonical routes, the API 404 boundary, and the `www` redirect. A failed route, migration, deployment, or smoke check fails the release job; `ci.yml` remains the pull-request gate and does not deploy marketing.
 
 Configure these GitHub Actions secrets for `ecryptoguru/lyrashield-ai`:
 

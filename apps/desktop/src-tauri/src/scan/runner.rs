@@ -703,30 +703,11 @@ fn parse_finding_line(line: &str) -> Option<Finding> {
     })
 }
 
-/// Resolve BYOK env for child process only. Never log values.
-/// Returns error if no credential is configured — fails before creation.
+/// Resolve the selected provider's explicit child env. Fails before any scan
+/// record or subprocess exists when the selection cannot produce a valid
+/// route. Never logs values — see `byok::resolve_byok_env`.
 fn resolve_byok_env() -> Result<HashMap<String, String>, String> {
-    // Check ChatGPT auth first (engine handles token file); if signed in, no env needed but still considered ready.
-    let chatgpt = crate::byok::check_chatgpt_auth();
-    let has_chatgpt = matches!(chatgpt, crate::byok::ChatGptAuthStatus::SignedIn);
-    let azure = crate::byok::load_azure_credentials()?;
-    let has_azure = azure.is_some();
-    if !has_chatgpt && !has_azure {
-        return Err("BYOK not configured — connect ChatGPT or Azure OpenAI in Setup".into());
-    }
-    let mut env = HashMap::new();
-    if let Some(creds) = azure {
-        // Validate without logging values
-        if creds.api_key.trim().is_empty() || creds.endpoint.trim().is_empty() {
-            return Err("Azure credentials incomplete".into());
-        }
-        // Only inject selected creds into child env
-        env.insert("AZURE_OPENAI_API_KEY".to_string(), creds.api_key);
-        env.insert("AZURE_OPENAI_ENDPOINT".to_string(), creds.endpoint);
-        // Also set generic variants for engine compatibility
-        // Do not log keys
-    }
-    Ok(env)
+    crate::byok::resolve_byok_env()
 }
 
 /// Whether a repo-form target string names a checked-out source tree on disk
@@ -997,7 +978,14 @@ async fn run_scan(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     cmd.env_clear();
+    // inherited_runtime_env already filters provider/model routing variables
+    // out of the parent environment; env_remove pins the same invariant so a
+    // stale LYRASHIELD_LLM/OPENAI_API_KEY/AZURE_* can never shadow the
+    // explicitly resolved route below.
     cmd.envs(crate::runtime::inherited_runtime_env());
+    for name in crate::runtime::PROVIDER_MODEL_ENV_NAMES {
+        cmd.env_remove(name);
+    }
     for (k, v) in &byok_env {
         cmd.env(k, v);
     }

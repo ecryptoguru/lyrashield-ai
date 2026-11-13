@@ -6,7 +6,6 @@ import {
   resolveProviderId,
   billingQuoteNotes,
 } from "@lyrashield/billing"
-import { parseAffiliateCookie, resolveAttribution } from "@lyrashield/affiliate"
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { LOCAL_SKU_MAP } from "@lyrashield/pricing"
@@ -32,14 +31,13 @@ export async function POST(request: Request) {
 
   try {
     const referenceId = `local_${randomUUID()}`
-    const attribution = await resolveAttribution({
-      cookieToken: parseAffiliateCookie(request.headers.get("cookie")),
-    })
+    // Affiliate attribution is closed while new admission is frozen. No
+    // affiliate_id or click_id is attached to the provider metadata. The
+    // published Local billing path, its admission gate and its rate limiting
+    // are unchanged.
     const metadata = {
       productId: LOCAL_SKU,
       referenceId,
-      ...(attribution.affiliateId ? { affiliate_id: attribution.affiliateId } : {}),
-      ...(attribution.clickId ? { click_id: attribution.clickId } : {}),
     }
     const appUrl = env.NEXT_PUBLIC_APP_URL || "https://app.lyrashieldai.com"
     const successUrl = `${appUrl}/buy/local?status=received`

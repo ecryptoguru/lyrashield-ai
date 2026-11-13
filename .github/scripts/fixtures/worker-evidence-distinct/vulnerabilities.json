@@ -1,0 +1,48 @@
+[
+  {
+    "id": "vuln-0001",
+    "title": "Fixture owner A",
+    "severity": "high",
+    "timestamp": "2026-11-02 21:02:45 UTC",
+    "description": "Revised private observation",
+    "target": "https://example.test",
+    "evidence": "Synthetic evidence only",
+    "finding_class": "dynamic",
+    "pending_http_exchange_ids": [
+      "72"
+    ],
+    "update_history": [
+      {
+        "timestamp": "2026-11-02 21:02:45 UTC",
+        "fields": [
+          "description"
+        ],
+        "reason": "Fixture revision"
+      }
+    ],
+    "updated_at": "2026-11-02 21:02:45 UTC",
+    "http_exchange_ids": [
+      "71"
+    ],
+    "verification_state": "unverified",
+    "evidence_contract_version": "1.2"
+  },
+  {
+    "id": "vuln-0002",
+    "title": "Fixture owner B",
+    "severity": "high",
+    "timestamp": "2026-11-02 21:02:45 UTC",
+    "description": "Private offline fixture",
+    "target": "https://example.test",
+    "evidence": "Synthetic evidence only",
+    "finding_class": "dynamic",
+    "pending_http_exchange_ids": [
+      "72"
+    ],
+    "http_exchange_ids": [
+      "73"
+    ],
+    "verification_state": "unverified",
+    "evidence_contract_version": "1.2"
+  }
+]

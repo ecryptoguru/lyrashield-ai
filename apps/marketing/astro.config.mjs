@@ -9,7 +9,13 @@ import sitemap from "@astrojs/sitemap"
 import tailwindcss from "@tailwindcss/vite"
 import { parseJsonc } from "./src/lib/jsonc"
 import { tools } from "./src/lib/tools"
-import { isFutureDated } from "./src/lib/blog-publishing"
+import { listGeneratedIntegrationDocLastmods } from "./src/lib/integration-doc-routes"
+import { BUILD_DATE, isFutureDated } from "./src/lib/blog-publishing"
+
+// workerd freezes its module-scope clock at the epoch before the first request.
+// Use the same Node-owned cutoff for config filters and prerendered consumers.
+const buildTimestamp = BUILD_DATE.getTime()
+if (!Number.isFinite(buildTimestamp)) throw new Error("Marketing build timestamp must be finite")
 
 // Code-block palette. Astro's markdown pipeline (@astrojs/markdown-satteri →
 // shiki) defaults to the bundled `github-dark` theme, whose comment token
@@ -101,6 +107,14 @@ function contentLastmod() {
   }
   walkDocs(docsDir, docsDir)
 
+  // Generated client guides use their registry verification date as the page's
+  // displayed dateModified; the dynamic Astro route has no literal date for
+  // the docs-source walk above to parse.
+  for (const { path, date: rawDate } of listGeneratedIntegrationDocLastmods()) {
+    const date = new Date(rawDate)
+    if (!Number.isNaN(date.valueOf())) map.set(path, date)
+  }
+
   // Free tools: the registry now carries an updatedDate for every tool.
   const toolDate = tools[0]?.updatedDate ? new Date(tools[0].updatedDate) : undefined
   if (toolDate && !Number.isNaN(toolDate.valueOf())) {
@@ -113,18 +127,35 @@ function contentLastmod() {
     }
   }
 
-  // WebMCP pillar page.
-  const webmcpPath = new URL("./src/pages/webmcp.astro", import.meta.url)
-  try {
-    const content = readFileSync(webmcpPath, "utf8")
-    const match = content.match(
-      /(?:const\s+reviewed|dateModified)\s*=\s*["']([0-9]{4}-[0-9]{2}-[0-9]{2})["']/
-    )
-    if (match) {
-      const date = new Date(match[1])
-      if (!Number.isNaN(date.valueOf())) map.set("/webmcp", date)
-    }
-  } catch {}
+  // Editorially dated pages: each declares one `const reviewed|updatedDate|
+  // reviewedDate` constant that also drives the page's visible text, <time
+  // datetime> attribute and JSON-LD dateModified. Parsing that same constant
+  // here keeps the sitemap lastmod equal to the date the page displays —
+  // a git-derived date would disagree with it (the Oct 2026 drift).
+  for (const [pageFile, route] of [
+    ["index", "/"],
+    ["webmcp", "/webmcp"],
+    ["methodology", "/methodology"],
+    ["about", "/about"],
+    ["evidence-vault", "/evidence-vault"],
+    ["vibe-security-50", "/vibe-security-50"],
+    ["ai-safety", "/ai-safety"],
+    ["blog/editorial-policy", "/blog/editorial-policy"],
+  ]) {
+    try {
+      const content = readFileSync(
+        new URL(`./src/pages/${pageFile}.astro`, import.meta.url),
+        "utf8"
+      )
+      const match = content.match(
+        /const\s+(?:reviewed|updatedDate|reviewedDate)\s*=\s*["']([0-9]{4}-[0-9]{2}-[0-9]{2})["']/
+      )
+      if (match) {
+        const date = new Date(match[1])
+        if (!Number.isNaN(date.valueOf())) map.set(route, date)
+      }
+    } catch {}
+  }
 
   // Git layer: for routes with a resolvable source file, the last commit that
   // touched that file is the page's real freshness signal. Only fills entries
@@ -187,7 +218,7 @@ function contentLastmod() {
   ]) {
     setIfAbsent(
       `/blog/tags/${tag}`,
-      "src/pages/blog/tags/[tag].astro",
+      "src/pages/blog/tags/[tag]/[...page].astro",
       "src/content/blog/",
       "src/lib/blog-categories.ts"
     )
@@ -358,7 +389,10 @@ const localPreview = process.env.LYRASHIELD_LOCAL_PREVIEW === "1"
 const xUrl = process.env.PUBLIC_X_URL || wranglerVar("PUBLIC_X_URL") || ""
 const buildRevision = process.env.LYRASHIELD_MARKETING_REVISION || process.env.GITHUB_SHA || "local"
 const configuredAppUrl = process.env.PUBLIC_APP_URL || wranglerVar("PUBLIC_APP_URL")
-const configuredScannerUrl = process.env.PUBLIC_SCANNER_URL || wranglerVar("PUBLIC_SCANNER_URL")
+const configuredScannerUrl = process.env.PUBLIC_SCANNER_URL ?? wranglerVar("PUBLIC_SCANNER_URL")
+// Local previews must never submit targets to the production scanner. Keep the
+// prerendered page state, robots metadata, and sitemap on this same build value.
+const scannerUrlForBuild = localPreview ? "" : (configuredScannerUrl ?? "")
 const turnstileSiteKey =
   process.env.PUBLIC_TURNSTILE_SITE_KEY || wranglerVar("PUBLIC_TURNSTILE_SITE_KEY") || ""
 const abuseEmail = process.env.PUBLIC_ABUSE_EMAIL || wranglerVar("PUBLIC_ABUSE_EMAIL") || ""
@@ -443,9 +477,7 @@ export default defineConfig({
           pathname !== "/terms" &&
           pathname !== "/terms-of-sale" &&
           pathname !== "/docs" &&
-          // Pagination remains crawlable, but declares noindex and canonical /blog.
-          !/^\/blog\/[1-9]\d*\/?$/.test(pathname) &&
-          (Boolean(configuredScannerUrl) || pathname !== "/scan")
+          (Boolean(scannerUrlForBuild) || pathname !== "/scan")
         )
       },
       serialize: (item) => {
@@ -460,7 +492,9 @@ export default defineConfig({
         // crawler anyway. SeoHead's canonical stays the trailing-slash form.
         const rawPathname = new URL(item.url).pathname.replace(/\/$/, "")
         const pathname = rawPathname === "" ? "/" : rawPathname
-        const lastmod = LASTMOD.get(pathname)
+        // Archive pages inherit the owning collection's actual content date.
+        const collectionPath = pathname.replace(/\/\d+$/, "")
+        const lastmod = LASTMOD.get(pathname) || LASTMOD.get(collectionPath)
         const image = SITEMAP_IMAGES.get(pathname)
         const serialized = { ...item }
         if (lastmod) serialized.lastmod = lastmod.toISOString().slice(0, 10)
@@ -561,9 +595,19 @@ export default defineConfig({
     define: {
       __MARKETING_INDEXABLE__: JSON.stringify(indexable),
       __MARKETING_LOCAL_PREVIEW__: JSON.stringify(localPreview),
+      // Keep preview client requests on the explicitly selected app origin;
+      // Cloudflare's local .dev.vars otherwise overrides Vite's public value.
+      ...(localPreview && configuredAppUrl
+        ? { "import.meta.env.PUBLIC_APP_URL": JSON.stringify(configuredAppUrl) }
+        : {}),
+      ...(localPreview
+        ? { "import.meta.env.PUBLIC_TURNSTILE_SITE_KEY": JSON.stringify(turnstileSiteKey) }
+        : {}),
+      __MARKETING_SCANNER_URL__: JSON.stringify(scannerUrlForBuild),
       __MARKETING_X_URL__: JSON.stringify(xUrl),
       __MARKETING_MYRA_ENABLED__: JSON.stringify(myraMarketingEnabled),
       __MARKETING_BUILD_REVISION__: JSON.stringify(buildRevision),
+      __MARKETING_BUILD_TIMESTAMP__: JSON.stringify(buildTimestamp),
       __MARKETING_SOURCE_DATES__: JSON.stringify(SOURCE_DATES),
       __MARKETING_GOOGLE_VERIFICATION__: JSON.stringify(googleVerification),
       __MARKETING_BING_VERIFICATION__: JSON.stringify(bingVerification),

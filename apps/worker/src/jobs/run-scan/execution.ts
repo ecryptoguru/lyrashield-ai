@@ -1,4 +1,6 @@
-import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
+import { prepareRelayRegistration, relaySetupFailure } from "./relay-registration"
+import { claimBoundedEngineCapacity } from "./capacity-lifecycle"
+import { prepareRepositoryAuth } from "../../engine/repository-auth"
 import {
   addScanEvent,
   prisma,
@@ -16,12 +18,9 @@ import {
   checkoutDeterministicRetest,
 } from "../../engine/deterministic-retest"
 import {
-  fetchRelayAudit,
   mintScanRelayGrant,
-  registerRelayGrant,
   resolveRelayRuntimeConfig,
   resolveSpecServerHosts,
-  revokeRelayGrant,
 } from "../../engine/relay-client"
 import {
   interpretExitCode,
@@ -29,7 +28,8 @@ import {
   runEngine,
   type EngineRunResult,
 } from "../../engine/runner"
-import { resolveScanBudgetUsd, type TargetType } from "../../engine/command-builder"
+import { effectiveEngineBudget, engineDispatchStatus } from "./execution-policy"
+import type { TargetType } from "../../engine/command-builder"
 import {
   AUTHENTICATED_ASSESSMENT_BETA_LIMITS,
   AUTHENTICATED_ASSESSMENT_DENIED_PATHS,
@@ -38,12 +38,7 @@ import {
 import type { RelaySessionBinding } from "@lyrashield/security"
 import type { ScanJobData, ScanJobResult } from "../../types"
 import { AuthSessionError, resolveRelaySessionBinding } from "./auth-session"
-import {
-  stageScanAttachments,
-  ScanAttachmentStagingError,
-  type StagedScanAttachments,
-} from "./attachments"
-import { ScanAttachmentError } from "@lyrashield/db"
+import { stageScanAttachments, attachmentFailure, type StagedScanAttachments } from "./attachments"
 import { requireEngineModel, resolveEngineRuntimeBudgetMs } from "./lifecycle-utils"
 import type { ScanExecutionTarget } from "./preparation"
 import type { ScanTerminalError } from "./settlement"
@@ -64,6 +59,7 @@ export type ScanExecutionResult =
       engineProfile?: ReturnType<typeof resolveEngineProfile>
       engineModel?: string
       maxBudgetUsd: number
+      capacityLimited?: boolean
       engineStartedAtMs: number | null
       /** Checksum-verified attachment staging receipt for the result manifest. */
       stagedAttachments?: {
@@ -72,7 +68,194 @@ export type ScanExecutionResult =
         manifestChecksum: string
       }
     }
-  | { ok: false; result: ScanJobResult }
+  | { ok: false; result: ScanJobResult; noEngineDispatchAfterClaim?: true }
+
+type UrlEngineRelay = ReturnType<typeof prepareRelayRegistration>
+
+type UrlEngineRelayResult =
+  { ok: true; relay: UrlEngineRelay } | { ok: false; result: ScanJobResult }
+
+async function prepareUrlEngineRelay(params: {
+  scanId: string
+  workspaceId: string
+  target: ScanExecutionTarget
+  mode: ScanJobData["mode"]
+  scanProfile: { canonicalMode: string } | null
+  policy: ScanPolicyConstraints | null
+  executionPlan?: ScanExecutionPlan | null
+  isAuthAssessment: boolean
+  scanRuntimeBudgetMs: number
+  elapsedScanMs: () => number
+}): Promise<UrlEngineRelayResult> {
+  const {
+    scanId,
+    workspaceId,
+    target,
+    mode,
+    scanProfile,
+    policy,
+    executionPlan,
+    isAuthAssessment,
+  } = params
+  const relayConfig = resolveRelayRuntimeConfig()
+  const verifiedDomain = target.url ? normalizeDomainForProof(target.url) : null
+  const verification = verifiedDomain
+    ? await prisma.targetDomainVerification.findFirst({
+        where: {
+          workspaceId,
+          domain: verifiedDomain,
+          status: "VERIFIED",
+          expiresAt: { gt: new Date() },
+        },
+        select: { id: true },
+      })
+    : null
+
+  if (!relayConfig || !verification || !target.url || !verifiedDomain) {
+    await addScanEvent(
+      scanId,
+      "engine_skipped",
+      "error",
+      "Engine-backed URL scan requires a verified domain and configured relay",
+      {
+        targetType: target.type,
+        relayConfigured: Boolean(relayConfig),
+        domainVerified: Boolean(verification),
+      }
+    )
+    return {
+      ok: false,
+      result: {
+        status: "failed",
+        errorCategory: "RELAY_SCOPE_UNAVAILABLE",
+        errorMessage:
+          "This review depth requires a verified domain and the target relay. Verify the domain or run Surface Review.",
+      },
+    }
+  }
+
+  let authorization: AuthenticatedAssessmentAuthorization | null = null
+  if (isAuthAssessment) {
+    try {
+      authorization = await resolveAuthenticatedAssessmentAuthorization({
+        workspaceId,
+        targetId: target.id,
+        authorizationRef: executionPlan?.authorizationRef ?? "",
+      })
+    } catch (authError) {
+      await addScanEvent(
+        scanId,
+        "engine_skipped",
+        "error",
+        "The recorded assessment authorization is no longer valid",
+        {
+          code: authError instanceof Error ? authError.message : "AUTH_ASSESSMENT_AUTH_NOT_FOUND",
+        }
+      )
+      return {
+        ok: false,
+        result: {
+          status: "failed",
+          errorCategory: "SCAN_AUTHORIZATION_REVOKED",
+          errorMessage:
+            "The recorded assessment authorization is no longer valid. Record a new scoped authorization and start a new scan.",
+        },
+      }
+    }
+  }
+
+  const engineTimeoutMs = Math.min(
+    resolveEngineRuntimeBudgetMs(
+      mode,
+      target.type,
+      params.scanRuntimeBudgetMs,
+      params.elapsedScanMs()
+    ),
+    executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
+  )
+
+  try {
+    const specServerHosts =
+      target.type === "API" && target.apiSpecUrl
+        ? await resolveSpecServerHosts(target.apiSpecUrl)
+        : []
+    const minted = mintScanRelayGrant(
+      {
+        scanId,
+        mode: scanProfile?.canonicalMode === "DEEP" ? "DEEP" : "STANDARD",
+        verifiedDomain,
+        targetUrl: target.url,
+        apiSpecUrl: target.apiSpecUrl,
+        specServerHosts,
+        engineBudgetMs: engineTimeoutMs,
+        destructiveTestsAllowed: !isAuthAssessment && policy?.destructiveTestsAllowed === true,
+        blockedPaths: isAuthAssessment
+          ? [
+              ...new Set([
+                ...(policy?.blockedPaths ?? []),
+                ...AUTHENTICATED_ASSESSMENT_DENIED_PATHS,
+              ]),
+            ]
+          : (policy?.blockedPaths ?? []),
+        allowedDomains: policy?.allowedDomains ?? [],
+        ...(isAuthAssessment && executionPlan?.limits.maxRequests
+          ? {
+              authenticatedBeta: {
+                maxRequests: executionPlan.limits.maxRequests,
+                maxResponseBytes:
+                  executionPlan.limits.maxResponseBytes ??
+                  AUTHENTICATED_ASSESSMENT_BETA_LIMITS.maxResponseBytes,
+              },
+            }
+          : {}),
+      },
+      relayConfig
+    )
+
+    let sessionBinding: RelaySessionBinding | undefined
+    if (isAuthAssessment) {
+      if (!authorization) throw new Error("AUTH_ASSESSMENT_AUTH_NOT_FOUND")
+      try {
+        sessionBinding = resolveRelaySessionBinding(authorization, {
+          grantExpiresAtMs: minted.scope.exp,
+        })
+      } catch (sessionError) {
+        const code =
+          sessionError instanceof AuthSessionError ? sessionError.code : "AUTH_SESSION_UNAVAILABLE"
+        await addScanEvent(
+          scanId,
+          "engine_skipped",
+          "error",
+          "The recorded test session could not be applied",
+          { code }
+        )
+        return {
+          ok: false,
+          result: {
+            status: "failed",
+            errorCategory: code,
+            errorMessage:
+              "The recorded test session is unavailable or out of scope. Re-create the test session and start a new scan.",
+          },
+        }
+      }
+    }
+
+    return {
+      ok: true,
+      relay: prepareRelayRegistration({
+        scanId,
+        targetType: target.type,
+        relayConfig,
+        minted,
+        sessionBinding,
+        authorization,
+      }),
+    }
+  } catch (grantError) {
+    return relaySetupFailure(scanId, target.type, grantError)
+  }
+}
 
 export async function executeScanTarget(params: {
   scanId: string
@@ -94,6 +277,7 @@ export async function executeScanTarget(params: {
   scanProfile: { canonicalMode: string } | null
   /** Hash-verified stored execution plan; null on legacy pre-plan rows. */
   executionPlan?: ScanExecutionPlan | null
+  accountingVersion?: number | null
 }): Promise<ScanExecutionResult> {
   const {
     scanId,
@@ -107,8 +291,6 @@ export async function executeScanTarget(params: {
     scanRuntimeBudgetMs,
     elapsedScanMs,
     isScanCancelled,
-    markGlobalScanTimeout,
-    markBillablePhaseStarted,
     deterministicRetest,
     engineBacked,
     urlEngineBacked,
@@ -117,6 +299,7 @@ export async function executeScanTarget(params: {
   } = params
 
   let engineResult: EngineRunResult
+  let capacityLimited = false
   let engineStartedAtMs: number | null = null
   let maxBudgetUsd = 0
   let deterministicCheckout: Awaited<ReturnType<typeof checkoutDeterministicRetest>> | undefined
@@ -131,12 +314,12 @@ export async function executeScanTarget(params: {
   const isAuthAssessment = executionPlan?.workflow === "AUTHENTICATED_ASSESSMENT"
 
   if (deterministicRetest) {
-    if (target.repoProvider !== "github") {
+    if (target.repoProvider !== "github")
       throw new Error("Deterministic repository retests require a GitHub source target")
-    }
     await authorizeDeterministicRetest(scanId, workspaceId, params.target.id)
     deterministicCheckout = await checkoutDeterministicRetest({
       scanId,
+      workspaceId,
       repoFullName: target.repoFullName,
       branch: target.branch,
       installationId: target.installationId,
@@ -181,11 +364,13 @@ export async function executeScanTarget(params: {
       throw error
     }
   } else if (engineBacked) {
-    maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd, target.type)
-    if (executionPlan) {
-      // Current policy and mode defaults may narrow, never widen, a queued plan.
-      maxBudgetUsd = Math.min(maxBudgetUsd, executionPlan.limits.maxBudgetUsd)
-    }
+    const budget = effectiveEngineBudget(
+      mode,
+      target.type,
+      policyMaxBudgetUsd,
+      executionPlan?.limits.maxBudgetUsd
+    )
+    maxBudgetUsd = budget.amount
     if (maxBudgetUsd <= 0) {
       const errorMessage = "Protected run limit is zero"
       logger.warn("Scan rejected: zero budget", { scanId, workspaceId, policyMaxBudgetUsd })
@@ -212,17 +397,10 @@ export async function executeScanTarget(params: {
 
     engineProfile = resolveEngineProfile(mode)
     engineModel = requireEngineModel(engineProfile.model)
-    const budgetSource =
-      typeof policyMaxBudgetUsd === "number" &&
-      Number.isFinite(policyMaxBudgetUsd) &&
-      policyMaxBudgetUsd > 0
-        ? "policy"
-        : "mode_default"
-
     try {
       await addScanEvent(scanId, "budget_cap", "info", "Protected run limit enabled", {
         maxBudgetUsd,
-        source: budgetSource,
+        source: budget.source,
       })
     } catch (eventErr) {
       logger.warn("Failed to persist budget_cap event", {
@@ -242,304 +420,106 @@ export async function executeScanTarget(params: {
       }
     }
 
-    // Stage recorded attachments BEFORE any billable/provider work: each
-    // stored object is re-resolved workspace-scoped, decrypted, verified
-    // against its recorded sha256, and written read-only under the engine
-    // workspace's `attachments/` input directory alongside the manifest the
-    // engine consumes. Attachment bytes are untrusted input data — they are
-    // never read into instructions, scope, credentials, model routing, or
-    // budget, so a hostile attachment cannot widen the run. A missing,
-    // deleted, or tampered input fails closed rather than running against a
-    // different input set than the immutable plan recorded.
-    if (plannedAttachmentIds.length > 0) {
-      try {
-        stagedAttachments = await stageScanAttachments({
-          scanId,
-          workspaceId,
-          attachmentIds: plannedAttachmentIds,
-        })
-        if (stagedAttachments) {
-          await addScanEvent(
-            scanId,
-            "attachments_staged",
-            "info",
-            `${stagedAttachments.entries.length} supporting file(s) staged read-only for the engine`,
-            {
-              count: stagedAttachments.entries.length,
-              totalBytes: stagedAttachments.totalBytes,
-              manifestChecksum: stagedAttachments.manifestChecksum,
-            }
-          )
-        }
-      } catch (error) {
-        const isKnown =
-          error instanceof ScanAttachmentError || error instanceof ScanAttachmentStagingError
-        logger.warn("Scan attachment staging failed", {
-          scanId,
-          workspaceId,
-          error: error instanceof Error ? error.message : String(error),
-        })
-        try {
-          await addScanEvent(
-            scanId,
-            "attachments_failed",
-            "error",
-            "A supporting file could not be verified or is no longer available",
-            {
-              code: isKnown ? error.code : "SCAN_ATTACHMENT_STAGING",
-            }
-          )
-        } catch (eventErr) {
-          logger.warn("Failed to persist attachments_failed event", {
-            scanId,
-            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-          })
-        }
-        return {
-          ok: false,
-          result: {
-            status: "failed",
-            errorCategory: isKnown ? error.code : "SCAN_ATTACHMENT_UNAVAILABLE",
-            errorMessage:
-              "A supporting file could not be verified or is no longer available. Re-upload it and start a new scan.",
-          },
-        }
-      }
+    try {
+      stagedAttachments = await stageScanAttachments({
+        scanId,
+        workspaceId,
+        attachmentIds: plannedAttachmentIds,
+      })
+    } catch (error) {
+      return attachmentFailure(scanId, workspaceId, error)
     }
+    await using inputs = stagedAttachments
 
-    // Engine-backed URL/API targets reach their host only through the
-    // scan-scoped relay. Everything here fails closed: no verified domain,
-    // no relay config, or an empty scope means no engine run — the coverage
-    // receipt records the gap instead of pretending the phase ran.
-    let relayCtx: { url: string; grant: string } | null = null
-    let relayConfigForCleanup: ReturnType<typeof resolveRelayRuntimeConfig> = null
+    let relay: UrlEngineRelay | null = null
     if (urlEngineBacked) {
-      const relayConfig = resolveRelayRuntimeConfig()
-      relayConfigForCleanup = relayConfig
-      const verifiedDomain = target.url ? normalizeDomainForProof(target.url) : null
-      const verification = verifiedDomain
-        ? await prisma.targetDomainVerification.findFirst({
-            where: {
-              workspaceId,
-              domain: verifiedDomain,
-              status: "VERIFIED",
-              expiresAt: { gt: new Date() },
-            },
-            select: { id: true },
-          })
-        : null
-      if (!relayConfig || !verification || !target.url || !verifiedDomain) {
-        await addScanEvent(
-          scanId,
-          "engine_skipped",
-          "error",
-          "Engine-backed URL scan requires a verified domain and configured relay",
-          {
-            targetType: target.type,
-            relayConfigured: Boolean(relayConfig),
-            domainVerified: Boolean(verification),
-          }
-        )
-        return {
-          ok: false,
-          result: {
-            status: "failed",
-            errorCategory: "RELAY_SCOPE_UNAVAILABLE",
-            errorMessage:
-              "This review depth requires a verified domain and the target relay. Verify the domain or run Surface Review.",
-          },
-        }
-      }
-
-      // Authenticated beta: re-verify the recorded scoped authorization and
-      // resolve the referenced test-session binding BEFORE minting the grant.
-      // A revoked/expired/mismatched record between admission and execution is
-      // a bounded stop — never a fallback to an unauthenticated run.
-      let authorization: AuthenticatedAssessmentAuthorization | null = null
-      if (isAuthAssessment) {
-        try {
-          authorization = await resolveAuthenticatedAssessmentAuthorization({
-            workspaceId,
-            targetId: target.id,
-            authorizationRef: executionPlan?.authorizationRef ?? "",
-          })
-        } catch (authError) {
-          await addScanEvent(
-            scanId,
-            "engine_skipped",
-            "error",
-            "The recorded assessment authorization is no longer valid",
-            {
-              code:
-                authError instanceof Error ? authError.message : "AUTH_ASSESSMENT_AUTH_NOT_FOUND",
-            }
-          )
-          return {
-            ok: false,
-            result: {
-              status: "failed",
-              errorCategory: "SCAN_AUTHORIZATION_REVOKED",
-              errorMessage:
-                "The recorded assessment authorization is no longer valid. Record a new scoped authorization and start a new scan.",
-            },
-          }
-        }
-      }
-
-      const engineTimeoutMsForGrant = Math.min(
-        resolveEngineRuntimeBudgetMs(mode, target.type, scanRuntimeBudgetMs, elapsedScanMs()),
-        // The recorded engine ceiling applies to every planned run.
-        executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
-      )
-      try {
-        const specServerHosts =
-          target.type === "API" && target.apiSpecUrl
-            ? await resolveSpecServerHosts(target.apiSpecUrl)
-            : []
-        const minted = mintScanRelayGrant(
-          {
-            scanId,
-            mode: scanProfile?.canonicalMode === "DEEP" ? "DEEP" : "STANDARD",
-            verifiedDomain,
-            targetUrl: target.url,
-            apiSpecUrl: target.apiSpecUrl,
-            specServerHosts,
-            engineBudgetMs: engineTimeoutMsForGrant,
-            // The beta grant always carries read-only methods regardless of
-            // policy; admission already denied a destructive-allowed policy.
-            destructiveTestsAllowed: !isAuthAssessment && policy?.destructiveTestsAllowed === true,
-            blockedPaths: isAuthAssessment
-              ? [
-                  ...new Set([
-                    ...(policy?.blockedPaths ?? []),
-                    ...AUTHENTICATED_ASSESSMENT_DENIED_PATHS,
-                  ]),
-                ]
-              : (policy?.blockedPaths ?? []),
-            allowedDomains: policy?.allowedDomains ?? [],
-            ...(isAuthAssessment && executionPlan?.limits.maxRequests
-              ? {
-                  authenticatedBeta: {
-                    maxRequests: executionPlan.limits.maxRequests,
-                    maxResponseBytes:
-                      executionPlan.limits.maxResponseBytes ??
-                      AUTHENTICATED_ASSESSMENT_BETA_LIMITS.maxResponseBytes,
-                  },
-                }
-              : {}),
-          },
-          relayConfig
-        )
-        // Session material binds to the scan at the relay boundary over the
-        // admin channel — never inside the signed grant, the engine
-        // environment, or this job's logs.
-        let sessionBinding: RelaySessionBinding | undefined
-        if (isAuthAssessment) {
-          if (!authorization) throw new Error("AUTH_ASSESSMENT_AUTH_NOT_FOUND")
-          try {
-            sessionBinding = resolveRelaySessionBinding(authorization, {
-              grantExpiresAtMs: minted.scope.exp,
-            })
-          } catch (sessionError) {
-            // Credential failure stops the run — it must not silently fall
-            // back to an unauthenticated clean result.
-            const code =
-              sessionError instanceof AuthSessionError
-                ? sessionError.code
-                : "AUTH_SESSION_UNAVAILABLE"
-            await addScanEvent(
-              scanId,
-              "engine_skipped",
-              "error",
-              "The recorded test session could not be applied",
-              { code }
-            )
-            return {
-              ok: false,
-              result: {
-                status: "failed",
-                errorCategory: code,
-                errorMessage:
-                  "The recorded test session is unavailable or out of scope. Re-create the test session and start a new scan.",
-              },
-            }
-          }
-        }
-        await registerRelayGrant(scanId, minted.grant, relayConfig, sessionBinding)
-        relayCtx = { url: relayConfig.url, grant: minted.grant }
-        await addScanEvent(scanId, "relay_scope", "info", "Relay scope granted", {
-          hosts: minted.scope.hosts,
-          methods: minted.scope.methods,
-          maxRequests: minted.scope.maxRequests,
-        })
-        if (sessionBinding && authorization) {
-          // The receipt records what was bound — the credential reference,
-          // scoped hosts, optional role label, and expiry — never session
-          // material and never a raw vault reference.
-          const credentialScope =
-            authorization.credentialScope &&
-            typeof authorization.credentialScope === "object" &&
-            !Array.isArray(authorization.credentialScope)
-              ? (authorization.credentialScope as Record<string, unknown>)
-              : {}
-          await addScanEvent(
-            scanId,
-            "auth_session_bound",
-            "info",
-            "Pre-created test session bound to the relay scope",
-            {
-              authorizationRef: authorization.planId,
-              credentialId: authorization.credentialId,
-              sessionHosts: sessionBinding.hosts,
-              sessionExpiresAt: new Date(sessionBinding.exp).toISOString(),
-              ...(typeof credentialScope.role === "string"
-                ? { credentialRole: credentialScope.role }
-                : {}),
-            }
-          )
-        }
-      } catch (grantErr) {
-        await addScanEvent(scanId, "engine_skipped", "error", "Relay grant could not be minted", {
-          targetType: target.type,
-          error: grantErr instanceof Error ? grantErr.message : String(grantErr),
-        })
-        return {
-          ok: false,
-          result: {
-            status: "failed",
-            errorCategory: "RELAY_SCOPE_UNAVAILABLE",
-            errorMessage: "Could not establish relay scope for this verified target.",
-          },
-        }
-      }
+      const relayResult = await prepareUrlEngineRelay({
+        scanId,
+        workspaceId,
+        target,
+        mode,
+        scanProfile,
+        policy,
+        executionPlan,
+        isAuthAssessment,
+        scanRuntimeBudgetMs,
+        elapsedScanMs,
+      })
+      if (!relayResult.ok) return relayResult
+      relay = relayResult.relay
     }
+
+    const repositoryAuth = await prepareRepositoryAuth(params)
 
     // Once the external engine begins, an automatic BullMQ replay could
     // spend twice for the same scan. Preflight remains retryable; the
     // billable phase is terminal and any rerun requires a fresh scan.
-    await addScanEvent(
-      scanId,
-      "billable_boundary",
-      "info",
-      "Automatic retries disabled before provider-billable analysis",
-      { retryPolicy: "fresh_scan_required" }
-    )
-    markBillablePhaseStarted()
 
     // Keep the profile's deterministic-scanner reserve available even when
     // the model is healthy until its own wall-clock cap.
-    const engineTimeoutMs = Math.min(
-      resolveEngineRuntimeBudgetMs(mode, target.type, scanRuntimeBudgetMs, elapsedScanMs()),
-      // The engine can never exceed the recorded plan's budget.
-      executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
-    )
-    if (engineTimeoutMs <= 0) {
-      markGlobalScanTimeout()
-      throw new Error("Scan analysis deadline exhausted before engine execution")
-    }
-
-    engineStartedAtMs = Date.now()
+    const claimElapsedMs = elapsedScanMs()
+    const capacity = await claimBoundedEngineCapacity(params)
+    capacityLimited = capacity.capacityLimited
+    const relayFailure = await relay?.activate()
+    if (relayFailure) return { ...relayFailure, noEngineDispatchAfterClaim: true }
     try {
+      if (inputs) {
+        try {
+          await inputs.publish()
+          await addScanEvent(
+            scanId,
+            "attachments_staged",
+            "info",
+            `${inputs.entries.length} supporting file(s) staged read-only for the engine`,
+            {
+              count: inputs.entries.length,
+              totalBytes: inputs.totalBytes,
+              manifestChecksum: inputs.manifestChecksum,
+            }
+          )
+        } catch (error) {
+          return {
+            ...(await attachmentFailure(scanId, workspaceId, error)),
+            noEngineDispatchAfterClaim: true,
+          }
+        }
+      }
+      // Bypass preflight’s cancellation cache after relay setup and input publication.
+      const cancelled = await engineDispatchStatus(isScanCancelled)
+      if (cancelled !== false) {
+        return {
+          ok: false,
+          noEngineDispatchAfterClaim: true,
+          result:
+            cancelled === true
+              ? {
+                  status: "failed",
+                  errorCategory: "CANCELLED",
+                  errorMessage: "Scan cancelled by user",
+                }
+              : {
+                  status: "failed",
+                  errorCategory: "SCAN_STATUS_UNAVAILABLE",
+                  errorMessage: "Could not confirm scan status before engine dispatch.",
+                },
+        }
+      }
+      const setupMs = Math.max(0, elapsedScanMs() - claimElapsedMs)
+      const engineTimeoutMs = capacity.runtimeLimitMs - setupMs
+      if (engineTimeoutMs <= 0) {
+        params.markGlobalScanTimeout()
+        return {
+          ok: false,
+          noEngineDispatchAfterClaim: true,
+          result: {
+            status: "failed",
+            errorCategory: "TIMEOUT",
+            errorMessage: "Engine time budget expired before dispatch.",
+          },
+        }
+      }
+      inputs?.handoff()
+      engineStartedAtMs = Date.now()
       engineResult = await runEngine(
         {
           scanId,
@@ -550,6 +530,7 @@ export async function executeScanTarget(params: {
             type: target.type as TargetType,
             url: target.url,
             repoFullName: target.repoFullName,
+            repoUrl: repositoryAuth && `https://github.com/${target.repoFullName}.git`,
             branch: target.branch,
             name: target.name,
           },
@@ -565,7 +546,8 @@ export async function executeScanTarget(params: {
                   focus,
                 }),
           maxBudgetUsd,
-          ...(relayCtx ? { relay: relayCtx } : {}),
+          ...(repositoryAuth ? { repositoryAuth } : {}),
+          ...(relay ? { relay: relay.context } : {}),
           // The stored plan drives --scope-mode and, for Review Changes, the
           // immutable --diff-base/--diff-head/--repository-revision pins.
           executionPlan: executionPlan ?? null,
@@ -573,43 +555,10 @@ export async function executeScanTarget(params: {
         scanId,
         engineTimeoutMs,
         isScanCancelled,
-        // Sprint 10: metering hook — called on each agent-loop tick with
-        // wall-clock elapsed ms. The hook is a no-op for now; the final
-        // metering is done after the engine completes. This signal can be
-        // used for real-time balance checks in a future iteration.
-        (_elapsedMs: number) => {
-          // Real-time metering hook — intentionally empty for now.
-          // The final wall-clock duration is recorded after the engine exits.
-        }
+        undefined
       )
     } finally {
-      // Relay hygiene runs on EVERY terminal path — success, failure,
-      // cancel, or throw. The grant's expiry is a backstop, not the
-      // mechanism; revocation is immediate.
-      if (relayConfigForCleanup) {
-        const entries = await fetchRelayAudit(scanId, relayConfigForCleanup)
-        if (entries.length > 0) {
-          try {
-            const uploaded = await uploadEncryptedArtifact({
-              workspaceId,
-              ownerId: scanId,
-              type: "relay_audit",
-              content: JSON.stringify(entries),
-              contentType: "application/json",
-            })
-            await addScanEvent(scanId, "relay_audit", "info", "Relay audit trail captured", {
-              entries: entries.length,
-              storageUri: uploaded.storageUri,
-            })
-          } catch (auditErr) {
-            logger.warn("Failed to persist relay audit", {
-              scanId,
-              error: auditErr instanceof Error ? auditErr.message : String(auditErr),
-            })
-          }
-        }
-        await revokeRelayGrant(scanId, relayConfigForCleanup)
-      }
+      await relay?.finish(workspaceId)
     }
   } else if (target.type === "WEB_APP" || target.type === "API") {
     engineResult = {
@@ -668,6 +617,7 @@ export async function executeScanTarget(params: {
     ...(engineModel ? { engineModel } : {}),
     maxBudgetUsd,
     engineStartedAtMs,
+    capacityLimited,
     ...(stagedAttachments
       ? {
           stagedAttachments: {

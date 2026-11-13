@@ -28,6 +28,8 @@ const ElevationSchema = z.object({
     "myra.case.resolve",
     "myra.case.assign",
     "myra.case.reply",
+    "billing.webhook-track.retry",
+    "billing.webhook-track.disposition",
   ]),
   code: z.string().regex(/^\d{6}$/),
 })

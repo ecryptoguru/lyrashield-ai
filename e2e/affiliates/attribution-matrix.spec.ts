@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test"
 import { prisma } from "@lyrashield/db"
 import {
   resolveAttribution,
-  attributeSignup,
   onOrderPaid,
   detectFraudSignals,
   isSelfReferral,

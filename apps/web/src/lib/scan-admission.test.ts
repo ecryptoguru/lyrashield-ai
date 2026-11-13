@@ -23,6 +23,7 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
 })
 
 vi.mock("@lyrashield/db", () => ({
+  findCurrentDomainProof: vi.fn(),
   prisma: {
     targetDomainVerification: { findFirst: vi.fn() },
     policy: { findFirst: vi.fn() },
@@ -36,9 +37,9 @@ vi.mock("@lyrashield/billing", () => ({
 
 import { prisma } from "@lyrashield/db"
 import { resolveAccountBilling, resolveWorkspaceScanSponsor } from "@lyrashield/billing"
+import { URL_PROFILE_UNSUPPORTED_MESSAGE } from "@lyrashield/types"
 import {
   authAssessmentAdmission,
-  findCurrentDomainProof,
   findScanPolicy,
   listAdmissibleReviewOptions,
   matchReviewOption,
@@ -48,25 +49,41 @@ import {
 } from "./scan-admission"
 
 describe("resolveUrlReviewMode", () => {
-  it("marks engine-backed URL tiers and never touches other target types", () => {
-    expect(
-      resolveUrlReviewMode({ targetType: "WEB_APP", mode: "STANDARD", hasApiSpec: false })
-    ).toEqual({ ok: true, engineBacked: true })
+  it("admits only the deterministic Safe/Quick tier for URL/API targets", () => {
     expect(
       resolveUrlReviewMode({ targetType: "WEB_APP", mode: "SAFE", hasApiSpec: false })
     ).toEqual({ ok: true, engineBacked: false })
+    expect(
+      resolveUrlReviewMode({ targetType: "WEB_APP", mode: "QUICK", hasApiSpec: false })
+    ).toEqual({ ok: true, engineBacked: false })
+    // Omitted profile defaults to Quick.
+    expect(resolveUrlReviewMode({ targetType: "API", mode: "", hasApiSpec: false })).toEqual({
+      ok: true,
+      engineBacked: false,
+    })
+    // Non-URL targets are never affected by URL admission.
     expect(
       resolveUrlReviewMode({ targetType: "REPO", mode: "STANDARD", hasApiSpec: false })
     ).toEqual({ ok: true, engineBacked: false })
   })
 
-  it("fails closed with the availability code POST would return", () => {
-    expect(
-      resolveUrlReviewMode({ targetType: "API", mode: "STANDARD", hasApiSpec: false })
-    ).toMatchObject({ ok: false, code: "API_SPEC_REQUIRED" })
-    expect(resolveUrlReviewMode({ targetType: "API", mode: "STANDARD", hasApiSpec: true })).toEqual(
-      { ok: true, engineBacked: true }
-    )
+  it("refuses explicit Standard/Deep/Custom for URL/API with a clear unsupported profile", () => {
+    for (const mode of ["STANDARD", "DEEP", "CUSTOM"] as const) {
+      expect(resolveUrlReviewMode({ targetType: "WEB_APP", mode, hasApiSpec: false })).toEqual({
+        ok: false,
+        code: "URL_MODE_UNSUPPORTED",
+        reason: URL_PROFILE_UNSUPPORTED_MESSAGE,
+      })
+      // Refused even when an OpenAPI spec would otherwise make API tiers pass.
+      expect(resolveUrlReviewMode({ targetType: "API", mode, hasApiSpec: true })).toEqual({
+        ok: false,
+        code: "URL_MODE_UNSUPPORTED",
+        reason: URL_PROFILE_UNSUPPORTED_MESSAGE,
+      })
+    }
+  })
+
+  it("fails closed with the availability code for genuinely unknown modes", () => {
     expect(
       resolveUrlReviewMode({ targetType: "WEB_APP", mode: "MASSIVE", hasApiSpec: false })
     ).toMatchObject({ ok: false, code: "URL_MODE_UNSUPPORTED" })
@@ -141,41 +158,6 @@ describe("resolveSponsorScanPlan", () => {
   })
 })
 
-describe("findCurrentDomainProof", () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it("normalizes the target URL and reports a current proof only", async () => {
-    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
-      id: "proof-1",
-    } as never)
-
-    const result = await findCurrentDomainProof("ws-1", "https://App.Example.com/path?q=1")
-    expect(result).toEqual({ domain: "app.example.com", verified: true })
-    expect(prisma.targetDomainVerification.findFirst).toHaveBeenCalledWith({
-      where: {
-        workspaceId: "ws-1",
-        domain: "app.example.com",
-        status: "VERIFIED",
-        expiresAt: { gt: expect.any(Date) },
-      },
-      select: { id: true },
-    })
-  })
-
-  it("reports unverified for absent URLs or missing proofs", async () => {
-    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
-
-    expect(await findCurrentDomainProof("ws-1", null)).toEqual({
-      domain: null,
-      verified: false,
-    })
-    expect(await findCurrentDomainProof("ws-1", "https://a.example.com")).toEqual({
-      domain: "a.example.com",
-      verified: false,
-    })
-  })
-})
-
 describe("findScanPolicy", () => {
   beforeEach(() => vi.clearAllMocks())
 
@@ -186,14 +168,22 @@ describe("findScanPolicy", () => {
     expect(prisma.policy.findFirst).toHaveBeenCalledWith({
       where: { id: "p-9", workspaceId: "ws-1", deletedAt: null },
       orderBy: undefined,
-      select: { id: true, destructiveTestsAllowed: true },
+      select: expect.objectContaining({
+        id: true,
+        destructiveTestsAllowed: true,
+        maxBudgetUsd: true,
+      }),
     })
 
     await findScanPolicy("ws-1")
     expect(prisma.policy.findFirst).toHaveBeenLastCalledWith({
       where: { workspaceId: "ws-1", name: "Default Policy", deletedAt: null },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, destructiveTestsAllowed: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: expect.objectContaining({
+        id: true,
+        destructiveTestsAllowed: true,
+        maxBudgetUsd: true,
+      }),
     })
   })
 })
@@ -204,15 +194,11 @@ describe("authAssessmentAdmission", () => {
     configMocks.authAssessment.allowlist = ""
   })
 
-  it("fails closed unless flag and allowlist both admit the pair", () => {
-    expect(authAssessmentAdmission("ws-1", "t-1").allowed).toBe(false)
+  it("is deferred: refuses every pair even when the env flag and allowlist admit it", () => {
+    expect(authAssessmentAdmission("ws-1", "t-1")).toEqual({ allowed: false, reason: "flag_off" })
     configMocks.authAssessment.enabled = "1"
-    expect(authAssessmentAdmission("ws-1", "t-1").allowed).toBe(false)
     configMocks.authAssessment.allowlist = "ws-1:t-1,ws-2"
-    expect(authAssessmentAdmission("ws-1", "t-1").allowed).toBe(true)
-    expect(authAssessmentAdmission("ws-2", "t-9").allowed).toBe(true)
-    expect(authAssessmentAdmission("ws-2", "t-1").allowed).toBe(true)
-    expect(authAssessmentAdmission("ws-3", "t-1").allowed).toBe(false)
+    expect(authAssessmentAdmission("ws-1", "t-1")).toEqual({ allowed: false, reason: "flag_off" })
   })
 })
 
@@ -220,9 +206,13 @@ describe("listAdmissibleReviewOptions / matchReviewOption", () => {
   it("derives the bounded option list for each target kind", () => {
     const repo = listAdmissibleReviewOptions({ type: "REPO" })
     expect(repo.map((o) => o.id)).toContain("REVIEW_CHANGES")
-    const api = listAdmissibleReviewOptions({ type: "API", hasApiSpec: false })
-    expect(api.find((o) => o.id === "API_STANDARD")?.available).toBe(false)
-    expect(api.find((o) => o.id === "API_STANDARD")?.disabledReason).toContain("OpenAPI")
+    // URL/API launch offers only the deterministic tier, so no Standard option
+    // exists to be unavailable.
+    for (const type of ["API", "WEB_APP"]) {
+      const options = listAdmissibleReviewOptions({ type, hasApiSpec: false })
+      expect(options.map((o) => o.mode)).toEqual(["SAFE"])
+      expect(options.some((o) => o.usesAi)).toBe(false)
+    }
   })
 
   it("matches the requested review to the option that owns its coverage", () => {
@@ -234,8 +224,9 @@ describe("listAdmissibleReviewOptions / matchReviewOption", () => {
     expect(matchReviewOption(repo, { canonicalMode: "STANDARD" })?.id).toBe("CODE_REVIEW")
 
     const web = listAdmissibleReviewOptions({ type: "WEB_APP" })
-    // URL profiles share ids with their options — the profile match wins.
-    expect(matchReviewOption(web, { profileId: "WEB_APP_DEEP" })?.id).toBe("WEB_APP_DEEP")
+    // A removed engine profile must not resolve to an option; the deterministic
+    // profile id is the only URL match.
+    expect(matchReviewOption(web, { profileId: "WEB_APP_DEEP" })).toBeUndefined()
     expect(matchReviewOption(web, { profileId: "WEB_APP_NOPE", canonicalMode: "SAFE" })?.id).toBe(
       "WEB_APP_SAFE"
     )

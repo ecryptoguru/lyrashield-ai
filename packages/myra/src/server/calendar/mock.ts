@@ -16,12 +16,12 @@ import { MYRA_LIMITS } from "../../contracts"
 import {
   CalendarConflictError,
   CalendarTimeoutError,
-  zonedWallToUtc,
   type BusyWindow,
   type CalendarAdapter,
   type CalendarEventResult,
   type CalendarEventSpec,
-} from "./adapter"
+} from "./types"
+import { zonedWallToUtc } from "./time"
 
 interface StoredEvent extends CalendarEventResult {
   spec: CalendarEventSpec

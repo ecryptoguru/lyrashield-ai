@@ -1,6 +1,9 @@
 ---
 import Base from "@layouts/Base.astro"
+import ScrollWorld from "@components/landing/ScrollWorld.astro"
 import PremiumHero from "@components/landing/PremiumHero.astro"
+import EvidenceMap from "@components/landing/EvidenceMap.astro"
+import TargetGlyph from "@components/landing/TargetGlyph.astro"
 import HeroProductFrame from "@components/landing/HeroProductFrame.astro"
 import HomeLiteScan from "@components/landing/HomeLiteScan.astro"
 import EvidenceWorld from "@components/landing/EvidenceWorld.astro"
@@ -8,7 +11,8 @@ import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
 import { CLOUD_PLANS, formatUSD } from "@lyrashield/pricing"
 import { createMotionMediaManifest } from "../lib/motion-manifest"
-import { tools } from "../lib/tools"
+import { agentOnboarding } from "../lib/agent-onboarding"
+import { TRIAL_LINE } from "../lib/site-copy"
 import { buildDateFor } from "../lib/build-date"
 
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
@@ -18,50 +22,38 @@ const buildDate =
 // Explicit freshness floor: the last content change to this page. The
 // git-derived buildDate wins when it resolves; the floor keeps dateModified
 // honest when the page ships without .git.
-const updatedDate = "2026-09-27"
+const updatedDate = "2026-10-29"
 const dateModified = buildDate ?? `${updatedDate}T00:00:00.000Z`
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
-const trialPlan = CLOUD_PLANS.find((plan) => plan.id === "TRIAL")!
+
 const enterprisePlan = CLOUD_PLANS.find((plan) => plan.id === "ENTERPRISE")!
-const renderHash = import.meta.env.PUBLIC_MOTION_RENDER_HASH as string
+const appSignUpUrl =
+  "https://app.lyrashieldai.com/sign-up?source=landing_pricing"
+const renderHash = __MARKETING_LOCAL_PREVIEW__ ? "local" : import.meta.env.PUBLIC_MOTION_RENDER_HASH as string
 const mediaUrl = renderHash === "local" ? "/media-local" : import.meta.env.PUBLIC_MEDIA_URL
+const cliLoginCommand = agentOnboarding.commands[0]
+
 const motionManifest = createMotionMediaManifest(mediaUrl, renderHash)
 
 const description =
-  "Review the code your agents wrote and the tools your app exposes to agents. Get one shareable release record before you ship. Open beta, no card needed."
+  "Review your repo, website or API with LyraShield AI. See the evidence, approve proposed fixes and retest before sharing a launch report."
 
 const faqItems = [
   {
     q: "What happens after I create an account?",
-    a: "Create a workspace, add an authorized repository, public URL or API target, then choose the review depth. LyraShield keeps the resulting scope, findings, evidence states, fix proposals and fresh retest outcomes in one release record.",
+    a: "Create a workspace, add an authorized repository, website or API, then choose the review depth. Your findings, evidence states, fix proposals and retest outcomes stay together.",
   },
   {
-    q: "What does a LyraShield result actually prove?",
-    a: "Only what the retained evidence supports. We keep detected candidates, independently verified findings, validated fixes (retest-confirmed), inconclusive retests and checks that were limited or not applicable distinct. Missing proof stays visible.",
+    q: "What does a result prove?",
+    a: "Only what retained evidence supports. Detected findings, retest-confirmed fixes and inconclusive results stay distinct. Missing coverage stays visible; no result guarantees that an application has no vulnerabilities.",
   },
   {
-    q: "Does LyraShield automatically fix my code?",
-    a: "No. LyraShield records fix proposals and can stage a server-generated patch. Browser Fix PR execution requires explicit approval. A connected OAuth agent may run only the operations authorized by its browser-confirmed grant, with checks at execution. Nothing auto-merges.",
+    q: "Do fixes need my approval?",
+    a: "Yes. Fix PRs open only after a human approves, with a server-generated patch. Nothing auto-merges. Connected agents act only within a browser-confirmed grant.",
   },
   {
-    q: "Is this a replacement for my other security scanners?",
-    a: "No. LyraShield complements specialist scanners rather than replacing them: SCA, secrets scanning, dependency checks and repo review are coverage layers inside a wider release-assurance workflow that adds evidence states, fix proposals and retests. Specialist tools may still provide deeper coverage in their own category.",
-  },
-  {
-    q: "What is the Operational Evidence Vault?",
-    a: "It is a private workspace where you collect, review and version proof for the seven Vibe Security 50 controls that cannot be established by a repository or URL scan: audit trails, monitoring, backup tests, sandboxing, test independence, multi-agent trust and accountable review. Accepted evidence is frozen into immutable private assurance reports; public shared reports do not include it.",
-  },
-  {
-    q: "What is live today and what is on the roadmap?",
-    a: `Live today: the free Lite Check, ${tools.length} browser-local tools, the full release-assurance platform in open beta, the Operational Evidence Vault, MCP and GitHub integrations, a published CLI and a GitHub Action with a diff-aware gate and SARIF output. Registration is open; product pages describe current coverage and limits. Cloud prices are listed on /pricing, while purchase availability is shown in the authenticated product.`,
-  },
-  {
-    q: "Do you store my codebase?",
-    a: "Scans run in hardened, short-lived environments. The full platform retains scope, receipts, findings and evidence states, not a copy of your source. Shared reports exclude repository coordinates, file paths and raw secrets.",
-  },
-  {
-    q: "How is the Lite Check different from the full review?",
-    a: "The Lite Check passively reads an authorized public URL for a bounded set of surface signals. The full platform can review repositories, URLs and APIs, retain control-level evidence, stage fix proposals, run fresh retests and produce a shareable release record.",
+    q: "How is Lite Check different from a full review?",
+    a: "Lite Check passively reads a bounded set of signals at an authorized public URL. A full review supports repositories, websites and APIs, retained evidence, approval-gated fix proposals, fresh retests and a shareable report.",
   },
 ]
 
@@ -70,7 +62,7 @@ const jsonLd = [
     "@context": "https://schema.org",
     "@type": "WebPage",
     "@id": `${pageUrl}#webpage`,
-    name: "Release assurance for AI-built apps",
+    name: "Launch gate for AI-built apps",
     description,
     url: pageUrl,
     inLanguage: "en-US",
@@ -113,71 +105,43 @@ const jsonLd = [
   canonical={pageUrl}
   jsonLd={jsonLd}
 >
-  <PremiumHero />
-  <section
-    id="how-it-works"
-    aria-labelledby="workflow-heading"
-    class="px-4 py-10 sm:px-6 sm:py-12 lg:px-8"
-    style="scroll-margin-top: 4.5rem"
-  >
-    <div class="mx-auto max-w-6xl">
-      <h2 id="workflow-heading" class="text-2xl font-semibold tracking-tight text-text sm:text-3xl">
-        One review, from authorized scope to useful evidence
-      </h2>
-      <ol class="mt-6 grid gap-4 md:grid-cols-3">
-        <li class="rounded-xl border border-border bg-bg-raised p-5">
-          <span class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">01 · Choose scope</span>
-          <p class="mt-3 font-semibold text-text">Select a repository, URL or API you are authorized to review.</p>
-        </li>
-        <li class="rounded-xl border border-border bg-bg-raised p-5">
-          <span class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">02 · Review evidence</span>
-          <p class="mt-3 font-semibold text-text">See what was checked, what needs attention and what could not be established.</p>
-        </li>
-        <li class="rounded-xl border border-border bg-bg-raised p-5">
-          <span class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">03 · Decide what is next</span>
-          <p class="mt-3 font-semibold text-text">If needed, review a proposed fix, approve it explicitly and run a fresh retest.</p>
-        </li>
-      </ol>
-      <p class="mt-4 text-sm leading-6 text-text-muted">
-        Fixes are proposals, retests are separate runs, and a finding changes state only when retained evidence supports it.
-      </p>
-    </div>
-  </section>
+  <ScrollWorld manifest={motionManifest}>
+  <div class="visual-intro">
+    <PremiumHero cinematic />
+    <EvidenceMap />
+    <HomeLiteScan />
+  </div>
+  {/* Block 4: the journey. It carries the #how-it-works anchor because the
+      header, the footer and the Product menu all link to it. */}
+  <div id="how-it-works" class="cinematic-threshold cinematic-threshold--to-dark" aria-hidden="true"></div>
+  <EvidenceWorld manifest={motionManifest} />
+  </ScrollWorld>
+  <div class="cinematic-threshold cinematic-threshold--to-light" aria-hidden="true"></div>
   <HeroProductFrame />
-  <HomeLiteScan />
-  <section aria-labelledby="capabilities-heading" class="px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
-    <div class="mx-auto max-w-6xl">
-      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Review the full release context</p>
-      <h2 id="capabilities-heading" class="mt-3 text-2xl font-semibold tracking-tight text-text sm:text-3xl">
-        Code, connected tools and operational evidence
-      </h2>
-      <div class="mt-6 grid gap-4 md:grid-cols-3">
-        <article class="rounded-xl border border-border bg-bg-raised p-5">
-          <h3 class="font-semibold text-text">Repository, URL and API reviews</h3>
-          <p class="mt-2 text-sm leading-6 text-text-muted">Review the authorized target and keep the tested scope attached to findings and reports.</p>
-        </article>
-        <article class="rounded-xl border border-border bg-bg-raised p-5">
-          <h3 class="font-semibold text-text">Agent-tool surfaces</h3>
-          <p class="mt-2 text-sm leading-6 text-text-muted">Check MCP and WebMCP tool surfaces alongside the rest of the review. Coverage remains bounded to the checks that ran.</p>
-        </article>
-        <article class="rounded-xl border border-border bg-bg-raised p-5">
-          <h3 class="font-semibold text-text">Operational evidence</h3>
-          <p class="mt-2 text-sm leading-6 text-text-muted">Keep customer-provided operational evidence separate from what a repository or URL scan can establish.</p>
-          <a href="/evidence-vault" data-cta-id="homepage-evidence-vault" class="mt-3 inline-flex min-h-11 items-center font-semibold text-accent underline underline-offset-4">Explore the Evidence Vault</a>
-        </article>
+
+  <section class="workflow-rail" aria-labelledby="surfaces-heading">
+    <div class="workflow-rail__inner">
+      <h2 id="surfaces-heading">Fits your workflow.</h2>
+      <div class="workflow-rail__integrations">
+        <a href="#product-preview"><TargetGlyph kind="web" />Web app</a>
+        <details><summary><TargetGlyph kind="api" />CLI setup</summary><div class="workflow-rail__command"><pre><code data-cli-command>{cliLoginCommand}</code></pre><button type="button" data-copy-cli>Copy command</button><span data-copy-status role="status"></span></div></details>
+        <a href="/docs/integrations/github-action" data-cta-id="homepage-surface-action-docs"><TargetGlyph kind="repo" />GitHub Action</a>
+        <a href="/agents" data-cta-id="homepage-surface-agents-setup"><TargetGlyph kind="approval" />Coding agents</a>
       </div>
-      <p class="mt-4 text-sm text-text-muted">
-        <a href="/ai-safety" data-cta-id="homepage-ai-safety" class="font-semibold text-accent underline underline-offset-4">Read the MCP guard evaluation</a>
-        for its methods, results and current limits.
-      </p>
+      <div id="coverage-heading" class="workflow-rail__links">
+        <a href="/vibe-security-50" data-cta-id="homepage-coverage-controls">Control coverage</a>
+        <a href="/evidence-vault" data-cta-id="homepage-coverage-vault">Evidence Vault</a>
+        <a href="/webmcp" data-cta-id="homepage-coverage-webmcp">WebMCP</a>
+        <a href="/tools/php2shell-checker" data-cta-id="homepage-coverage-php2shell">PHP2Shell checker</a>
+      </div>
     </div>
   </section>
   <section id="cloud-plans" aria-labelledby="home-pricing-heading" class="border-y border-border bg-bg-raised/45 px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
     <div class="mx-auto max-w-6xl">
-      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Cloud plans</p>
-      <h2 id="home-pricing-heading" class="mt-3 text-2xl font-semibold tracking-tight text-text sm:text-3xl">Choose by review depth and capacity</h2>
+
+      <h2 id="home-pricing-heading" class="mt-3 text-2xl font-semibold tracking-tight text-text sm:text-3xl">Choose your plan.</h2>
       <p class="mt-3 min-w-0 max-w-3xl break-words text-sm leading-6 text-text-muted">
-        Start with a {trialPlan.agentMinutes}-minute, {trialPlan.targetCaps}-target trial for 7 days with no card. Paid plans use the existing monthly or annual catalog; regional prices and full limits are on <a href="/pricing" class="font-semibold text-accent underline underline-offset-4">pricing</a>.
+        Free trial: {TRIAL_LINE}. <a href="/pricing" class="font-semibold text-accent underline underline-offset-4">All limits and regional pricing</a>.
       </p>
       <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         {cloudPlans.map((plan) => (
@@ -190,50 +154,70 @@ const jsonLd = [
             <p class="mt-1 min-w-0 break-words text-sm text-text-muted">
               <span>{formatUSD(plan.price.usd.annual)}/yr</span>
               <span aria-hidden="true"> · </span>
-              <span>{plan.agentMinutes.toLocaleString()} agent-minutes/month</span>
+              <span>
+                {plan.agentMinutes.toLocaleString()} agent-minutes/month{" "}
+
+              </span>
               <span aria-hidden="true"> · </span>
               <span>up to {plan.targetCaps} targets</span>
             </p>
-            <p class="mt-3 min-w-0 break-words text-sm text-text-muted">{plan.deepAllowed ? "Deep and Custom scans included." : "Safe, Quick and Standard scans."}</p>
+            <p class="mt-2 min-w-0 break-words text-sm text-text-muted">{plan.deepAllowed ? "Deep and Custom included." : "Safe, Quick and Standard."}</p>
+            <a
+              href={`${appSignUpUrl}&cta=choose_${plan.id.toLowerCase()}`}
+              data-cta-id={`homepage-plan-choose-${plan.id.toLowerCase()}`}
+              class="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-accent px-4 text-sm font-semibold text-accent hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              Choose {plan.name}
+            </a>
           </article>
         ))}
       </div>
       <p class="mt-4 min-w-0 break-words text-sm text-text-muted">
-        Enterprise is contact-led from {formatUSD(enterprisePlan.price.usd.monthly)}/month. Paid plans and purchase availability are confirmed in the authenticated product.
+        Wall-clock server time. Deep and Custom scans count 3x.<br />Enterprise from {formatUSD(enterprisePlan.price.usd.monthly)}/month. <a href="/demo" class="underline underline-offset-4">Talk to us</a>.
       </p>
     </div>
   </section>
-  <div class="cinematic-threshold cinematic-threshold--to-dark" aria-hidden="true"></div>
-  <EvidenceWorld manifest={motionManifest} />
-  <div class="cinematic-threshold cinematic-threshold--to-light" aria-hidden="true"></div>
   <Faq items={faqItems} />
-  <section id="demo" aria-labelledby="demo-heading" class="px-4 py-14 sm:px-6 lg:px-8" style="scroll-margin-top: 4.5rem">
-    <div class="mx-auto max-w-3xl" data-reveal-group>
-      <p class="font-mono text-xs font-semibold tracking-[.18em] text-accent uppercase" data-reveal>
-        Talk to the founder
-      </p>
-      <h2 id="demo-heading" data-reveal class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl">
-        See how LyraShield fits your app.
-      </h2>
-      <p data-reveal class="mt-5 max-w-2xl text-lg leading-8 text-text-muted">
-        Walk through the product with Ankit. Discuss what you are shipping, how the evidence and
-        retest workflow works and where a review would fit your release process.
-      </p>
-      <div class="mt-8" data-reveal>
-        <a
-          href="/demo"
-          data-cta-id="home-demo"
-          class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg px-6 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          Book a demo
-        </a>
-      </div>
-    </div>
-  </section>
   <FinalCta />
 </Base>
 
+<script>
+  const copyButton = document.querySelector<HTMLButtonElement>("[data-copy-cli]")
+  const copyStatus = document.querySelector<HTMLElement>("[data-copy-status]")
+  copyButton?.addEventListener("click", async () => {
+    const command = document.querySelector("[data-cli-command]")?.textContent
+    if (!command || !copyStatus) return
+    copyButton.disabled = true
+    try {
+      await navigator.clipboard.writeText(command)
+      copyStatus.textContent = "Copied"
+    } catch {
+      copyStatus.textContent = "Copy unavailable. Select the command to copy it."
+    } finally { copyButton.disabled = false }
+  })
+</script>
+
 <style>
+  /* Keep the measured opening flight span while replacing prose with visual stages.
+     These are composed scenes, not spacer elements; content can grow at enlarged text. */
+  .visual-intro { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, minmax(auto, 1fr)); min-height: calc(1950px + 60svh); }
+  .workflow-rail { padding: 1rem max(1rem, calc((100% - 1152px)/2)) 4rem; }
+  .workflow-rail__inner { border-block: 1px solid var(--border); padding-block: 2rem; }
+  .workflow-rail h2 { margin: 0 0 1.5rem; font-size: 1.5rem; letter-spacing: -.02em; }
+  .workflow-rail__integrations { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: 1rem; align-items: start; }
+  .workflow-rail__integrations > * { min-width: 0; }
+  .workflow-rail__integrations > a, .workflow-rail summary { display: flex; align-items: center; gap: .75rem; min-height: 44px; color: var(--text); font-weight: 600; cursor: pointer; }
+  .workflow-rail__integrations :global(svg) { color: var(--accent); flex: none; width: 24px; height: 24px; }
+  .workflow-rail__links { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; padding-top: 1.5rem; }
+  .workflow-rail__links a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent); font-size: .875rem; text-decoration: underline; text-underline-offset: 4px; }
+  .workflow-rail__command { margin-top: 1rem; padding: .75rem; background: var(--bg-raised); border-radius: .75rem; }
+  .workflow-rail pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .75rem; }
+  .workflow-rail button { min-height: 44px; max-width: 100%; padding: .5rem .75rem; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: .5rem; font-size: .875rem; }
+  .workflow-rail a:focus-visible, .workflow-rail summary:focus-visible, .workflow-rail button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+  @media(max-width:1023px) { .visual-intro { min-height: calc(2607px + 60svh); } }
+  @media(max-width:480px) { .visual-intro { min-height: calc(3700px + 60svh); } }
+  @media(max-width:374px) { .visual-intro { min-height: calc(3920px + 60svh); } }
+
   .cinematic-threshold {
     min-height: clamp(3rem, 7vw, 7rem);
     pointer-events: none;

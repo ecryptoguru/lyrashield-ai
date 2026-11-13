@@ -421,26 +421,6 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
-  it("bypasses the gate with allowMutations", async () => {
-    const fetchFn = fetchStub({ id: "scan-1" })
-    const res = await handleRemoteMcpRequest(
-      mcpRequest({
-        jsonrpc: "2.0",
-        id: 2,
-        method: "tools/call",
-        params: {
-          name: "lyrashield_run_pr_scan",
-          arguments: { workspaceId: "ws-1", targetId: "t-1" },
-        },
-      }),
-      { toolContext: ctx(fetchFn), allowMutations: true }
-    )
-    const body = await readJson(res)
-    const result = body.result as { isError?: boolean }
-    expect(result?.isError).toBeFalsy()
-    expect(fetchFn).toHaveBeenCalledOnce()
-  })
-
   it("refuses a mutating tool with a read-only key", async () => {
     const fetchFn = fetchStub()
     const gate: RemoteApprovalGate = (_toolName, _args, ctx) => {

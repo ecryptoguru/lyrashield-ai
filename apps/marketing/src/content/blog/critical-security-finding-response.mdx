@@ -2,7 +2,7 @@
 title: "What to do with a critical security finding"
 description: "Treat critical severity as a triage input: confirm scope and exposure, contain credible risk, preserve evidence, fix and run a fresh retest."
 pubDate: 2026-07-17
-updatedDate: 2026-08-07
+updatedDate: 2026-10-24
 author: lyrashield-team
 tags: ["verification", "vibe-coding-security"]
 draft: false
@@ -22,7 +22,7 @@ Assign one incident owner and contain credible active risk without waiting for p
 
 A scanner's severity rating is useful, but it does not prove that the condition applies, is reachable or has been exploited. Before anyone announces an incident or merges an emergency patch, establish what the tool observed and what remains an assumption.
 
-The [LyraShield AI security guide for vibe-coded applications](/blog/vibe-coding-security-guide) separates a detected candidate from an independently verified finding, a retest-confirmed outcome and an inconclusive result. That vocabulary keeps the response tied to the available evidence.
+The [LyraShield AI security guide for vibe-coded applications](/blog/vibe-coding-security-guide) separates a detected candidate, a retest-confirmed outcome and an inconclusive result. That vocabulary keeps the response tied to the available evidence.
 
 [NIST SP 800-61 Rev. 3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) integrates incident response with risk management and treats detection, response, recovery and later improvement as connected work. [CISA's SSVC guide](https://www.cisa.gov/sites/default/files/publications/cisa-ssvc-guide%20508c.pdf) adds decision context such as exploitation status, technical impact, mission prevalence and public or safety impact. Neither approach says to sort solely by a severity number.
 
@@ -71,7 +71,7 @@ Review:
 - logs for the affected action, using approved access and retention procedures;
 - adjacent systems that share the same component or credential.
 
-The related guide to [verifying a security finding](/blog/verify-security-finding) covers this evidence step in more depth. A second model repeating the alert is not independent verification.
+The related guide to [verifying a security finding](/blog/verify-security-finding) covers this evidence step in more depth. A second model repeating the alert is not a retest.
 
 Check the [CISA Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) when the issue involves a published CVE. Presence in KEV raises urgency only if the affected product and version apply. Absence from KEV does not show that exploitation is impossible.
 
@@ -101,6 +101,8 @@ Do not put secrets, personal data or exploit-ready details in a broadly visible 
 Review a proposed fix like any other security-sensitive change. Inspect authorization, error paths, dependency updates, migrations, rollback behavior and tests. Run normal regression checks plus an independent test derived from the original precondition.
 
 After deployment to an authorized test environment, run a fresh server-owned retest against the original condition. Preserve both results. A clean deterministic retest supports a retest-confirmed outcome only when the relevant scanner coverage was complete. If the affected path was skipped or the environment did not match, record the result as inconclusive.
+
+For a PHP runtime advisory, a clean source retest cannot show which binary or image is serving requests. Preserve the rollout and worker readback described in the [PHP2Shell patching guide](/blog/patch-php2shell-docker-fpm-apache). Patching also cannot establish that no earlier compromise occurred; use the [earlier-compromise review](/blog/php2shell-investigate-earlier-compromise) to keep that investigation separate from remediation.
 
 LyraShield AI can represent a finding workflow, approval-bound fix proposal and retest record. It does not automatically execute a fix pull request. Human approval and the repository's own merge controls remain required.
 

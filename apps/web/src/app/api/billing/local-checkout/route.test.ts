@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   razorpayAdmission: "off",
   createPolar: vi.fn().mockResolvedValue("https://polar.example/local"),
   createRazorpay: vi.fn().mockResolvedValue({ id: "plink_1", url: "https://rzp.example/local" }),
-  resolveAttribution: vi.fn().mockResolvedValue({ affiliateId: "aff_1", clickId: "click_1" }),
 }))
 
 vi.mock("@lyrashield/config", () => ({
@@ -25,10 +24,6 @@ vi.mock("@lyrashield/config", () => ({
 vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
   logger: { error: vi.fn(), warn: vi.fn() },
-}))
-vi.mock("@lyrashield/affiliate", () => ({
-  parseAffiliateCookie: () => "opaque-cookie-token",
-  resolveAttribution: mocks.resolveAttribution,
 }))
 vi.mock("@/lib/rate-limit", () => ({
   clientIpFromRequest: () => "203.0.113.4",
@@ -88,7 +83,7 @@ describe("POST /api/billing/local-checkout", () => {
     }
   })
 
-  it("creates only the fixed Polar launch checkout with internal attribution IDs", async () => {
+  it("creates only the fixed Polar launch checkout with no affiliate metadata", async () => {
     mocks.polarAdmission = "public"
     const response = await POST(request())
     expect(response.status).toBe(200)
@@ -97,11 +92,15 @@ describe("POST /api/billing/local-checkout", () => {
         productId: "prod_launch",
         metadata: expect.objectContaining({
           productId: "individual_launch",
-          affiliate_id: "aff_1",
-          click_id: "click_1",
         }),
       })
     )
+    const polarCall = mocks.createPolar.mock.calls[0]![0] as Record<string, unknown>
+    const metadata: Record<string, unknown> =
+      (polarCall.metadata as Record<string, unknown> | undefined) ?? {}
+    // The affiliate cookie on the request must not reach the provider metadata.
+    expect(metadata).not.toHaveProperty("affiliate_id")
+    expect(metadata).not.toHaveProperty("click_id")
     expect(JSON.stringify(mocks.createPolar.mock.calls)).not.toContain("opaque-cookie-token")
   })
 
@@ -122,6 +121,14 @@ describe("POST /api/billing/local-checkout", () => {
         }),
       })
     )
+    // The Razorpay rail takes `notes`. The affiliate cookie on the request must
+    // not reach it — pre-freeze this payload carried affiliate_id and click_id.
+    const razorpayCall = mocks.createRazorpay.mock.calls[0]![0] as Record<string, unknown>
+    const notes: Record<string, unknown> =
+      (razorpayCall.notes as Record<string, unknown> | undefined) ?? {}
+    expect(notes).not.toHaveProperty("affiliate_id")
+    expect(notes).not.toHaveProperty("click_id")
+    expect(JSON.stringify(mocks.createRazorpay.mock.calls)).not.toContain("opaque-cookie-token")
   })
 
   it("rate-limits by trusted client IP before provider calls", async () => {

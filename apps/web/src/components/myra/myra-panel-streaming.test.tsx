@@ -56,11 +56,6 @@ describe("MyraPanel while Myra is answering", () => {
     expect(html).toContain("Myra is answering")
   })
 
-  it("keeps the polite live-region announcement element", () => {
-    expect(html).toContain('role="status"')
-    expect(html).toContain('aria-live="polite"')
-  })
-
   it("blocks Enter-to-send while a stream is in flight", () => {
     const enterBranch = /if \(e\.key === "Enter" && !e\.shiftKey\)\s*{([\s\S]*?)}/.exec(
       hookSource

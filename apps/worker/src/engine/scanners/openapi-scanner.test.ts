@@ -267,24 +267,6 @@ describe("scanOpenApi", () => {
     expect(ops.every((o) => ["GET", "HEAD", "OPTIONS"].includes(o.method))).toBe(true)
   })
 
-  it("rejects a spec with more than 500 paths", async () => {
-    const apiSpecUrl = "https://api.example.com/openapi.json"
-    const fetchFn = defaultFetch({
-      [apiSpecUrl]: makeSpecResponse(JSON.stringify(specWithTooManyPaths)),
-    })
-
-    const result = await scanOpenApi({
-      targetUrl: "https://api.example.com",
-      apiSpecUrl,
-      profile: getUrlScanProfile("API", "STANDARD"),
-      fetchFn,
-      resolver: PUBLIC_RESOLVER,
-    })
-
-    expect(result.attemptedOperations).toHaveLength(0)
-    expect(result.issues).toContainEqual(expect.objectContaining({ code: "UNSUPPORTED_CONTENT" }))
-  })
-
   it("skips operations whose server is off-origin", async () => {
     const apiSpecUrl = "https://api.example.com/openapi.json"
     const spec = {

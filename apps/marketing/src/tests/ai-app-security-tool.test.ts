@@ -29,7 +29,7 @@ describe("AI App Security scanner marketing tool", () => {
   it("is registered in the tools catalog", () => {
     const tool = tools.find((t) => t.slug === "ai-app-security-scanner")
     expect(tool).toBeDefined()
-    expect(tool?.title).toBe("AI App Security Scanner")
+    expect(tool?.title).toBe("Local Code Scanner")
     expect(tool?.checks).toHaveLength(3)
     expect(tool?.limitations).toHaveLength(3)
     expect(tool?.references.length).toBeGreaterThan(0)

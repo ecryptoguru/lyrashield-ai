@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import {
   claimOrGetAgentOperation,
+  completeAgentOperation,
+  retainUnknownAgentOperationResult,
   getOperationStatus,
   hashOperationInput,
   toJsonObject,
@@ -25,7 +27,7 @@ vi.mock("../rls", () => ({
 
 describe("WP-03 Agent Operation Durable Execution and Idempotency", () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
   })
 
   it("produces deterministic canonical input hashes regardless of key order", () => {
@@ -42,6 +44,7 @@ describe("WP-03 Agent Operation Durable Execution and Idempotency", () => {
     })
 
     expect(hash1).toBe(hash2)
+    expect(hash1).toBe("b31e5bc8578770702a57634458c8f921b0ba144c0b626a2c6354f5c7621169fa")
   })
 
   it("normalizes dates and omitted values into a Prisma JSON object", () => {
@@ -163,6 +166,167 @@ describe("WP-03 Agent Operation Durable Execution and Idempotency", () => {
     expect(result.status).toBe("IN_PROGRESS")
   })
 
+  it.each([
+    "live",
+    "stale",
+    "refreshed",
+    "completed",
+    "rotated-version",
+    "future-version",
+    "foreign-principal",
+    "foreign-workspace",
+    "rest",
+  ])("expires only an opted-in stale outer execution (%s)", async (kind) => {
+    const input = { targetId: "target-1", mode: "STANDARD" }
+    const cutoff = new Date("2026-10-02T10:00:00Z")
+    const updatedAt = new Date(kind === "live" ? "2026-10-02T10:01:00Z" : "2026-10-02T09:59:00Z")
+    const existing = {
+      id: "outer-op",
+      workspaceId: kind === "foreign-workspace" ? "ws-other" : "ws-1",
+      connectionId: "conn-1",
+      principalType: "OAUTH_CONNECTION",
+      principalId: kind === "foreign-principal" ? "conn-other" : "conn-1",
+      operationName: "scan.create",
+      idempotencyKey: "outer-key",
+      inputHash: hashOperationInput("scan.create", input),
+      authorizationVersion: kind === "rotated-version" ? 1 : kind === "future-version" ? 3 : 2,
+      status: "EXECUTING",
+      result: null,
+      resultReference: null,
+      error: null,
+      createdAt: updatedAt,
+      updatedAt,
+    }
+    vi.mocked(prisma.agentOperation.findUnique).mockResolvedValueOnce(existing as never)
+    const current =
+      kind === "refreshed"
+        ? { ...existing, updatedAt: new Date("2026-10-02T10:02:00Z") }
+        : kind === "completed"
+          ? { ...existing, status: "COMPLETED", resultReference: "scan-existing" }
+          : { ...existing, status: "FAILED", error: "OPERATION_OUTCOME_UNKNOWN" }
+    vi.mocked(prisma.agentOperation.updateMany).mockResolvedValueOnce({
+      count: kind === "stale" || kind === "rotated-version" ? 1 : 0,
+    })
+    vi.mocked(prisma.agentOperation.findFirst).mockResolvedValueOnce(current as never)
+    const result = await claimOrGetAgentOperation({
+      workspaceId: "ws-1",
+      connectionId: "conn-1",
+      operationName: "scan.create",
+      idempotencyKey: "outer-key",
+      input,
+      authorizationVersion: 2,
+      ...(kind === "rest" ? {} : { staleExecutingBefore: cutoff }),
+    })
+    expect(result.status).toBe(
+      kind === "stale" || kind === "rotated-version"
+        ? "FAILED"
+        : kind === "completed"
+          ? "REPLAY"
+          : "IN_PROGRESS"
+    )
+    if (
+      kind === "live" ||
+      kind === "future-version" ||
+      kind === "foreign-principal" ||
+      kind === "foreign-workspace" ||
+      kind === "rest"
+    ) {
+      expect(prisma.agentOperation.updateMany).not.toHaveBeenCalled()
+    } else {
+      expect(prisma.agentOperation.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "outer-op",
+          workspaceId: "ws-1",
+          connectionId: "conn-1",
+          principalType: "OAUTH_CONNECTION",
+          principalId: "conn-1",
+          operationName: "scan.create",
+          idempotencyKey: "outer-key",
+          inputHash: existing.inputHash,
+          authorizationVersion: existing.authorizationVersion,
+          status: "EXECUTING",
+          updatedAt: { equals: updatedAt, lt: cutoff },
+        },
+        data: { status: "FAILED", error: "OPERATION_OUTCOME_UNKNOWN" },
+      })
+    }
+    expect(prisma.agentOperation.create).not.toHaveBeenCalled()
+  })
+
+  it("attaches a late scan result only to the same terminal unknown outer execution", async () => {
+    const original = {
+      id: "outer-op",
+      status: "EXECUTING",
+      workspaceId: "ws-1",
+      connectionId: "conn-1",
+      principalType: "OAUTH_CONNECTION",
+      principalId: "conn-1",
+      operationName: "scan.create",
+      idempotencyKey: "key-1",
+      inputHash: "input-hash",
+      authorizationVersion: 1,
+    }
+    const expiredAt = new Date("2026-10-02T10:00:00Z")
+    const result = { content: [], structuredContent: { scan: { id: "scan-existing" } } }
+    const terminal = {
+      ...original,
+      status: "FAILED",
+      error: "OPERATION_OUTCOME_UNKNOWN",
+      updatedAt: expiredAt,
+      resultReference: "scan-existing",
+      result,
+    }
+    vi.mocked(prisma.agentOperation.updateMany).mockResolvedValueOnce({ count: 1 })
+    vi.mocked(prisma.agentOperation.findFirst).mockResolvedValueOnce(terminal as never)
+    expect(
+      await retainUnknownAgentOperationResult(original as never, "ws-1", {
+        terminalUpdatedAt: expiredAt,
+        resultReference: "scan-existing",
+        result,
+        currentAuthorizationVersion: 2,
+        userId: "user-1",
+      })
+    ).toEqual(terminal)
+    expect(prisma.agentOperation.updateMany).toHaveBeenCalledWith({
+      where: {
+        ...original,
+        status: "FAILED",
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        updatedAt: expiredAt,
+        resultReference: null,
+        result: { equals: expect.anything() },
+        connection: {
+          status: "ACTIVE",
+          userId: "user-1",
+          scopes: { hasSome: ["write", "lyrashield.write"] },
+          authorizationVersion: 2,
+        },
+      },
+      data: { resultReference: "scan-existing", result },
+    })
+    expect(prisma.agentOperation.update).not.toHaveBeenCalled()
+  })
+
+  it("does not complete an outer operation after its original execution expired", async () => {
+    const original = new Date("2026-10-02T09:00:00Z")
+    vi.mocked(prisma.agentOperation.updateMany).mockResolvedValueOnce({ count: 0 })
+    vi.mocked(prisma.agentOperation.findFirst).mockResolvedValueOnce({
+      id: "outer-op",
+      status: "FAILED",
+      error: "OPERATION_OUTCOME_UNKNOWN",
+    } as never)
+    const result = await completeAgentOperation("outer-op", "ws-1", {
+      resultReference: "scan-existing",
+      expectedUpdatedAt: original,
+    })
+    expect(result).toMatchObject({ status: "FAILED", error: "OPERATION_OUTCOME_UNKNOWN" })
+    expect(prisma.agentOperation.update).not.toHaveBeenCalled()
+    expect(prisma.agentOperation.updateMany).toHaveBeenCalledWith({
+      where: { id: "outer-op", workspaceId: "ws-1", status: "EXECUTING", updatedAt: original },
+      data: { status: "COMPLETED", resultReference: "scan-existing", result: undefined },
+    })
+  })
+
   it("returns CONFLICT when same key is used with conflicting input", async () => {
     const mockFindUnique = vi.mocked(prisma.agentOperation.findUnique)
 
@@ -194,6 +358,29 @@ describe("WP-03 Agent Operation Durable Execution and Idempotency", () => {
       input: { targetId: "target-DIFFERENT-B" },
     })
 
+    expect(result.status).toBe("CONFLICT")
+  })
+
+  it("does not replay a different input with a prototype-named field", async () => {
+    const input = { metadata: { value: 1 } }
+    vi.mocked(prisma.agentOperation.findUnique).mockResolvedValueOnce({
+      id: "op-original",
+      workspaceId: "ws-1",
+      connectionId: "conn-1",
+      operationName: "connector.invoke",
+      idempotencyKey: "key-shared",
+      inputHash: hashOperationInput("connector.invoke", input),
+      status: "COMPLETED",
+      result: null,
+    } as never)
+    const differentInput = JSON.parse('{"metadata":{"value":1,"__proto__":{"extra":true}}}')
+    const result = await claimOrGetAgentOperation({
+      workspaceId: "ws-1",
+      connectionId: "conn-1",
+      operationName: "connector.invoke",
+      idempotencyKey: "key-shared",
+      input: differentInput,
+    })
     expect(result.status).toBe("CONFLICT")
   })
 
@@ -273,45 +460,6 @@ describe("WP-03 Agent Operation Durable Execution and Idempotency", () => {
     )
 
     expect(result).toMatchObject({ status: "IN_PROGRESS", operation: { id: "cancel-op-1" } })
-  })
-
-  it("reclaims only scan cancellations older than the supplied cutoff", async () => {
-    const service = (await import("../agent-operation-service")) as unknown as {
-      retryScanCancellation?: (
-        operationId: string,
-        workspaceId: string,
-        staleBefore: Date
-      ) => Promise<{ status: string; operation?: { id: string } } | null>
-    }
-    expect(service.retryScanCancellation).toBeTypeOf("function")
-    if (!service.retryScanCancellation) return
-
-    const staleBefore = new Date("2026-09-28T00:00:00Z")
-    vi.mocked(prisma.agentOperation.updateMany).mockResolvedValueOnce({ count: 1 } as never)
-    vi.mocked(prisma.agentOperation.findFirst).mockResolvedValueOnce({
-      id: "cancel-op-1",
-      workspaceId: "ws-1",
-      operationName: "scan.cancel",
-      status: "EXECUTING",
-    } as never)
-
-    const result = await service.retryScanCancellation("cancel-op-1", "ws-1", staleBefore)
-
-    expect(prisma.agentOperation.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          operationName: "scan.cancel",
-          OR: expect.arrayContaining([
-            expect.objectContaining({
-              status: { in: ["PENDING", "EXECUTING"] },
-              error: null,
-              updatedAt: { lt: staleBefore },
-            }),
-          ]),
-        }),
-      })
-    )
-    expect(result).toMatchObject({ status: "NEW", operation: { id: "cancel-op-1" } })
   })
 
   it("does not fail a cancellation after another attempt has taken over", async () => {

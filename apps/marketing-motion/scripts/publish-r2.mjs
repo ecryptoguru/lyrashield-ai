@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs"
 import { relative, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
 import { motionPublishRoot, motionTrackRelativePath } from "./motion-media-contract.mjs"
+import { assertObjectAbsent } from "./publication-probe.mjs"
 
 if (!process.argv.includes("--confirm-production")) {
   throw new Error(
@@ -28,28 +29,30 @@ for (const file of files) hash.update(relative(source, file)).update(readFileSyn
 const renderHash = hash.digest("hex").slice(0, 16)
 
 const publishRoot = motionPublishRoot(renderHash)
-const sentinelProbe = spawnSync(
-  "pnpm",
-  [
-    "--filter",
-    "@lyrashield/marketing",
-    "exec",
-    "wrangler",
-    "r2",
-    "object",
-    "get",
-    `lyrashield-marketing-media/${publishRoot}/${sentinelRelativePath}`,
-    "--file",
-    "/dev/null",
-    "--remote",
-  ],
-  {
-    cwd: resolve(root, "../.."),
-    stdio: "ignore",
-  }
-)
-if (sentinelProbe.status === 0) {
-  throw new Error(`Refusing to overwrite immutable render ${publishRoot}`)
+// Check every key before the first write, including incomplete prior uploads.
+for (const file of files) {
+  const key = `lyrashield-marketing-media/${publishRoot}/${relative(source, file)}`
+  const probe = spawnSync(
+    "pnpm",
+    [
+      "--filter",
+      "@lyrashield/marketing",
+      "exec",
+      "wrangler",
+      "r2",
+      "object",
+      "get",
+      key,
+      "--file",
+      "/dev/null",
+      "--remote",
+    ],
+    {
+      cwd: resolve(root, "../.."),
+      encoding: "utf8",
+    }
+  )
+  assertObjectAbsent(probe, key)
 }
 
 const contentTypes = {
@@ -57,6 +60,7 @@ const contentTypes = {
   jpg: "image/jpeg",
   mp4: "video/mp4",
   webp: "image/webp",
+  json: "application/json",
 }
 
 for (const file of files) {

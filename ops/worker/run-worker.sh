@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 
+
 runtime_config="${LYRASHIELD_WORKER_RUNTIME_CONFIG:-/etc/lyrashield/worker-runtime.conf}"
 environment_file="${LYRASHIELD_WORKER_ENV_FILE:-/etc/lyrashield/worker.env}"
 worker_env_lib="${LYRASHIELD_WORKER_ENV_LIB:-/opt/lyrashield-worker-host/worker-env.sh}"
@@ -21,14 +22,92 @@ if [ ! -r "$environment_file" ]; then
   exit 1
 fi
 
+unset LYRASHIELD_COLD_SINGLE_WORKER LYRASHIELD_COLD_DATABASE_EPOCH_SHA256 LYRASHIELD_COLD_RELEASE_OWNER
+unset LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH
 set -a
 # shellcheck disable=SC1090
 . "$runtime_config"
 set +a
 
+publication_record_mount=
+if [ -n "${LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH:-}" ]; then
+  publication_record=/etc/lyrashield/sandbox-publication-record.json
+  [ "$LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH" = "$publication_record" ] &&
+    [ -f "$publication_record" ] && [ ! -L "$publication_record" ] &&
+    [ "$(stat -c '%u:%a' "$publication_record")" = 0:444 ] || {
+      echo "Signed publication record must be a root-owned read-only regular file" >&2
+      exit 1
+    }
+  publication_record_mount="--mount type=bind,src=$publication_record,dst=$publication_record,readonly"
+fi
+
 : "${LYRASHIELD_WORKER_IMAGE:?Set an immutable worker image in the runtime configuration}"
 : "${LYRASHIELD_SANDBOX_IMAGE:?Set an immutable sandbox image in the runtime configuration}"
 : "${LYRASHIELD_SANDBOX_NETWORK:=lyrashield-sandbox}"
+
+# Held for the attached worker lifetime; the explicit cold barrier uses this
+# same lock only after systemd has stopped the previous owner.
+cold_start_directory=/var/lib/lyrashield/worker-cold-start
+[ "${LYRASHIELD_WORKER_COLD_START_DIR:-$cold_start_directory}" = "$cold_start_directory" ] || exit 1
+install -d -m 700 "$cold_start_directory"
+exec 9>"$cold_start_directory/owner.lock"
+flock -n 9 || { echo "Another native worker owner holds the host" >&2; exit 1; }
+if [ -e "$cold_start_directory/pending" ] || [ -e "$cold_start_directory/owner-started" ]; then
+  echo "Unresolved cold host barrier; admission remains held" >&2
+  exit 1
+fi
+
+# A daemon may finish an accepted create after its client dies. Every native
+# owner therefore burns this cold-start fence before create; only the explicit
+# stopped-owner/daemon barrier may clear it. Automatic restart stays fail closed.
+if [ "${LYRASHIELD_COLD_SINGLE_WORKER:-0}" = 1 ]; then
+  marker_product=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+  marker_engine=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')
+  /usr/bin/python3 - "$cold_start_directory" "$LYRASHIELD_WORKER_IMAGE" "${LYRASHIELD_COLD_RELEASE_OWNER:?}" "$marker_product" "$marker_engine" "${LYRASHIELD_COLD_DATABASE_EPOCH_SHA256:?}" <<'PYOWNER'
+import datetime,hashlib,json,os,re,stat,sys
+state,image,owner,product,engine,epoch=sys.argv[1:]
+if not re.fullmatch(r'[1-9][0-9]{0,19}:[1-9][0-9]{0,9}',owner) or not re.fullmatch('[a-f0-9]{64}',epoch) or any(not re.fullmatch('[a-f0-9]{40}',v) for v in (product,engine)): raise SystemExit(1)
+def canon(value):
+ name,digest=value.split('@');return name.split(':')[0]+'@'+digest
+def read_root(path):
+ fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+ with os.fdopen(fd,'rb') as source:
+  metadata=os.fstat(source.fileno())
+  if metadata.st_uid!=0 or stat.S_IMODE(metadata.st_mode)!=0o600 or metadata.st_size>65536: raise SystemExit(1)
+  raw=source.read();return raw,json.loads(raw)
+raw,receipt=read_root(state+'/receipt.json')
+boot=open('/proc/sys/kernel/random/boot_id').read().strip()
+finished=datetime.datetime.fromisoformat(receipt['finishedAt'].replace('Z','+00:00'))
+age=(datetime.datetime.now(datetime.timezone.utc)-finished).total_seconds()
+if receipt['bootId']!=boot or not 0<=age<=180 or receipt['network']!='lyrashield-sandbox': raise SystemExit(1)
+checksum=hashlib.sha256(raw).hexdigest()
+if canon(receipt['workerImage'])!=canon(image):
+ _,context=read_root('/var/lib/lyrashield/cold-release-'+owner+'/context.json')
+ identity=context['identity']
+ if context.get('barrierSha256')!=checksum or identity.get('owner')!=owner or canon(identity.get('image',''))!=canon(image) or identity.get('product')!=product or identity.get('engine')!=engine or canon(context['oldWorker'])!=canon(receipt['workerImage']) or canon(context['oldSandbox'])!=canon(receipt['sandboxImage']): raise SystemExit(1)
+fd=os.open(state+'/owner-started',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+with os.fdopen(fd,'w') as output:
+ json.dump(dict(owner=owner,workerImage=image,productRevision=product,engineRevision=engine,epochSha256=epoch,bootId=boot,receiptSha256=checksum),output);output.flush();os.fsync(output.fileno())
+fd=os.open(state,os.O_RDONLY|os.O_DIRECTORY);os.fsync(fd);os.close(fd)
+PYOWNER
+else
+  (umask 077; set -C; : > "$cold_start_directory/owner-started")
+fi
+# Linux syncfs commits the marker and its directory entry on the same filesystem.
+# An unavailable primitive or failed sync must stop before any native execution.
+command -v sync >/dev/null 2>&1 && sync -f "$cold_start_directory" || {
+  echo "Cold owner fence could not be persisted; startup denied" >&2
+  exit 1
+}
+
+# Fixed host path: a matching /2 image is insufficient during empty-state
+# maintenance. This runs before registry login, pulls or any consumer startup.
+empty_state_fence=/var/lib/lyrashield/webhook-empty-state/fence.json
+if [ -e "$empty_state_fence" ] || [ -L "$empty_state_fence" ]; then
+  fence_verifier=/opt/lyrashield-worker-host/ops/worker/webhook-empty-state-startup-fence.mjs
+  [ ! -L "$fence_verifier" ] && [ "$(stat -c '%u:%a' "$fence_verifier")" = 0:644 ] || exit 1
+  node "$fence_verifier"
+fi
 
 case "$LYRASHIELD_WORKER_IMAGE" in
   *@sha256:????????????????????????????????????????????????????????????????) ;;
@@ -69,6 +148,17 @@ is_64_hex "${worker_digest#sha256:}" || {
   echo "Worker image digest must be sha256:<64 hex>" >&2
   exit 1
 }
+
+# The engine rejects unsafe sandbox topology at scan admission. Check the same
+# host contract before registry traffic or starting a queue consumer so a drifted
+# network cannot advertise readiness and accept work that will inevitably fail.
+if ! sandbox_network_state=$(docker network inspect --format '{{.Driver}}|{{.Internal}}|{{index .Options "com.docker.network.bridge.enable_icc"}}' "$LYRASHIELD_SANDBOX_NETWORK" 2>/dev/null) ||
+  [ "$sandbox_network_state" != 'bridge|true|false' ]; then
+  echo "Sandbox network '$LYRASHIELD_SANDBOX_NETWORK' must exist with Driver=bridge, Internal=true and com.docker.network.bridge.enable_icc=false." >&2
+  echo "Stop scan admission, drain active work and repair the network through the guarded maintenance procedure before restarting the worker." >&2
+  exit 1
+fi
+
 extract_env_value() {
   var="$1"
   file="$2"
@@ -137,6 +227,29 @@ for image in "$LYRASHIELD_WORKER_IMAGE" "$LYRASHIELD_SANDBOX_IMAGE"; do
   fi
 done
 
+# BEGIN GO RESOLVER QUALIFICATION
+# This public metadata-only toolchain is a release asset, never a scan-time pull.
+# The checked-in pin must match GO_RESOLVER_IMAGE; CI checks that binding.
+go_resolver_image='golang:1.26.8-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c'
+if ! timeout --foreground 5s docker image inspect "$go_resolver_image" >/dev/null 2>&1; then
+  timeout --foreground 60s docker pull "$go_resolver_image" >/dev/null
+fi
+go_qualification_name="lyrashield-go-qualification-$$"
+if ! go_resolver_version=$(timeout --foreground 15s docker run --rm --pull=never --name "$go_qualification_name" \
+  --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+  --user=65534:65534 --pids-limit=32 --memory=128m --cpus=1 \
+  --env GOTOOLCHAIN=local --env GOENV=off --env GOTELEMETRY=off \
+  --entrypoint go "$go_resolver_image" version); then
+  timeout --foreground 5s docker rm --force "$go_qualification_name" >/dev/null 2>&1 || true
+  echo "Pinned Go dependency resolver qualification failed" >&2
+  exit 1
+fi
+case "$go_resolver_version" in
+  'go version go1.26.8 linux/'*) ;;
+  *) echo "Pinned Go dependency resolver toolchain mismatch" >&2; exit 1 ;;
+esac
+# END GO RESOLVER QUALIFICATION
+
 worker_shared_root=/var/lib/lyrashield/worker
 # Computing the argument list here keeps the image-label provenance validation
 # ahead of the privileged shared-root chown below.
@@ -154,7 +267,20 @@ if [ -e "$cutover_receipt" ]; then
   docker run --rm --network none --env-file "$environment_file" $env_args \
     --env TMPDIR=/tmp --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     -w /app/apps/worker "$LYRASHIELD_WORKER_IMAGE" \
-    node --import tsx --input-type=module -e 'import {createHash} from "node:crypto"; const receipt=JSON.parse(process.argv[1]); const billing=await import("@lyrashield/billing"); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); if(process.env.LYRASHIELD_PRODUCT_REVISION!==receipt.productRevision || billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/1" || receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL) || receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL) || receipt.redisUrlSha256!==hash(process.env.REDIS_URL)) throw new Error("Cutover worker environment does not match owned receipt");' "$saved_cutover"
+    node --import tsx --input-type=module -e 'import {createHash} from "node:crypto"; const [raw,image]=process.argv.slice(1); const receipt=JSON.parse(raw); const billing=await import("@lyrashield/billing"); const recovery=await import("file:///opt/lyrashield-worker-host/webhook-cutover-recovery.mjs").catch(error=>{if(error.code==="ERR_MODULE_NOT_FOUND") return null; throw error;}); if(recovery){recovery.assertWebhookCutoverWorkerIdentity({receipt,workerImage:image,productRevision:process.env.LYRASHIELD_PRODUCT_REVISION,engineRevision:process.env.LYRASHIELD_ENGINE_REVISION,workerDigest:process.env.LYRASHIELD_WORKER_IMAGE_DIGEST,protocol:billing.WEBHOOK_TRACK_CLAIM_PROTOCOL,environment:process.env});} else {const hash=value=>createHash("sha256").update(value??"").digest("hex"); const digest=image.match(/@sha256:([a-f0-9]{64})$/)?.[1]; if((receipt.recoveryCandidates??[]).length>0 || receipt.candidateWorkerImage!==image || receipt.productRevision!==process.env.LYRASHIELD_PRODUCT_REVISION || receipt.candidateProductRevision!==process.env.LYRASHIELD_PRODUCT_REVISION || receipt.candidateEngineRevision!==process.env.LYRASHIELD_ENGINE_REVISION || process.env.LYRASHIELD_WORKER_IMAGE_DIGEST!==`sha256:${digest}` || billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/2" || receipt.candidateWebhookTrackClaimProtocol!=="durable-claims/2" || receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL) || receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL) || receipt.redisUrlSha256!==hash(process.env.REDIS_URL)) throw new Error("Legacy cutover worker does not match its recorded candidate");}' "$saved_cutover" "$LYRASHIELD_WORKER_IMAGE"
+fi
+
+# A held v26 receipt authorizes only its exact reservation-aware candidate.
+# Completed receipts retain the protocol floor for subsequent rollbacks.
+v26_receipt=${LYRASHIELD_V26_RECEIPT_FILE:-/var/lib/lyrashield/v26-cutover.json}
+if [ -e "$v26_receipt" ]; then
+  [ ! -L "$v26_receipt" ] && [ "$(stat -c '%u:%a' "$v26_receipt")" = 0:600 ] || exit 1
+  saved_v26=$(cat "$v26_receipt")
+  # shellcheck disable=SC2086,SC2016
+  docker run --rm --network none --env-file "$environment_file" $env_args \
+    --env TMPDIR=/tmp --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+    -w /app/apps/worker "$LYRASHIELD_WORKER_IMAGE" \
+    node --import tsx --input-type=module -e 'const {assertV26WorkerIdentity}=await import("file:///opt/lyrashield-worker-host/v26-cutover-identity.mjs");const {SCAN_ACCOUNTING_PROTOCOL}=await import("@lyrashield/db");assertV26WorkerIdentity({receipt:JSON.parse(process.argv[1]),image:process.argv[2],environment:process.env,protocol:SCAN_ACCOUNTING_PROTOCOL,allowComplete:true});' "$saved_v26" "$LYRASHIELD_WORKER_IMAGE"
 fi
 
 socket_group=$(stat -c '%g' /var/run/docker.sock)
@@ -187,7 +313,12 @@ done <"$pin_file"
 
 install -d -m 700 "$worker_shared_root" "$worker_shared_root/lyrashield_runs" "$worker_shared_root/tmp"
 
-docker rm -f lyrashield-worker >/dev/null 2>&1 || true
+# Never erase a running owner, nor ignore a lost Docker removal acknowledgement.
+remaining_worker=$(docker ps -a --filter 'name=^/lyrashield-worker$' --format '{{.ID}}')
+if [ -n "$remaining_worker" ]; then
+  echo "Previous native worker ownership is unresolved; run the cold host barrier" >&2
+  exit 1
+fi
 docker run --rm \
   --network none \
   --user 0:0 \
@@ -195,6 +326,17 @@ docker run --rm \
   --entrypoint sh \
   "$LYRASHIELD_WORKER_IMAGE" \
   -c "chown -R lyrashield:lyrashield '$worker_shared_root' && chmod 700 '$worker_shared_root' '$worker_shared_root/lyrashield_runs' '$worker_shared_root/tmp'"
+
+cold_evidence_mount=
+if [ "${LYRASHIELD_COLD_SINGLE_WORKER:-0}" = 1 ]; then
+  [ -d /etc/lyrashield/cold-sandbox ] && [ ! -L /etc/lyrashield/cold-sandbox ] &&
+    [ "$(stat -c '%u:%a' /etc/lyrashield/cold-sandbox)" = 0:555 ] || exit 1
+  for evidence in verification.json expected.json; do
+    [ -f "/etc/lyrashield/cold-sandbox/$evidence" ] && [ ! -L "/etc/lyrashield/cold-sandbox/$evidence" ] &&
+      [ "$(stat -c '%u:%a' "/etc/lyrashield/cold-sandbox/$evidence")" = 0:444 ] || exit 1
+  done
+  cold_evidence_mount='--mount type=bind,src=/etc/lyrashield/cold-sandbox,dst=/etc/lyrashield/cold-sandbox,readonly'
+fi
 
 # Intentional word splitting: worker-env.sh emits one `--env` argument pair per
 # line and every emitted value is whitespace-free.
@@ -205,6 +347,7 @@ docker create \
   "$@" \
   --env-file "$environment_file" \
   $env_args \
+  $publication_record_mount $cold_evidence_mount \
   --group-add "$socket_group" \
   --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
   --mount type=bind,src="$worker_shared_root",dst="$worker_shared_root" \
@@ -224,5 +367,13 @@ docker create \
   --log-opt=max-file=5 \
   "$LYRASHIELD_WORKER_IMAGE" >/dev/null
 
-docker network connect "$LYRASHIELD_SANDBOX_NETWORK" lyrashield-worker
+# Keep the worker on its outbound bridge only. Joining the untrusted sandbox
+# bridge would let a raw-socket sandbox spoof a worker-only same-bridge rule.
+# Install the bounded cross-bridge control policy before starting any consumer.
+worker_egress_script="${LYRASHIELD_WORKER_EGRESS_SCRIPT:-/usr/local/libexec/lyrashield-refresh-egress}"
+if [ ! -x "$worker_egress_script" ]; then
+  echo "Worker egress policy helper is unavailable: $worker_egress_script" >&2
+  exit 1
+fi
+LYRASHIELD_REQUIRE_SANDBOX_CONTROL=1 "$worker_egress_script"
 exec docker start --attach lyrashield-worker

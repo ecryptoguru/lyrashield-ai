@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest"
 import {
   beginScanSubmission,
   clearPendingScanSubmission,
+  clearPendingScanSubmissionIfNotSubmitted,
   readPendingScanSubmission,
+  pendingEngineBudgetInput,
   recordAcceptedScan,
   recordScanOperation,
   runScanSubmission,
@@ -36,6 +38,79 @@ const firstKey = "11111111-1111-4111-8111-111111111111"
 const secondKey = "22222222-2222-4222-8222-222222222222"
 
 describe("recoverable scan submissions", () => {
+  it("recovers the exact requested engine ceiling after reload and rejects a changed amount on retry", () => {
+    const storage = new MemoryStorage()
+    const limited = { ...payload, engineBudgetCeilingUsd: 1 }
+    beginScanSubmission(scope, limited, storage, () => firstKey)
+    const reloaded = readPendingScanSubmission(scope, storage)
+    expect(pendingEngineBudgetInput(reloaded)).toBe("1")
+    expect(beginScanSubmission(scope, limited, storage, () => secondKey).kind).toBe("existing")
+    expect(
+      beginScanSubmission(
+        scope,
+        { ...limited, engineBudgetCeilingUsd: 2 },
+        storage,
+        () => secondKey
+      ).kind
+    ).toBe("conflict")
+    expect(beginScanSubmission(scope, payload, storage, () => secondKey).kind).toBe("conflict")
+  })
+
+  it("clears only a pending key whose response proves it was not submitted", () => {
+    const storage = new MemoryStorage()
+    beginScanSubmission(scope, payload, storage, () => firstKey)
+
+    expect(clearPendingScanSubmissionIfNotSubmitted(scope, firstKey, undefined, storage)).toBe(
+      false
+    )
+    expect(readPendingScanSubmission(scope, storage)?.idempotencyKey).toBe(firstKey)
+
+    expect(
+      clearPendingScanSubmissionIfNotSubmitted(
+        scope,
+        firstKey,
+        { operationOutcome: "OPERATION_OUTCOME_UNKNOWN" },
+        storage
+      )
+    ).toBe(false)
+    expect(readPendingScanSubmission(scope, storage)?.idempotencyKey).toBe(firstKey)
+
+    expect(
+      clearPendingScanSubmissionIfNotSubmitted(
+        scope,
+        firstKey,
+        { status: "COMPLETED", resultLocation: "scan-1" },
+        storage
+      )
+    ).toBe(false)
+    expect(readPendingScanSubmission(scope, storage)?.idempotencyKey).toBe(firstKey)
+
+    expect(
+      clearPendingScanSubmissionIfNotSubmitted(
+        scope,
+        firstKey,
+        { operationOutcome: "OPERATION_NOT_SUBMITTED" },
+        storage
+      )
+    ).toBe(true)
+    expect(readPendingScanSubmission(scope, storage)).toBeNull()
+  })
+
+  it("does not clear a newer submission when an older response proves non-submission", () => {
+    const storage = new MemoryStorage()
+    beginScanSubmission(scope, payload, storage, () => secondKey)
+
+    expect(
+      clearPendingScanSubmissionIfNotSubmitted(
+        scope,
+        firstKey,
+        { operationOutcome: "OPERATION_NOT_SUBMITTED" },
+        storage
+      )
+    ).toBe(false)
+    expect(readPendingScanSubmission(scope, storage)?.idempotencyKey).toBe(secondKey)
+  })
+
   it("keeps the same key after an accepted response is lost and the page reloads", () => {
     const storage = new MemoryStorage()
     const started = beginScanSubmission(scope, payload, storage, () => firstKey)

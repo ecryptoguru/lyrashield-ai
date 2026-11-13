@@ -1,5 +1,6 @@
-import Link from "next/link"
 import { loadActiveProgram } from "@lyrashield/affiliate"
+
+export const dynamic = "force-dynamic"
 
 export const metadata = {
   title: "Affiliate Program — LyraShield AI",
@@ -93,7 +94,8 @@ export default async function AffiliateLandingPage() {
             <div>
               <h3 className="font-semibold">Apply</h3>
               <p className="text-sm text-muted-foreground">
-                Submit your application with details about your audience and promotion methods.
+                Applications are not open yet. We are finishing the review and payout controls the
+                program needs before it opens.
               </p>
             </div>
           </li>
@@ -116,8 +118,8 @@ export default async function AffiliateLandingPage() {
             <div>
               <h3 className="font-semibold">Promote</h3>
               <p className="text-sm text-muted-foreground">
-                Share your referral link or promo code with your audience. Track clicks, signups,
-                and conversions in real time.
+                Share your referral link or promo code with your audience. Track clicks or signups
+                or conversions in real time.
               </p>
             </div>
           </li>
@@ -163,22 +165,20 @@ export default async function AffiliateLandingPage() {
             {terms.reserveDays} days
           </li>
           <li>
-            <strong>Payout methods:</strong> RazorpayX (India), Payoneer (global), BriskPe
-            (RBI-native fallback)
+            <strong>Payout methods:</strong> RazorpayX (India; payout admission is currently
+            disabled)
           </li>
           <li>
-            <strong>No commission on:</strong> Minute packs, trial signups, or self-referrals
+            <strong>No commission on:</strong> Minute packs or trial signups or self-referrals
           </li>
         </ul>
       </section>
 
       <div className="text-center">
-        <Link
-          href="/affiliates/apply"
-          className="inline-flex items-center justify-center rounded-lg bg-primary px-8 py-3 text-primary-foreground font-semibold hover:bg-primary/90"
-        >
-          Apply Now
-        </Link>
+        <p className="text-sm text-muted-foreground">
+          Applications are not open yet. The program is frozen while the review and payout controls
+          are finished.
+        </p>
       </div>
     </main>
   )

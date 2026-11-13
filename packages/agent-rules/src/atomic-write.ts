@@ -1,6 +1,7 @@
-import { lstat, open, realpath, rename } from "node:fs/promises"
+import { lstat, open, readFile, realpath, rename, rm } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { dirname, resolve } from "node:path"
+import type { Stats } from "node:fs"
 
 function expectedRealpath(path: string): string {
   if (process.platform === "darwin") {
@@ -57,10 +58,21 @@ async function assertNoSymlinkedAncestor(dir: string): Promise<void> {
  * checked so a symlink at ANY depth cannot redirect the write outside the
  * intended location.
  */
-export async function atomicWrite(filePath: string, content: string): Promise<void> {
+export async function atomicWrite(
+  filePath: string,
+  content: string,
+  options: { mode?: number; expectedContent?: string | null } = {}
+): Promise<void> {
   const absolutePath = resolve(filePath)
 
   await assertNoSymlinkedAncestor(dirname(absolutePath))
+
+  const destinationStat = await getRegularDestinationStat(absolutePath)
+  const existingMode = destinationStat ? destinationStat.mode & 0o777 : undefined
+  // An explicit mode is a caller's security requirement (for example, an
+  // inline API key), so it must override a more permissive mode on the old
+  // destination. With no explicit mode, keep preserving the destination mode.
+  const mode = options.mode === undefined ? existingMode : options.mode & 0o777
 
   const tmp = `${absolutePath}.${randomUUID()}.lyrashield-tmp`
 
@@ -69,23 +81,82 @@ export async function atomicWrite(filePath: string, content: string): Promise<vo
   // another file and we overwrite the target. fsync before rename so the data is
   // durable on disk before it becomes visible at the final path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const handle = await open(tmp, "wx")
+  const handle = await open(tmp, "wx", mode ?? 0o666)
+  let renamed = false
   try {
-    await handle.writeFile(content, "utf-8")
-    await handle.sync()
+    try {
+      await handle.writeFile(content, "utf-8")
+      if (mode !== undefined) await handle.chmod(mode)
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+
+    await assertNoSymlinkedAncestor(dirname(absolutePath))
+    const currentDestinationStat = await getRegularDestinationStat(absolutePath)
+    if (!sameDestination(destinationStat, currentDestinationStat)) {
+      throw new Error(`The destination changed during the atomic write: ${absolutePath}`)
+    }
+    if (Object.prototype.hasOwnProperty.call(options, "expectedContent")) {
+      // absolutePath is resolved and validated as a regular destination above.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const currentContent = currentDestinationStat ? await readFile(absolutePath, "utf-8") : null
+      if (currentContent !== options.expectedContent) {
+        throw new Error(`The destination contents changed during the atomic write: ${absolutePath}`)
+      }
+      const afterReadStat = await getRegularDestinationStat(absolutePath)
+      if (!sameDestination(currentDestinationStat, afterReadStat)) {
+        throw new Error(`The destination changed during the atomic write: ${absolutePath}`)
+      }
+    }
+
+    // filePath is the resolved installer target path selected for this workspace.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await rename(tmp, absolutePath)
+    renamed = true
+
+    // Re-validate the final path is a regular file and that the rename landed in
+    // the expected place, not through a later-created symlink.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const stat = await lstat(absolutePath)
+    if (!stat.isFile()) {
+      throw new Error(`Atomic write did not produce a regular file: ${absolutePath}`)
+    }
   } finally {
-    await handle.close()
+    if (!renamed) {
+      // This path is created with wx above and therefore belongs to this write.
+      await rm(tmp, { force: true }).catch(() => undefined)
+    }
+  }
+}
+
+export async function assertSafeDestination(filePath: string): Promise<void> {
+  const absolutePath = resolve(filePath)
+  await assertNoSymlinkedAncestor(dirname(absolutePath))
+  await getRegularDestinationStat(absolutePath)
+}
+
+async function getRegularDestinationStat(filePath: string): Promise<Stats | undefined> {
+  let stat: Stats | undefined
+  try {
+    // filePath is the resolved installer destination.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    stat = await lstat(filePath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
+    throw error
   }
 
-  // filePath is the resolved installer target path selected for this workspace.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  await rename(tmp, absolutePath)
-
-  // Re-validate the final path is a regular file and that the rename landed in
-  // the expected place, not through a later-created symlink.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const stat = await lstat(absolutePath)
+  if (stat.isSymbolicLink()) {
+    throw new Error(`Refusing to replace a symlinked destination file: ${filePath}`)
+  }
   if (!stat.isFile()) {
-    throw new Error(`Atomic write did not produce a regular file: ${absolutePath}`)
+    throw new Error(`Refusing to replace a non-file destination: ${filePath}`)
   }
+  return stat
+}
+
+function sameDestination(before: Stats | undefined, after: Stats | undefined): boolean {
+  if (!before || !after) return before === after
+  return before.dev === after.dev && before.ino === after.ino
 }

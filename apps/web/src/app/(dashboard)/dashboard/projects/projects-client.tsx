@@ -207,7 +207,7 @@ export function ProjectsClient({
                 // The form unmounts, so focus must be returned to the control
                 // that opened it — otherwise the next Tab restarts at the top
                 // of the document.
-                formTriggerRef.current?.focus()
+                requestAnimationFrame(() => formTriggerRef.current?.focus())
               }}
             >
               Cancel

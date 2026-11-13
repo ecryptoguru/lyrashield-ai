@@ -42,14 +42,13 @@ describe("getOnboardingReviewOptions", () => {
       { label: "Release check", mode: "QUICK" },
       { label: "Code scan", mode: "STANDARD" },
       { label: "Deep security scan", mode: "DEEP" },
+      { label: "Standard launch review", mode: "STANDARD" },
     ])
   })
 
-  it("uses URL-specific safe, standard, and deep choices", () => {
+  it("uses only the deterministic Safe choice for a URL target", () => {
     expect(getOnboardingReviewOptions("url").map(({ label, mode }) => ({ label, mode }))).toEqual([
       { label: "Surface Review", mode: "SAFE" },
-      { label: "Engine Review", mode: "STANDARD" },
-      { label: "Deep Live Review", mode: "DEEP" },
     ])
   })
 
@@ -57,6 +56,19 @@ describe("getOnboardingReviewOptions", () => {
     expect(getOnboardingReviewOptions("api").map(({ label, mode }) => ({ label, mode }))).toEqual([
       { label: "Endpoint Review", mode: "SAFE" },
     ])
+  })
+
+  it("binds the launch choice to Standard launch-review intent", () => {
+    expect(
+      getOnboardingReviewOptions("github").find(
+        (option) => option.label === "Standard launch review"
+      )
+    ).toMatchObject({
+      goal: "LAUNCH_REVIEW",
+      mode: "STANDARD",
+      workflow: "REVIEW_TARGET",
+      isDefault: false,
+    })
   })
 })
 
@@ -94,10 +106,16 @@ describe("stepModelForPath (v16 3.1 single source of truth)", () => {
     )
   })
 
-  it("falls back to the three-step model while the path is unset", () => {
-    // Step 2 is only reachable through the GitHub connect redirect, so the
-    // unknown-path list must still contain it (the old "Step 3 of 2" bug).
-    expect(stepModelForPath(null)).toHaveLength(3)
+  it("keeps the first chooser generic but restores the repo step after OAuth", () => {
+    expect(stepModelForPath(null, 1).map((entry) => entry.label)).toEqual([
+      "Add target",
+      "Target details",
+    ])
+    expect(stepModelForPath(null, 2).map((entry) => entry.label)).toEqual([
+      "Add target",
+      "Select repository",
+      "Target details",
+    ])
     expect(stepModelForPath("skip")).toHaveLength(3)
   })
 

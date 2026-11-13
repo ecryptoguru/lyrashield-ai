@@ -1,125 +1,148 @@
 import {
   ACTIVE_SCAN_STATUSES,
-  createScan,
-  claimDueSchedule,
+  advanceBlockedSchedule,
+  restoreUnsubmittedScheduleOccurrence,
+  createScheduledScan,
   getDueSchedules,
   getNextRunAt,
+  findCurrentDomainProof,
   prisma,
+  releaseUnstartedScanSlot,
+  runWithAccountContext,
   runWithWorkspaceContext,
   updateScanStatus,
+  type ScheduleBlockedReason,
 } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { MAX_CONCURRENT_WORKSPACE_SCANS, resolveTargetScanMode } from "@lyrashield/types"
+import { MAX_CONCURRENT_WORKSPACE_SCANS } from "@lyrashield/types"
+import { evaluateScanEntitlement } from "@lyrashield/billing"
+import { resolveAvailableUrlReview, ScanEnqueueNotSubmittedError } from "@lyrashield/integrations"
 import { assertScanWorkerAvailable, enqueueScan } from "./queue"
+import { notifyScheduleBlocked } from "./notifications"
+
+type DueSchedule = Awaited<ReturnType<typeof getDueSchedules>>[number]
+type ScheduleAdmission =
+  { status: "eligible" | "defer" } | { status: "blocked"; reason: ScheduleBlockedReason }
+
+async function scheduledScanAdmission(schedule: DueSchedule): Promise<ScheduleAdmission> {
+  if (!schedule.createdById) return { status: "blocked", reason: "SCAN_ELIGIBILITY_REQUIRED" }
+  // Read uncertainty, infrastructure loss and active work never consume cadence.
+  // Any thrown read leaves the one due timestamp pending for the next poll.
+  const entitlement = await runWithAccountContext(schedule.createdById, () =>
+    evaluateScanEntitlement({
+      workspaceId: schedule.workspaceId,
+      mode: schedule.mode,
+      sponsorAccountId: schedule.createdById,
+      mutateOnTrialExpiry: true,
+      deferCapacityCheck: true,
+    })
+  )
+  if (!entitlement.allowed) return { status: "blocked", reason: "SCAN_ELIGIBILITY_REQUIRED" }
+
+  const review = await resolveAvailableUrlReview({
+    targetType: schedule.target.type,
+    mode: schedule.mode,
+    hasApiSpec: Boolean(schedule.target.apiSpecUrl),
+  })
+  if (!review.ok) {
+    return review.code === "TARGET_RELAY_UNAVAILABLE"
+      ? { status: "defer" }
+      : { status: "blocked", reason: "SCAN_PROFILE_UNAVAILABLE" }
+  }
+  if (review.engineBacked) {
+    const proof = await findCurrentDomainProof(schedule.workspaceId, schedule.target.url)
+    if (!proof.verified) return { status: "blocked", reason: "DOMAIN_VERIFICATION_REQUIRED" }
+  }
+
+  const activeScans = await prisma.scan.count({
+    where: {
+      workspaceId: schedule.workspaceId,
+      targetId: schedule.targetId,
+      status: { in: [...ACTIVE_SCAN_STATUSES] },
+    },
+  })
+  if (activeScans > 0) return { status: "defer" }
+  const activeWorkspaceScans = await prisma.scan.count({
+    where: { workspaceId: schedule.workspaceId, status: { in: [...ACTIVE_SCAN_STATUSES] } },
+  })
+  if (activeWorkspaceScans >= MAX_CONCURRENT_WORKSPACE_SCANS) return { status: "defer" }
+  return { status: "eligible" }
+}
+
+// A restart may revisit rows safely: occurrence CAS is the durable authority.
+// Replace the object on progress so a stale poll cannot regain ownership after
+// the cursor wraps back to the same value. Starting a poll claims no ownership.
+let dueScheduleCursor: Readonly<{ afterId: string | undefined }> = { afterId: undefined }
+const SCHEDULE_POLL_BUDGET_MS = 15_000
 
 export async function processDueSchedules(now = new Date()): Promise<number> {
-  const schedules = await getDueSchedules(now)
+  const deadline = Date.now() + SCHEDULE_POLL_BUDGET_MS
+  let cursor = dueScheduleCursor
+  const advanceCursor = (afterId: string | undefined): boolean => {
+    if (dueScheduleCursor !== cursor) return false
+    if (cursor.afterId !== afterId) {
+      cursor = { afterId }
+      dueScheduleCursor = cursor
+    }
+    return true
+  }
+  let schedules = await getDueSchedules(now, cursor.afterId)
+  if (dueScheduleCursor !== cursor) return 0
+  if (!schedules.length && cursor.afterId) {
+    advanceCursor(undefined)
+    schedules = await getDueSchedules(now)
+    if (dueScheduleCursor !== cursor) return 0
+  }
   let enqueued = 0
-
+  let processed = 0
   for (const schedule of schedules) {
+    if (Date.now() >= deadline || dueScheduleCursor !== cursor) break
     let workerUnavailable = false
     await runWithWorkspaceContext(schedule.workspaceId, async () => {
       try {
+        // Coalesce every missed interval into this single pending occurrence.
         const nextRunAt = getNextRunAt(schedule.cron, now)
         if (!nextRunAt) {
-          await prisma.schedule.update({
-            where: { id: schedule.id },
-            data: { enabled: false },
+          await prisma.schedule.updateMany({
+            where: {
+              id: schedule.id,
+              workspaceId: schedule.workspaceId,
+              updatedAt: schedule.updatedAt,
+            },
+            data: {
+              enabled: false,
+              lastBlockedAt: now,
+              lastBlockedReason: "SCHEDULE_CRON_UNSUPPORTED",
+            },
           })
           logger.warn("Disabled schedule with unsupported cron expression", {
             scheduleId: schedule.id,
-            workspaceId: schedule.workspaceId,
-            cron: schedule.cron,
           })
           return
         }
-
         try {
-          // Do not advance a schedule unless this worker can still accept its scan.
           await assertScanWorkerAvailable()
-        } catch (error) {
-          logger.warn("Scan worker unavailable; pausing scheduled scan processing", {
-            error: error instanceof Error ? error.message : String(error),
-          })
+        } catch {
           workerUnavailable = true
           return
         }
-
-        if (!(await claimDueSchedule(schedule.id, now, nextRunAt))) {
-          return
-        }
-
-        // P1-8 (v16): workspaceId is passed EXPLICITLY so the guard never
-        // depends on ambient context propagation — a scheduled scan starting
-        // on top of a running one double-spends the customer's agent-minutes.
-        // The extension binds the RLS transaction from the explicit arg.
-        const activeScans = await prisma.scan.count({
-          where: {
-            workspaceId: schedule.workspaceId,
-            targetId: schedule.targetId,
-            status: { in: [...ACTIVE_SCAN_STATUSES] },
-          },
-        })
-
-        if (activeScans > 0) {
-          logger.info("Skipping scheduled scan because target already has an active scan", {
-            scheduleId: schedule.id,
-            targetId: schedule.targetId,
-          })
-          return
-        }
-
-        // Schedules must not bypass the workspace concurrency cap that the
-        // scan-create API enforces: N schedules on N targets due in the same
-        // minute would otherwise launch N concurrent billable scans at once.
-        const activeWorkspaceScans = await prisma.scan.count({
-          where: {
-            workspaceId: schedule.workspaceId,
-            status: { in: [...ACTIVE_SCAN_STATUSES] },
-          },
-        })
-        if (activeWorkspaceScans >= MAX_CONCURRENT_WORKSPACE_SCANS) {
-          logger.info("Skipping scheduled scan because workspace is at its concurrent scan cap", {
-            scheduleId: schedule.id,
-            workspaceId: schedule.workspaceId,
-            activeWorkspaceScans,
-            cap: MAX_CONCURRENT_WORKSPACE_SCANS,
-          })
-          return
-        }
-
-        if (schedule.target.type === "WEB_APP" || schedule.target.type === "API") {
-          const resolved = resolveTargetScanMode({
-            targetType: schedule.target.type,
-            mode: schedule.mode,
-            hasApiSpec: Boolean(schedule.target.apiSpecUrl),
-          })
-          if (!resolved.ok) {
-            await prisma.schedule.update({
-              where: { id: schedule.id },
-              data: { enabled: false },
-            })
-            logger.warn("Disabled schedule with unavailable mode", {
-              scheduleId: schedule.id,
-              targetId: schedule.targetId,
-              targetType: schedule.target.type,
-              mode: schedule.mode,
-              reason: resolved.reason,
-              code: resolved.code,
-            })
-            return
+        const admission = await scheduledScanAdmission(schedule)
+        if (admission.status === "defer") return
+        if (admission.status === "blocked") {
+          if (await advanceBlockedSchedule(schedule, now, nextRunAt, admission.reason)) {
+            await notifyScheduleBlocked(
+              schedule.workspaceId,
+              schedule.id,
+              schedule.target.name,
+              admission.reason,
+              now.toISOString().slice(0, 10)
+            )
           }
+          return
         }
-
-        const scan = await createScan({
-          workspaceId: schedule.workspaceId,
-          targetId: schedule.targetId,
-          goal: schedule.goal,
-          mode: schedule.mode,
-          createdById: schedule.createdById,
-          triggerType: "schedule",
-        })
-
+        // User-slot/workspace/target contention rolls back the occurrence too.
+        const scan = await createScheduledScan(schedule, now, nextRunAt)
+        if (!scan) return
         try {
           await enqueueScan({
             scanId: scan.id,
@@ -129,17 +152,18 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
             mode: schedule.mode,
           })
           enqueued += 1
-          logger.info("Scheduled scan enqueued", {
-            scheduleId: schedule.id,
-            scanId: scan.id,
-            targetId: schedule.targetId,
-          })
+          logger.info("Scheduled scan enqueued", { scheduleId: schedule.id, scanId: scan.id })
         } catch (error) {
-          logger.error("Failed to enqueue scheduled scan", {
-            scheduleId: schedule.id,
-            scanId: scan.id,
-            error: error instanceof Error ? error.message : String(error),
-          })
+          // This scan was freshly created by the winning occurrence CAS in
+          // THIS invocation. A no-add error says nothing about prior attempts;
+          // never apply this reset to recovered/reused queue identities.
+          if (!(error instanceof ScanEnqueueNotSubmittedError) || error.scanId !== scan.id) {
+            logger.error("Scheduled publication uncertain; retained original scan identity", {
+              scanId: scan.id,
+              error: String(error),
+            })
+            return
+          }
           await updateScanStatus(
             scan.id,
             "FAILED",
@@ -149,18 +173,29 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
             },
             schedule.workspaceId
           )
+          await releaseUnstartedScanSlot(schedule.workspaceId, scan.id)
+          await restoreUnsubmittedScheduleOccurrence(schedule, scan.id, now, nextRunAt)
+          logger.error("Failed to enqueue scheduled scan", {
+            scheduleId: schedule.id,
+            scanId: scan.id,
+            error: String(error),
+          })
         }
       } catch (error) {
-        logger.error("Failed to process scheduled scan", {
+        logger.warn("Scheduled review processing could not finish", {
           scheduleId: schedule.id,
           workspaceId: schedule.workspaceId,
           error: error instanceof Error ? error.message : String(error),
         })
       }
     })
+    processed += 1
+    // Finish the entire started row, including publication/cleanup, before
+    // relinquishing stale traversal. Never interrupt or replay its scan work.
+    if (!advanceCursor(schedule.id)) return enqueued
     if (workerUnavailable) break
   }
-
+  if (processed === schedules.length && schedules.length < 50) advanceCursor(undefined)
   return enqueued
 }
 

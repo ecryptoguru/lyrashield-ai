@@ -1,4 +1,5 @@
 import type { AISecuritySignal } from "@lyrashield/security/ai-security"
+import { phpContextForFile, type PhpRepositoryContext } from "./php-engine-context"
 
 const SHA256 = /^[a-f0-9]{64}$/i
 const GIT_SHA = /^[a-f0-9]{40}$/i
@@ -25,7 +26,8 @@ type EngineTriageInput = {
  */
 export function buildEngineTriageInput(
   signals: AISecuritySignal[],
-  sourceRevision: string | null | undefined
+  sourceRevision: string | null | undefined,
+  phpContext?: PhpRepositoryContext
 ): EngineTriageInput | null {
   if (!sourceRevision || !GIT_SHA.test(sourceRevision)) return null
   const candidates = signals
@@ -51,9 +53,13 @@ export function buildEngineTriageInput(
       severity: signal.severity,
       selectionReason: "MEDIUM_SEVERITY" as const,
       evidenceChecksum: signal.evidenceChecksum,
-      evidenceExcerpt: Buffer.from(signal.snippet ?? "", "utf8")
+      evidenceExcerpt: Buffer.from(
+        phpContextForFile(signal.file, phpContext) + (signal.snippet ?? ""),
+        "utf8"
+      )
         .subarray(0, 4096)
-        .toString("utf8"),
+        .toString("utf8")
+        .replace(/\uFFFD$/, ""),
     }))
   if (candidates.length === 0) return null
   return {

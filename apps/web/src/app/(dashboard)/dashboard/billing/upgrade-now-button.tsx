@@ -3,68 +3,51 @@
 import { useState } from "react"
 import { buttonVariants } from "@lyrashield/ui"
 import { TrendingUp } from "lucide-react"
-import { useRouter } from "next/navigation"
-import { openRazorpaySubscriptionCheckout } from "@/lib/razorpay-checkout"
-
-interface UpgradeNowButtonProps {
-  workspaceId: string
-}
+import { rememberPlanIntent } from "@/lib/plan-intent"
+import { PLAN_PICKER_ID } from "./plan-picker"
 
 /**
- * Client-side "Upgrade Now" button for the trial status card.
- * POSTs to /billing/checkout and redirects to the returned URL.
+ * Moves the user to the plan picker on the page they are already on.
+ *
+ * This was a `Link` to `/dashboard/billing?plan=PRO` — the route that renders
+ * it, so the only visible effect was a full page reload and a status line. It
+ * now records the Pro preference and scrolls to, then focuses, the first
+ * checkout control in the picker. No navigation, no reload.
  */
-export function UpgradeNowButton({ workspaceId }: UpgradeNowButtonProps) {
-  const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export function UpgradeNowButton() {
+  const [missing, setMissing] = useState(false)
 
-  async function handleUpgrade() {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch("/billing/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, plan: "PRO", interval: "monthly" }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error?.message ?? "Unable to start checkout. Please try again.")
-      } else if (data.success && data.data?.url) {
-        window.location.href = data.data.url
-      } else if (data.success && data.data?.subscriptionId && data.data?.keyId) {
-        await openRazorpaySubscriptionCheckout({
-          keyId: data.data.keyId,
-          subscriptionId: data.data.subscriptionId,
-          onAuthorized: () => router.push("/dashboard/billing?checkout=processing"),
-          onDismiss: () => setLoading(false),
-        })
-      } else {
-        setError("Unable to start checkout. Please try again.")
-      }
-    } catch {
-      setError("Unable to start checkout. Check your connection and try again.")
-    } finally {
-      setLoading(false)
+  function goToPlanPicker() {
+    rememberPlanIntent("PRO")
+    const picker = document.getElementById(PLAN_PICKER_ID)
+    const firstChoice = picker?.querySelector<HTMLElement>("button")
+    if (!picker || !firstChoice) {
+      // The picker renders only while purchases are available and the plan is
+      // Free. Say so instead of reloading the page for no reason.
+      setMissing(true)
+      return
     }
+    setMissing(false)
+    picker.scrollIntoView({ block: "center", behavior: "smooth" })
+    firstChoice.focus({ preventScroll: true })
   }
 
   return (
-    <div className="space-y-2">
-      {error && (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      )}
+    <div className="w-full space-y-2">
       <button
-        onClick={handleUpgrade}
-        disabled={loading}
+        type="button"
+        onClick={goToPlanPicker}
+        aria-controls={PLAN_PICKER_ID}
         className={`${buttonVariants({ variant: "default" })} w-full`}
       >
-        <TrendingUp className="mr-2 h-4 w-4" />
-        {loading ? "Loading..." : "Upgrade Now"}
+        <TrendingUp className="mr-2 h-4 w-4" aria-hidden="true" />
+        Upgrade Now
       </button>
+      {missing && (
+        <p role="status" className="text-muted-foreground text-xs">
+          Plan choices are not available on this page right now. Review the plan section above.
+        </p>
+      )}
     </div>
   )
 }

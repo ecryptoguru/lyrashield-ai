@@ -26,60 +26,87 @@ import { env } from "@lyrashield/config"
 import { z } from "zod"
 import { WebhookAuthError, WebhookPayloadError } from "../../webhook-errors"
 
-export interface RazorpayWebhookEvent {
-  event: string
-  /** Razorpay includes the original event creation time in Unix seconds. */
-  created_at?: number
-  payload: {
-    payment?: {
-      entity: {
-        id: string
-        amount: number
-        currency: string
-        notes?: Record<string, string>
-        email?: string
-        order_id?: string
-        amount_refunded?: number
-        amountRefunded?: number
-        refund_status?: string
-        refundStatus?: string
-        status?: string
-      }
-    }
-    refund?: {
-      entity: {
-        id: string
-        payment_id: string
-        amount?: number
-        currency?: string
-        status?: string
-      }
-    }
-    order?: {
-      entity: {
-        id: string
-      }
-    }
-    subscription?: {
-      entity: {
-        id: string
-        status: string
-        plan_id: string
-        current_start?: number
-        current_end?: number
-        ended_at?: number
-        notes?: Record<string, string>
-      }
-    }
-    payment_link?: {
-      entity: {
-        id: string
-        reference_id?: string
-        notes?: Record<string, string>
-      }
-    }
-  }
-}
+const notesSchema = z.preprocess(
+  (value) => (Array.isArray(value) && value.length === 0 ? {} : value),
+  z.record(z.string(), z.string()).nullish()
+)
+
+const paymentEntitySchema = z
+  .object({
+    id: z.string(),
+    amount: z.number(),
+    currency: z.string(),
+    notes: notesSchema,
+    email: z.string().optional(),
+    order_id: z.string().nullish(),
+    amount_refunded: z.number().optional(),
+    amountRefunded: z.number().optional(),
+    refund_status: z.string().nullish(),
+    refundStatus: z.string().nullish(),
+    status: z.string().optional(),
+  })
+  .passthrough()
+
+const razorpayWebhookEventSchema = z
+  .object({
+    event: z.string().min(1),
+    /** Razorpay includes the original event creation time in Unix seconds. */
+    created_at: z.number().optional(),
+    payload: z
+      .object({
+        payment: z.object({ entity: paymentEntitySchema }).passthrough().optional(),
+        refund: z
+          .object({
+            entity: z
+              .object({
+                id: z.string(),
+                payment_id: z.string(),
+                amount: z.number().optional(),
+                currency: z.string().optional(),
+                status: z.string().optional(),
+              })
+              .passthrough(),
+          })
+          .passthrough()
+          .optional(),
+        order: z
+          .object({ entity: z.object({ id: z.string() }).passthrough() })
+          .passthrough()
+          .optional(),
+        subscription: z
+          .object({
+            entity: z
+              .object({
+                id: z.string(),
+                status: z.string(),
+                plan_id: z.string(),
+                current_start: z.number().nullish(),
+                current_end: z.number().nullish(),
+                ended_at: z.number().nullish(),
+                notes: notesSchema,
+              })
+              .passthrough(),
+          })
+          .passthrough()
+          .optional(),
+        payment_link: z
+          .object({
+            entity: z
+              .object({
+                id: z.string(),
+                reference_id: z.string().nullish(),
+                notes: notesSchema,
+              })
+              .passthrough(),
+          })
+          .passthrough()
+          .optional(),
+      })
+      .passthrough(),
+  })
+  .passthrough()
+
+export type RazorpayWebhookEvent = z.infer<typeof razorpayWebhookEventSchema>
 
 const MAX_PROVIDER_REPLAY_AGE_MS = 15 * 24 * 60 * 60 * 1000
 const MAX_PROVIDER_CLOCK_SKEW_MS = 5 * 60 * 1000
@@ -90,7 +117,8 @@ const MAX_PROVIDER_CLOCK_SKEW_MS = 5 * 60 * 1000
  * Security:
  * - Uses RAZORPAY_WEBHOOK_SECRET exclusively (never falls back to the API key
  *   secret, which has a different purpose and would weaken webhook validation).
- * - Rejects events older than 5 minutes to prevent replay attacks.
+ * - Rejects events older than the 15-day provider replay window or too far in
+ *   the future to prevent replay attacks.
  *
  * @param body - Raw request body string
  * @param signature - Value of X-Razorpay-Signature header
@@ -125,11 +153,9 @@ export function validateRazorpayWebhook(body: string, signature: string): Razorp
   } catch {
     throw new WebhookPayloadError("Razorpay webhook body is not valid JSON")
   }
-  const event = z
-    .object({ event: z.string().min(1), payload: z.record(z.string(), z.unknown()) })
-    .safeParse(parsed)
+  const event = razorpayWebhookEventSchema.safeParse(parsed)
   if (!event.success) throw new WebhookPayloadError("Razorpay webhook has invalid event shape")
-  const validated = parsed as RazorpayWebhookEvent
+  const validated = event.data
 
   // `created_at` is the original event time. Razorpay can retry a signed
   // payload for 24 hours and supports replay requests for 15 days. Accept that

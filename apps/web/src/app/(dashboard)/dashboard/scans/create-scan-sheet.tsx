@@ -2,8 +2,8 @@
 
 import Link from "next/link"
 import { useRef, type Dispatch, type SetStateAction } from "react"
-import { AlertCircle, Check, ChevronDown, ChevronRight, Clock, Play } from "lucide-react"
-import { Badge, Button, cn, FormField, Input, Select, Spinner } from "@lyrashield/ui"
+import { AlertCircle, Check, ChevronRight, Clock } from "lucide-react"
+import { Badge, Button, cn, FormField, Input, Select } from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Sheet,
@@ -16,9 +16,88 @@ import { formatEstimate } from "@/lib/estimator"
 import { getScanModeLabel, getTargetTypeLabel } from "@/lib/enum-labels"
 import type { ManualScanOption } from "@/lib/scan-presets"
 import { SCAN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
-import { getReviewSetupGuidance, isBillingRecoveryCode } from "./scans-client.utils"
+import { getReviewSetupGuidance } from "./scans-client.utils"
+import { ScanSubmissionFooter, useScanSheetErrorVisibility } from "./scan-submission-feedback"
+import { ScanAdvancedOptions } from "./scan-advanced-options"
+import { ScanEligibilityRecovery } from "./scan-eligibility-recovery"
 import type { ScanEligibilityState, TargetItem } from "./scan-types"
 import type { ScanAttachmentItem } from "@/lib/api-schemas"
+
+function getModeAdvisory(eligibility: ScanEligibilityState, optionId: string) {
+  return eligibility.status === "ready"
+    ? eligibility.eligibility.supportedModes?.find(
+        (mode) => mode.id === optionId.replace(/_LAUNCH_REVIEW$/, "")
+      )
+    : undefined
+}
+
+function ScanMinuteDisclosure({ option }: { option: ManualScanOption }) {
+  return (
+    <p className="text-muted-foreground mt-2 text-xs">
+      {option.usesAi ? (
+        <>
+          Elapsed analysis time rounds up to whole minutes
+          {["DEEP", "CUSTOM"].includes(option.mode) ? ", then uses a 3× multiplier" : ""}. Charged
+          agent-minutes differ from elapsed time. Available account capacity may shorten the review;
+          unused reserved minutes are released.
+        </>
+      ) : (
+        "This deterministic review uses no agent-minutes."
+      )}
+    </p>
+  )
+}
+
+function ScanEligibilitySummary({
+  option,
+  remainingMinutes,
+  isTrial,
+}: {
+  option: ManualScanOption
+  remainingMinutes: number
+  isTrial: boolean
+}) {
+  return (
+    <div className="rounded-lg border p-3 text-sm">
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span className="flex items-center gap-1.5 font-medium">
+          <Clock className="text-muted-foreground size-4" aria-hidden="true" />
+          Est. time: {formatEstimate(option.estimate)}
+        </span>
+        <span className="text-muted-foreground">
+          Agent-minutes remaining:{" "}
+          <span className="text-foreground font-medium">{remainingMinutes}</span>
+          {isTrial ? " (trial)" : ""}
+        </span>
+      </p>
+      <ScanMinuteDisclosure option={option} />
+    </div>
+  )
+}
+
+function AddTargetLink() {
+  return (
+    <Link
+      href="/dashboard/scans?new=1&source=url"
+      className="text-primary inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4"
+    >
+      Add a new target
+    </Link>
+  )
+}
+
+function CreateScanHeader() {
+  return (
+    <SheetHeader className="border-b px-6 py-4 text-left">
+      <SheetTitle>Start a {SCAN_SINGULAR.toLowerCase()}</SheetTitle>
+      <SheetDescription>
+        Choose a {TARGET_SINGULAR.toLowerCase()} and how thorough the review should be. Starting a{" "}
+        {SCAN_SINGULAR.toLowerCase()} begins durable server-side work that may use the sponsoring
+        account&apos;s agent-minute allowance.
+      </SheetDescription>
+    </SheetHeader>
+  )
+}
 
 function modeBadgeVariant(mode: string): "default" | "success" | "info" | "warning" | "muted" {
   switch (mode) {
@@ -44,10 +123,11 @@ export function CreateScanSheet({
   selectedTarget,
   handleSelectTarget,
   availableOptions,
-  enabledOptions,
   selectedOption,
   choosePreset,
   modeResetNotice,
+  engineBudgetCeiling,
+  setEngineBudgetCeiling,
   selectedFocus,
   setSelectedFocus,
   reviewSetupGuidance,
@@ -83,6 +163,8 @@ export function CreateScanSheet({
   selectedOption: ManualScanOption | undefined
   choosePreset: (id: string) => void
   modeResetNotice: string | null
+  engineBudgetCeiling: string
+  setEngineBudgetCeiling: (value: string) => void
   selectedFocus: string | null
   setSelectedFocus: Dispatch<SetStateAction<string | null>>
   reviewSetupGuidance: ReturnType<typeof getReviewSetupGuidance>
@@ -105,6 +187,27 @@ export function CreateScanSheet({
   toggleAttachment: (id: string) => void
 }) {
   const returnFocusRef = useRef<HTMLElement | null>(null)
+  const { submissionErrorRef, visibleErrorMessage } = useScanSheetErrorVisibility(
+    open,
+    errorMessage
+  )
+  const displayedOptions = availableOptions.map((option) => {
+    const advisory = getModeAdvisory(eligibility, option.id)
+    return advisory?.available === false
+      ? {
+          ...option,
+          available: false,
+          disabledReason: option.disabledReason ?? advisory.disabledReason ?? undefined,
+        }
+      : option
+  })
+  const enabledOptions = displayedOptions.filter((option) => option.available)
+  const selectedIsAvailable = enabledOptions.some((option) => option.id === selectedOption?.id)
+  // Roving tabindex for the review-type radiogroup: exactly one radio is
+  // tabbable — the selected option, or the first enabled option when nothing
+  // is selected yet. With no selection, `isSelected ? 0 : -1` left the whole
+  // group unreachable by keyboard.
+  const firstEnabledOptionIndex = displayedOptions.findIndex((option) => option.available)
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -126,36 +229,22 @@ export function CreateScanSheet({
             : "h-[92vh] max-h-[92vh] rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
         )}
       >
-        <SheetHeader className="border-b px-6 py-4 text-left">
-          <SheetTitle>Start a {SCAN_SINGULAR.toLowerCase()}</SheetTitle>
-          <SheetDescription>
-            Choose a {TARGET_SINGULAR.toLowerCase()} and how thorough the review should be. Starting
-            a {SCAN_SINGULAR.toLowerCase()} begins durable server-side work that may use the
-            sponsoring account&apos;s agent-minute allowance.
-          </SheetDescription>
-        </SheetHeader>
-
+        <CreateScanHeader />
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <div className="space-y-5">
-            {(errorMessage || scanRecoveryError) && (
-              <div role="alert" className="border-destructive/40 rounded-lg border p-3 text-sm">
-                {errorMessage && <p>{errorMessage}</p>}
-                {scanRecoveryError && scanRecoveryError !== errorMessage && (
-                  <p>{scanRecoveryError}</p>
-                )}
-              </div>
-            )}
-            {errorCode === "DOMAIN_VERIFICATION_REQUIRED" && selectedTarget && (
-              <div role="alert" className="border-destructive/40 rounded-lg border p-3 text-sm">
-                <p>Domain verification is required before this review can start.</p>
-                <Link
-                  href={`/dashboard/targets/${encodeURIComponent(selectedTarget)}#domain-verification`}
-                  className="text-primary inline-flex min-h-11 items-center font-medium hover:underline"
-                >
-                  Verify control of this domain
-                </Link>
-              </div>
-            )}
+            {errorCode === "DOMAIN_VERIFICATION_REQUIRED" &&
+              visibleErrorMessage &&
+              selectedTarget && (
+                <div role="alert" className="border-destructive/40 rounded-lg border p-3 text-sm">
+                  <p>Domain verification is required before this review can start.</p>
+                  <Link
+                    href={`/dashboard/targets/${encodeURIComponent(selectedTarget)}#domain-verification`}
+                    className="text-primary inline-flex min-h-11 items-center font-medium hover:underline"
+                  >
+                    Verify control of this domain
+                  </Link>
+                </div>
+              )}
             <FormField label={TARGET_SINGULAR} htmlFor="scan-target">
               <Select
                 id="scan-target"
@@ -169,6 +258,7 @@ export function CreateScanSheet({
                   </option>
                 ))}
               </Select>
+              <AddTargetLink />
             </FormField>
 
             <div>
@@ -178,9 +268,12 @@ export function CreateScanSheet({
               </div>
 
               <div role="radiogroup" aria-label="Scan type" className="grid grid-cols-1 gap-3">
-                {availableOptions.map((option) => {
+                {displayedOptions.map((option, index) => {
                   const isSelected = selectedOption?.id === option.id
                   const isDisabled = !option.available
+                  const isRovingFocusTarget =
+                    (isSelected && !isDisabled) ||
+                    (!selectedIsAvailable && index === firstEnabledOptionIndex)
                   return (
                     <button
                       key={option.id}
@@ -190,7 +283,7 @@ export function CreateScanSheet({
                       aria-checked={isSelected}
                       aria-disabled={isDisabled}
                       aria-label={`${option.label}: ${option.description}${isDisabled ? ` (${option.disabledReason})` : ""}`}
-                      tabIndex={isSelected ? 0 : -1}
+                      tabIndex={isRovingFocusTarget ? 0 : -1}
                       disabled={isDisabled}
                       onClick={() => !isDisabled && choosePreset(option.id)}
                       onKeyDown={(e) => {
@@ -411,175 +504,45 @@ export function CreateScanSheet({
                   </Button>
                 </div>
               ) : eligibility.status === "ready" && eligibility.eligibility.allowed ? (
-                <div className="rounded-lg border p-3 text-sm">
-                  <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <Clock className="text-muted-foreground size-4" aria-hidden="true" />
-                      Est. time: {formatEstimate(selectedOption.estimate)}
-                    </span>
-                    <span className="text-muted-foreground">
-                      Agent-minutes remaining:{" "}
-                      <span className="text-foreground font-medium">
-                        {eligibility.eligibility.remainingMinutes}
-                      </span>
-                      {eligibility.eligibility.isTrial ? " (trial)" : ""}
-                    </span>
-                  </p>
-                </div>
+                <ScanEligibilitySummary
+                  option={selectedOption}
+                  remainingMinutes={eligibility.eligibility.remainingMinutes}
+                  isTrial={eligibility.eligibility.isTrial}
+                />
               ) : eligibility.status === "ready" ? (
-                <div
-                  className="border-destructive/40 bg-destructive/5 rounded-lg border p-3 text-sm"
-                  role="alert"
-                >
-                  <p className="font-medium">This review cannot start yet</p>
-                  <p className="text-muted-foreground mt-1">
-                    {eligibility.eligibility.message ?? "Not allowed for this workspace."}
-                  </p>
-                  {eligibility.eligibility.code === "TRIAL_AVAILABLE" &&
-                    (canManageBilling ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="mt-2"
-                        disabled={startingTrial}
-                        onClick={handleStartTrial}
-                      >
-                        {startingTrial ? "Starting trial…" : "Start free trial"}
-                      </Button>
-                    ) : (
-                      <p className="text-muted-foreground mt-2">
-                        Ask a workspace owner to start the trial.
-                      </p>
-                    ))}
-                  {isBillingRecoveryCode(eligibility.eligibility.code) && (
-                    <p className="mt-2">
-                      {canManageBilling ? (
-                        <Link
-                          href="/dashboard/billing"
-                          className="text-primary inline-flex min-h-11 items-center gap-1 font-medium hover:underline"
-                        >
-                          Review billing options
-                          <ChevronRight className="size-4" aria-hidden="true" />
-                        </Link>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          Ask a workspace owner to review billing options.
-                        </span>
-                      )}
-                    </p>
-                  )}
-                  {eligibility.eligibility.code === "DOMAIN_VERIFICATION_REQUIRED" &&
-                    selectedTarget && (
-                      <Link
-                        href={`/dashboard/targets/${encodeURIComponent(selectedTarget)}#domain-verification`}
-                        className="text-primary mt-2 inline-flex min-h-11 items-center font-medium hover:underline"
-                      >
-                        Verify control of this domain
-                      </Link>
-                    )}
-                </div>
+                <ScanEligibilityRecovery
+                  eligibility={eligibility}
+                  enabledOptions={enabledOptions}
+                  choosePreset={choosePreset}
+                  canManageBilling={canManageBilling}
+                  startingTrial={startingTrial}
+                  handleStartTrial={handleStartTrial}
+                  selectedTarget={selectedTarget}
+                />
               ) : null}
             </div>
 
-            <div>
-              <button
-                type="button"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                aria-expanded={showAdvanced}
-                aria-controls="scan-advanced-panel"
-                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex min-h-11 items-center gap-1 rounded-md px-1 text-xs font-medium focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
-              >
-                <ChevronDown
-                  className={cn(
-                    "size-4 transition-transform duration-(--duration-fast) ease-out",
-                    showAdvanced ? "rotate-180" : ""
-                  )}
-                  aria-hidden="true"
-                />
-                What this covers
-              </button>
-
-              {showAdvanced && selectedOption && (
-                <div
-                  id="scan-advanced-panel"
-                  className="bg-muted/40 border-border mt-2 rounded-lg border p-4"
-                >
-                  <dl className="space-y-3 text-xs leading-relaxed">
-                    <div>
-                      <dt className="text-sm font-medium">What this review covers</dt>
-                      <dd className="text-muted-foreground mt-1">{selectedOption.hint}</dd>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <div>
-                        <dt className="text-muted-foreground font-medium">Workflow</dt>
-                        <dd>
-                          {selectedOption.workflow === "REVIEW_CHANGES"
-                            ? "Scan changes"
-                            : "Scan target"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground font-medium">Depth</dt>
-                        <dd>{getScanModeLabel(selectedOption.mode)}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground font-medium">Effective scope</dt>
-                        <dd>{selectedOption.scopeSummary}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground font-medium">Limits</dt>
-                        <dd>{selectedOption.limitsSummary}</dd>
-                      </div>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground font-medium">Applicable checks</dt>
-                      <dd>
-                        <ul className="text-muted-foreground mt-1 list-inside list-disc">
-                          {selectedOption.applicableChecks.map((check) => (
-                            <li key={check}>{check}</li>
-                          ))}
-                        </ul>
-                      </dd>
-                    </div>
-                    {selectedOption.authorizationHint ? (
-                      <div>
-                        <dt className="text-muted-foreground font-medium">
-                          Authorization required
-                        </dt>
-                        <dd className="text-muted-foreground">
-                          {selectedOption.authorizationHint}
-                        </dd>
-                      </div>
-                    ) : null}
-                    <dd className="text-muted-foreground">
-                      The completed scan records the applicable evidence and any limitations so you
-                      can decide what to fix or retest next.
-                    </dd>
-                  </dl>
-                </div>
-              )}
-            </div>
+            <ScanAdvancedOptions
+              selectedOption={selectedOption}
+              showAdvanced={showAdvanced}
+              setShowAdvanced={setShowAdvanced}
+              engineBudgetCeiling={engineBudgetCeiling}
+              setEngineBudgetCeiling={setEngineBudgetCeiling}
+            />
           </div>
         </div>
 
-        <div className="flex gap-2 border-t px-6 py-4">
-          <Button onClick={handleCreateScan} disabled={startDisabled} className="min-h-11 flex-1">
-            {creating ? (
-              <>
-                <Spinner className="mr-2 h-4 w-4" />
-                Starting…
-              </>
-            ) : (
-              <>
-                <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-                Start {SCAN_SINGULAR}
-              </>
-            )}
-          </Button>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="min-h-11">
-            Cancel
-          </Button>
-        </div>
+        <ScanSubmissionFooter
+          errorCode={errorCode}
+          errorMessage={visibleErrorMessage}
+          recoveryError={scanRecoveryError}
+          canManageBilling={canManageBilling}
+          creating={creating}
+          startDisabled={startDisabled || !selectedIsAvailable}
+          onStart={handleCreateScan}
+          onCancel={() => onOpenChange(false)}
+          submissionErrorRef={submissionErrorRef}
+        />
       </SheetContent>
     </Sheet>
   )

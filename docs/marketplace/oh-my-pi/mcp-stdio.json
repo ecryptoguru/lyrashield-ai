@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "lyrashield": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp@0.2.12"]
+    }
+  }
+}

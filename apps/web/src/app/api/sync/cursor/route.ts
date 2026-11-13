@@ -1,12 +1,12 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
 import { z } from "zod"
-import { prisma } from "@lyrashield/db"
 import { withWorkspaceRLS } from "@lyrashield/db"
-import { requireAuth } from "@lyrashield/auth/server"
+import { requireAuth, requirePermission } from "@lyrashield/auth/server"
+import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
-import { hasSyncWriteAccess } from "../../../../lib/sync-auth"
+import { hasSyncFindingWriteRole, hasSyncWriteAccess } from "../../../../lib/sync-auth"
 import { markLegacySyncResponse, resolveSyncCredential } from "../../../../lib/sync-license-auth"
 
 export const dynamic = "force-dynamic"
@@ -56,15 +56,12 @@ async function put(request: Request) {
     if (!hasSyncWriteAccess(session, workspaceId)) {
       return apiError("FORBIDDEN", "A write-capable key for this workspace is required", 403)
     }
+    const { workspace } = await requirePermission(workspaceId, PERMISSIONS.finding.update)
+    if (!hasSyncFindingWriteRole(workspace.role)) {
+      return apiError("FORBIDDEN", "A workspace finding-writer role is required", 403)
+    }
     const requestedSeq = parsed.data.seq ?? parsed.data.expectedSeq
     const { lastSyncedFindingId } = parsed.data
-
-    const membership = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId: session.userId } },
-    })
-    if (!membership || membership.status !== "active") {
-      return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
-    }
 
     const credential = await resolveSyncCredential({
       workspaceId,

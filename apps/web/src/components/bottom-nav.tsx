@@ -14,9 +14,8 @@ import {
 } from "@/components/ui/sheet"
 import { ChevronRight, Menu, LogOut } from "lucide-react"
 import { useState } from "react"
-import { authClient } from "@lyrashield/auth"
 import { apiPost } from "@/lib/api-client"
-import { invalidateAnalyticsPreference } from "@/lib/analytics"
+import { signOutAndClearSessionData } from "@/lib/sign-out"
 import { WorkspaceSwitcher } from "./workspace-switcher"
 
 function isActive(pathname: string, href: string): boolean {
@@ -123,9 +122,8 @@ export function BottomNav({
     try {
       if (workspaceId) await apiPost("/api/workspaces/active", { workspaceId })
       else {
-        const result = await authClient.signOut()
+        const result = await signOutAndClearSessionData()
         if (result.error) throw new Error("Unable to sign out. Please try again.")
-        invalidateAnalyticsPreference()
       }
       window.location.assign(workspaceId ? "/dashboard" : "/sign-in")
     } catch (error) {

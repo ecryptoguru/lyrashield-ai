@@ -8,7 +8,7 @@ import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import { z } from "zod"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetPaginated, apiPatch } from "@/lib/api-client"
-import { formatDateTime } from "@/lib/date-format"
+import { formatDateTimeUtc } from "@/lib/date-format"
 import { humanizeToken } from "@/lib/labels"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -76,7 +76,6 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
       setNextCursor(res.nextCursor)
       setError(null)
     } catch {
-      setNotifications([])
       setError("Failed to load notifications.")
     } finally {
       setLoading(false)
@@ -144,7 +143,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
         action={markAllReadAction}
       />
 
-      {error && (
+      {error && !loading && (
         <DashboardErrorCard
           message={error}
           onRetry={() => {
@@ -166,14 +165,14 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
             <Skeleton key={item} className="h-28 w-full" />
           ))}
         </div>
-      ) : notifications.length === 0 ? (
+      ) : notifications.length === 0 && !error ? (
         <EmptyState
           icon={Bell}
           title="No notifications"
           description="You'll see scan alerts, critical finding warnings and fix PR updates here."
           action={null}
         />
-      ) : (
+      ) : notifications.length > 0 ? (
         <div className="space-y-3">
           {notifications.map((notification) => {
             const Icon = CHANNEL_ICONS[notification.channel] ?? Bell
@@ -197,8 +196,8 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
                       {notification.body}
                     </p>
                     <p className="text-muted-foreground mt-2 text-xs">
-                      {formatDateTime(notification.createdAt)}
-                      {notification.sentAt && <> · Sent {formatDateTime(notification.sentAt)}</>}
+                      {formatDateTimeUtc(notification.createdAt)}
+                      {notification.sentAt && <> · Sent {formatDateTimeUtc(notification.sentAt)}</>}
                     </p>
                   </div>
                   {notification.status !== "read" && (
@@ -233,7 +232,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
             onNextCursor={setNextCursor}
           />
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

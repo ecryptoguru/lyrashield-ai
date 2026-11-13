@@ -1,15 +1,15 @@
-# LyraShield CLI 0.2.13
+# LyraShield CLI 0.2.14
 
-The `lyrashield` command-line interface installs, configures, and drives LyraShield scans from a terminal or CI pipeline.
+The `lyrashield` command-line interface installs, configures, and drives LyraShield scans from a terminal or CI pipeline. Scans started here produce the same evidence-backed record as the dashboard: explicit evidence states, coverage receipts, approval-gated fix proposals and server-owned retests — never a bare confidence score.
 
 ## Quick start
 
 ```sh
-npx lyrashield login --oauth      # hosted PKCE OAuth login (recommended)
-npx lyrashield use <workspace>
-npx lyrashield project use        # detect the current git repo and set it as the default project
-npx lyrashield scan               # scan the default project (uses default mode)
-npx lyrashield pr-scan --auto     # run a bounded PR check on the current repo
+npx -y lyrashield@0.2.14 login --oauth      # hosted PKCE OAuth login (recommended)
+npx -y lyrashield@0.2.14 use <workspace>
+npx -y lyrashield@0.2.14 project use        # detect the current git repo and set it as the default project
+npx -y lyrashield@0.2.14 scan               # scan the default project (uses default mode)
+npx -y lyrashield@0.2.14 pr-scan --auto     # run a bounded PR check on the current repo
 ```
 
 You can also set `LYRASHIELD_API_KEY` (and optionally `LYRASHIELD_API_URL`) in the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com`.
@@ -34,9 +34,27 @@ lyrashield <command> [args] [--json]
 
 - `agents` — list the complete registry with detection state, evidence-backed support tier, and verification metadata
 - `init` — detect and configure all installed agents using that client's documented transport and install path. When a client requires its own marketplace, UI, or config merge, `init` prints the exact next step instead of copying files into an unrecognized directory.
-- `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent. Cursor accepts a local Agent Plugin copy; Codex, Claude Code, and GitHub Copilot use their marketplace commands; Kiro uses its documented MCP settings file. `--dry-run` previews every path without executing vendor CLIs or writing files.
+- `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent. For clients without a reviewed, supported plugin install path, the CLI provides direct-MCP guidance; Kiro uses its documented MCP settings file. `--dry-run` previews every path without executing vendor CLIs or writing files.
 - `uninstall <agent>` — remove a CLI-managed LyraShield config or plugin. Marketplace and UI installs return client-specific removal guidance.
 - `rules add <agent>|remove <agent>|check` — add, remove, or validate an agent rules file (`AGENTS.md`, `CLAUDE.md`, etc.)
+- `skills install|remove <agent> [--project|--global] [--dry-run] [--project-root <dir>]` — install shared LyraShield skills at a documented client path, or remove only unchanged LyraShield-owned files. Installing files does not confirm client discovery; reload the client and verify its skill list.
+
+CLI `0.2.14` includes the config writers and shared-skill installer described above. Pin setup to
+this CLI version and the matching MCP package:
+
+```sh
+npx -y lyrashield@0.2.14 login --oauth
+npx -y lyrashield@0.2.14 install <agent> --project --dry-run
+npx -y lyrashield@0.2.14 skills install <agent> --project --dry-run
+```
+
+Remove `--dry-run` only after reviewing the preview. Use `--global` instead of `--project` for a
+user-level install. The direct MCP configuration uses `@lyrashield/mcp@0.2.12`, matching this
+CLI release. Follow the current [client guides](https://lyrashieldai.com/docs/integrations/agent-plugins)
+for client-specific plugin, MCP and skill discovery. Marketplace listing and authenticated client
+runtime acceptance are separate from npm package availability; use direct-MCP guidance when a
+client-owned plugin install path has not been verified. Do not install from a mutable marketplace
+preparation branch.
 
 `install` refuses to write raw secrets into shared-by-convention files unless you pass `--inline-secret` and the file is gitignored. Use `--dry-run` to preview the config change without writing it.
 
@@ -107,7 +125,9 @@ The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes on
 - `report [--title ... --scan <scanId> --type executive|developer|compliance]` — list or create reports
 - `approvals list|create <actionName>|approve <approvalId>|deny <approvalId>` — manage agent-approval requests
 - `mcp call <tool> [--input '{...}']` — call a remote MCP tool
-- `hook install` — install a pre-commit hook that runs `lyrashield check-diff`
+- `hook install|remove` — optionally install or remove LyraShield's marked advisory block in Git's active `pre-commit` hook, including worktrees and `core.hooksPath` configurations. Existing hook commands, comments, line endings and permissions are preserved.
+
+The hook runs the local `lyrashield check-diff --staged` command only when `lyrashield` is available on `PATH`; otherwise it prints a skip message and allows the commit. It does not use `npx`, access the network, or start a paid scan. The hook is opt-in. `hook remove` removes only LyraShield's intact marked block and leaves other hook content in place. `hook install` migrates the exact legacy LyraShield network hook in place; if that legacy command appears alongside custom content, installation stops and asks you to remove only the old LyraShield lines manually. Installation refuses existing non-shell shebangs; a hook without a shebang must already be POSIX shell-compatible (Git's shell fallback can vary by host). Existing file permissions are preserved, and the command warns when the hook is not executable.
 
 ## Exit codes
 

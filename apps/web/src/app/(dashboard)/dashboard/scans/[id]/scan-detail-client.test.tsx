@@ -69,6 +69,7 @@ function renderDetail(props: {
   scan: ScanData
   findings: FindingItem[]
   scorecard?: React.ComponentProps<typeof ScanDetailClient>["scorecard"]
+  canCancel?: boolean
 }) {
   // The dashboard layout guarantees the WebMCP receipt provider — render
   // inside it, matching the component's real runtime contract.
@@ -78,6 +79,7 @@ function renderDetail(props: {
         scan={props.scan}
         findings={props.findings}
         scorecard={props.scorecard ?? null}
+        canCancel={props.canCancel ?? false}
       />
     </WebMcpReceiptProvider>
   ).replaceAll("<!-- -->", "")
@@ -86,6 +88,27 @@ function renderDetail(props: {
 const html = renderDetail({ scan, findings: [finding] })
 
 describe("scan detail badge labels", () => {
+  it("labels UTC timestamps on the scan detail page", () => {
+    expect(html).toContain("completed Jan 1, 2026, 00:05 UTC")
+
+    const eventHtml = renderDetail({
+      scan: {
+        ...scan,
+        events: [
+          {
+            id: "event-1",
+            stage: "worker",
+            level: "info",
+            message: "Started scan",
+            createdAt: "2026-01-01T00:03:00.000Z",
+          },
+        ],
+      },
+      findings: [],
+    })
+    expect(eventHtml).toContain("00:03 UTC")
+  })
+
   it("uses the same goal label as the scan list", () => {
     for (const [goal, label] of [
       ["CHECK_PR", "Check a PR"],
@@ -172,6 +195,40 @@ describe("scan detail guided states", () => {
     expect(html).not.toContain("Create an assurance report")
   })
 
+  it("shows the specific Windows Brotli applicability gap alongside completed IaC coverage", () => {
+    const html = renderDetail({
+      scan: {
+        ...scan,
+        target,
+        integrity: {
+          ...scan.integrity,
+          coverage: [
+            {
+              scanner: "iac",
+              controlId: "iac",
+              status: "COMPLETED",
+              reason: null,
+              subject: null,
+              metadata: null,
+            },
+            {
+              scanner: "php-windows-brotli",
+              controlId: "php-runtime:windows-brotli",
+              status: "BLOCKED",
+              reason: "Verify the serving Windows package",
+              subject: "composer.json",
+              metadata: null,
+            },
+          ],
+        },
+      },
+      findings: [],
+    })
+    expect(html).toContain("PHP Windows Brotli applicability")
+    expect(html).toContain("Verify the serving Windows package")
+    expect(html).toContain("Coverage: Partial")
+  })
+
   it("offers a scan-scoped report only after completed applicable coverage with no findings", () => {
     const html = renderDetail({
       scan: {
@@ -242,6 +299,65 @@ describe("scan detail guided states", () => {
     expect(html).toContain("Review account usage")
     expect(html).toContain("/dashboard/billing")
     expect(html).not.toContain("Start a new scan")
+  })
+})
+
+/**
+ * W1/P2-5 — a scan waiting for approval rendered the animated in-progress card
+ * with an estimate and a "most scans finish sooner" promise, and no way to
+ * reach the queue it was waiting in. No scan detail page offered Cancel.
+ */
+describe("scan detail — approval and cancellation (W1/P2-5)", () => {
+  const activeScan = (overrides: Partial<ScanData> = {}): ScanData => ({
+    ...scan,
+    status: "REQUIRES_APPROVAL",
+    endedAt: null,
+    target: null,
+    integrity: { ...scan.integrity, coverage: [] },
+    ...overrides,
+  })
+
+  it("does not describe a scan waiting on a human as scanning", () => {
+    const html = renderDetail({ scan: activeScan(), findings: [] })
+
+    expect(html).toContain("Scan needs approval")
+    expect(html).not.toContain("Most scans finish sooner")
+    expect(html).not.toContain("Estimated time")
+    expect(html).toContain("Scan work has not started.")
+  })
+
+  it("links to the approval queue", () => {
+    const html = renderDetail({ scan: activeScan(), findings: [] })
+
+    expect(html).toContain('href="/dashboard/approvals"')
+    expect(html).toContain("Open the approval queue")
+  })
+
+  it("offers no cancel control without the cancel permission", () => {
+    const html = renderDetail({ scan: activeScan(), findings: [] })
+
+    expect(html).not.toContain("Cancel this scan")
+  })
+
+  it("offers a confirm-gated cancel for an active scan when permitted", () => {
+    const html = renderDetail({ scan: activeScan(), findings: [], canCancel: true })
+
+    // InlineConfirm renders only its trigger until the first click; the
+    // confirmation row is created on demand and so is absent from this markup.
+    // The click behaviour is covered in inline-confirm.test.tsx.
+    expect(html).toContain('aria-label="Cancel this scan"')
+    expect(html).toContain(">Cancel</button>")
+    expect(html).not.toContain("Stop scan")
+  })
+
+  it("offers no cancel control for a scan that already ended", () => {
+    const html = renderDetail({
+      scan: activeScan({ status: "COMPLETED", endedAt: "2026-01-01T00:05:00.000Z" }),
+      findings: [],
+      canCancel: true,
+    })
+
+    expect(html).not.toContain("Cancel this scan")
   })
 })
 
@@ -349,4 +465,73 @@ describe("scan detail — truthful scope and declared coverage", () => {
     expect(failedHtml).toContain("Supporting file unavailable")
     expect(failedHtml).not.toContain("Clean")
   })
+
+  it("keeps the original runtime-limit diagnostic in scan failure details", () => {
+    const originalDiagnostic = "Engine reached its runtime limit before filing any findings"
+    const failedHtml = renderDetail({
+      scan: {
+        ...scan,
+        status: "FAILED",
+        errorCategory: "ENGINE_RUNTIME_DEADLINE",
+        errorMessage: originalDiagnostic,
+      },
+      findings: [finding],
+    })
+
+    expect(failedHtml).toContain("Failure details")
+    expect(failedHtml).toContain(originalDiagnostic)
+    expect(failedHtml).toContain("Example finding")
+  })
+})
+
+it("distinguishes elapsed analysis from charged minutes using the stored capacity receipt", () => {
+  const capacity = {
+    state: "SETTLED",
+    executionStopped: true,
+    admissionHeld: false,
+    multiplier: 3,
+    fundedMinutes: 9,
+    runtimeLimitMs: 180000,
+    observedMs: 61000,
+    chargedMinutes: 6,
+    absorbedMinutes: 0,
+  }
+  const markup = renderDetail({ scan: { ...scan, capacity }, findings: [] })
+  expect(markup).toContain("Elapsed analysis: 1m 1s")
+  expect(markup).toContain("6 agent-minutes charged")
+  expect(markup).toContain("3×")
+  expect(markup).toContain("separate from elapsed time")
+})
+it("keeps cancellation finalizing until execution has stopped even if minutes are released", () => {
+  const capacity = {
+    state: "RELEASED",
+    executionStopped: false,
+    admissionHeld: true,
+    multiplier: 1,
+    fundedMinutes: 0,
+    runtimeLimitMs: 0,
+    observedMs: 0,
+    chargedMinutes: 0,
+    absorbedMinutes: 0,
+  }
+  const markup = renderDetail({ scan: { ...scan, status: "CANCELLED", capacity }, findings: [] })
+  expect(markup).toContain("Waiting for analysis to stop")
+  expect(markup).not.toContain("Reserved capacity has been released")
+})
+
+it("shows finalizing when execution stopped but the active slot is still held", () => {
+  const capacity = {
+    state: "RUNNING",
+    executionStopped: true,
+    admissionHeld: true,
+    multiplier: 1,
+    fundedMinutes: 5,
+    runtimeLimitMs: 300000,
+    observedMs: 1000,
+    chargedMinutes: 0,
+    absorbedMinutes: 0,
+  }
+  const markup = renderDetail({ scan: { ...scan, capacity }, findings: [] })
+  expect(markup).toContain("Finalizing this review")
+  expect(markup).not.toContain("Analysis stops within the available capacity")
 })

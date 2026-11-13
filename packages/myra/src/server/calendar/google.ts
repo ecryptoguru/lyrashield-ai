@@ -7,11 +7,11 @@ import { env } from "@lyrashield/config"
 import { MyraServiceError } from "../errors"
 import {
   CalendarTimeoutError,
-  type BusyWindow,
   type CalendarAdapter,
+  type BusyWindow,
   type CalendarEventResult,
   type CalendarEventSpec,
-} from "./adapter"
+} from "./types"
 
 interface GoogleEnv {
   clientId: string

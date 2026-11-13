@@ -7,22 +7,39 @@ import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "@lyrashie
 import { getRedis } from "./redis"
 
 const SCAN_WORKER_REGISTRY_KEY = "lyrashield:scan-workers"
+const TARGET_RELAY_MEMBER_PREFIX = "~relay~"
 export const SCAN_ADMISSION_STOP_KEY = "lyrashield:scan-admission:stopped"
 export const SCAN_WORKER_HEARTBEAT_MS = 120_000
 export const SCAN_WORKER_TTL_MS = 300_000
 
+export type ScanWorkerUnavailabilityReason =
+  "ADMISSION_HELD" | "NO_WORKER_LEASE" | "REDIS_UNAVAILABLE" | "PROVENANCE_INVALID" | "UNKNOWN"
+
 export class ScanWorkerUnavailableError extends Error {
   readonly code = "SCAN_SERVICE_UNAVAILABLE"
 
-  constructor() {
+  constructor(readonly reason: ScanWorkerUnavailabilityReason = "UNKNOWN") {
     super("No scan worker is currently available")
     this.name = "ScanWorkerUnavailableError"
   }
 }
 
+/** This invocation never called queue.add; it is NOT proof about earlier invocations. */
+export class ScanEnqueueNotSubmittedError extends ScanWorkerUnavailableError {
+  constructor(
+    readonly scanId: string,
+    cause: unknown
+  ) {
+    super()
+    this.name = "ScanEnqueueNotSubmittedError"
+    this.message = cause instanceof Error ? cause.message : "Scan queue submission did not start"
+    this.cause = cause
+  }
+}
+
 function requireRedis() {
   const redis = getRedis()
-  if (!redis) throw new ScanWorkerUnavailableError()
+  if (!redis) throw new ScanWorkerUnavailableError("REDIS_UNAVAILABLE")
   return redis
 }
 
@@ -32,9 +49,11 @@ type ScanWorkerRedis = ReturnType<typeof requireRedis> & {
     now: number,
     expiresAt: number,
     workerId: string,
-    keyTtl: number
+    keyTtl: number,
+    relayReady: string
   ): Promise<number>
   scanWorkerReadiness(key: string, now: number): Promise<number>
+  scanWorkerMembers(key: string, now: number): Promise<string[]>
 }
 
 function getScanWorkerRedis(): ScanWorkerRedis {
@@ -45,7 +64,12 @@ function getScanWorkerRedis(): ScanWorkerRedis {
       numberOfKeys: 1,
       lua: `
         redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+        local relayMember = "~relay~" .. ARGV[3]
+        redis.call("ZREM", KEYS[1], relayMember)
         redis.call("ZADD", KEYS[1], ARGV[2], ARGV[3])
+        if ARGV[5] == "1" then
+          redis.call("ZADD", KEYS[1], ARGV[2], relayMember)
+        end
         return redis.call("PEXPIRE", KEYS[1], ARGV[4])
       `,
     })
@@ -61,56 +85,105 @@ function getScanWorkerRedis(): ScanWorkerRedis {
     })
   }
 
+  if (!redis.scanWorkerMembers) {
+    redis.defineCommand("scanWorkerMembers", {
+      numberOfKeys: 1,
+      lua: `
+        redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+        return redis.call("ZRANGE", KEYS[1], 0, -1)
+      `,
+    })
+  }
+
   return redis
 }
 
-export async function registerScanWorker(workerId: string, now = Date.now()): Promise<void> {
+export async function registerScanWorker(
+  workerId: string,
+  now = Date.now(),
+  relayReady = false
+): Promise<void> {
   const redis = getScanWorkerRedis()
   await redis.scanWorkerHeartbeat(
     SCAN_WORKER_REGISTRY_KEY,
     now,
     now + SCAN_WORKER_TTL_MS,
     workerId,
-    SCAN_WORKER_TTL_MS * 2
+    SCAN_WORKER_TTL_MS * 2,
+    relayReady ? "1" : "0"
   )
 }
 
 export async function unregisterScanWorker(workerId: string): Promise<void> {
   const redis = requireRedis()
-  await redis.zrem(SCAN_WORKER_REGISTRY_KEY, workerId)
+  await redis.zrem(SCAN_WORKER_REGISTRY_KEY, workerId, `${TARGET_RELAY_MEMBER_PREFIX}${workerId}`)
 }
 
-export async function isScanWorkerAvailable(now = Date.now()): Promise<boolean> {
+export async function isTargetRelayWorkerAvailable(now = Date.now()): Promise<boolean> {
   if (!getRedis()) return false
-
   try {
-    const workers = await getScanWorkerRedis().scanWorkerReadiness(SCAN_WORKER_REGISTRY_KEY, now)
-    // Managed Redis proxies do not reliably expose other clients' names via
-    // CLIENT LIST, which makes BullMQ getWorkersCount() connection-dependent.
-    // The worker owns this short-lived registration, removes it on shutdown,
-    // and clears readiness when its heartbeat fails.
-    return Number(workers) > 0
+    const redis = getScanWorkerRedis()
+    const members = await redis.scanWorkerMembers(SCAN_WORKER_REGISTRY_KEY, now)
+    const workers = members.filter((id) => !id.startsWith(TARGET_RELAY_MEMBER_PREFIX))
+    const registered = new Set(members)
+    // Both parts of a heartbeat update atomically in one key: a known negative
+    // cannot renew ordinary readiness while retaining a prior positive capability.
+    return (
+      workers.length > 0 &&
+      workers.every((id) => registered.has(`${TARGET_RELAY_MEMBER_PREFIX}${id}`))
+    )
   } catch {
     return false
   }
 }
 
+async function scanWorkerAvailability(
+  now: number
+): Promise<"AVAILABLE" | ScanWorkerUnavailabilityReason> {
+  try {
+    if (!getRedis()) return "REDIS_UNAVAILABLE"
+    const workers = await getScanWorkerRedis().scanWorkerReadiness(SCAN_WORKER_REGISTRY_KEY, now)
+    // Managed Redis proxies do not reliably expose other clients' names via
+    // CLIENT LIST, which makes BullMQ getWorkersCount() connection-dependent.
+    // The worker owns this short-lived registration, removes it on shutdown,
+    // and clears readiness when its heartbeat fails.
+    if (!Number.isSafeInteger(workers) || workers < 0) return "UNKNOWN"
+    return workers > 0 ? "AVAILABLE" : "NO_WORKER_LEASE"
+  } catch {
+    return "REDIS_UNAVAILABLE"
+  }
+}
+
+export async function isScanWorkerAvailable(now = Date.now()): Promise<boolean> {
+  return (await scanWorkerAvailability(now)) === "AVAILABLE"
+}
+
 export async function assertScanWorkerAvailable(): Promise<void> {
-  const redis = getRedis()
-  if (!redis) throw new ScanWorkerUnavailableError()
+  let redis: ReturnType<typeof getRedis>
+  try {
+    redis = getRedis()
+  } catch {
+    throw new ScanWorkerUnavailableError("REDIS_UNAVAILABLE")
+  }
+  if (!redis) throw new ScanWorkerUnavailableError("REDIS_UNAVAILABLE")
 
   try {
     // This key is in a different Redis Cluster slot from the worker registry.
-    if ((await redis.exists(SCAN_ADMISSION_STOP_KEY)) > 0) {
-      throw new ScanWorkerUnavailableError()
+    const admissionStop = await redis.exists(SCAN_ADMISSION_STOP_KEY)
+    if (admissionStop !== 0 && admissionStop !== 1) {
+      throw new ScanWorkerUnavailableError("UNKNOWN")
+    }
+    if (admissionStop === 1) {
+      throw new ScanWorkerUnavailableError("ADMISSION_HELD")
     }
   } catch (error) {
     if (error instanceof ScanWorkerUnavailableError) throw error
     // Admission state is authoritative. Redis uncertainty must fail closed.
-    throw new ScanWorkerUnavailableError()
+    throw new ScanWorkerUnavailableError("REDIS_UNAVAILABLE")
   }
 
-  if (!(await isScanWorkerAvailable())) throw new ScanWorkerUnavailableError()
+  const status = await scanWorkerAvailability(Date.now())
+  if (status !== "AVAILABLE") throw new ScanWorkerUnavailableError(status)
 }
 
 export const QUEUE_PRODUCER_TIMEOUT_MS = 5_000
@@ -225,8 +298,8 @@ export function getScanQueue(): Queue<ScanJobData, ScanJobResult> {
 }
 
 export async function enqueueScan(data: ScanJobData): Promise<string> {
-  const queue = getScanQueue()
   try {
+    const queue = getScanQueue()
     return await boundedQueueAdd(
       queue,
       data.scanId,
@@ -240,7 +313,8 @@ export async function enqueueScan(data: ScanJobData): Promise<string> {
       assertScanWorkerAvailable
     )
   } catch (error) {
-    if (!(error instanceof QueueEnqueueUncertainError)) throw error
+    if (!(error instanceof QueueEnqueueUncertainError))
+      throw new ScanEnqueueNotSubmittedError(data.scanId, error)
     // Admission already persisted this exact scan. Keep it QUEUED and return
     // its identity: failing it here could race a running job; retrying a new
     // scan could duplicate paid work. Existing reconciliation resolves absence.
@@ -376,7 +450,7 @@ export interface FixGenerateJobData {
 
 let fixGenerateQueue: Queue<FixGenerateJobData, unknown> | null = null
 
-function getFixGenerateQueue(): Queue<FixGenerateJobData, unknown> {
+export function getFixGenerateQueue(): Queue<FixGenerateJobData, unknown> {
   if (!fixGenerateQueue || producerConnections.get(fixGenerateQueue)?.status === "end") {
     fixGenerateQueue = createProducerQueue<FixGenerateJobData, unknown>(FIX_GENERATE_QUEUE_NAME, {
       // The consumer is deterministic from stored evidence (no model call),

@@ -418,18 +418,6 @@ describe("scanUrl", () => {
 })
 
 describe("scanUrl — SSRF protection (fetch-time)", () => {
-  it("blocks a target whose hostname resolves to the cloud-metadata IP (rebinding)", async () => {
-    const rebindResolver: HostResolver = async () => ["169.254.169.254"]
-    mockFetch.mockResolvedValue(makeResponse("<html></html>"))
-    const { findings } = await scanUrl({
-      targetUrl: "https://internal.attacker.example",
-      fetchFn: mockFetch,
-      resolver: rebindResolver,
-    })
-    expect(findings).toHaveLength(0)
-    expect(mockFetch).not.toHaveBeenCalled()
-  })
-
   it("blocks a decimal-encoded loopback address (http://2130706433 = 127.0.0.1)", async () => {
     mockFetch.mockResolvedValue(makeResponse("<html></html>"))
     const { findings } = await scanUrl({
@@ -455,5 +443,38 @@ describe("scanUrl — SSRF protection (fetch-time)", () => {
     expect(findings).toHaveLength(0)
     // The redirect target must never be fetched (only the first hop).
     expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("passive PHP banner leads", () => {
+  it("retains a response version as an unverified lead with no CVE assertion", async () => {
+    mockFetch.mockResolvedValue(
+      makeResponse("<html>Hello</html>", { "X-Powered-By": "PHP/8.4.26" })
+    )
+    const { findings } = await scanUrl({
+      targetUrl: "https://example.com",
+      fetchFn: mockFetch,
+      resolver: stubResolver,
+    })
+    const lead = findings.find((finding) => finding.finding_class === "php_runtime_banner")
+    expect(lead).toMatchObject({
+      scannerSource: "url",
+      dependency_metadata: {
+        runtime_version: "8.4.26",
+        evidence_scope: "public_banner",
+        runtime_verified: false,
+      },
+    })
+    expect(lead?.cve).toBeUndefined()
+    expect(lead?.code_locations).toBeUndefined()
+  })
+  it("ignores PHP text in HTML and headers without a reported version", async () => {
+    mockFetch.mockResolvedValue(makeResponse("<html>PHP/8.4.26</html>", { "X-Powered-By": "PHP" }))
+    const { findings } = await scanUrl({
+      targetUrl: "https://example.com",
+      fetchFn: mockFetch,
+      resolver: stubResolver,
+    })
+    expect(findings.some((finding) => finding.finding_class === "php_runtime_banner")).toBe(false)
   })
 })

@@ -8,8 +8,8 @@ import { MYRA_COPY } from "@lyrashield/myra"
   hidden
   aria-expanded="false"
   aria-controls="myra-panel"
-  class="fixed bottom-5 left-5 z-40 inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-bg-raised px-4 text-sm font-semibold text-text shadow-[0_12px_38px_-14px_rgba(0,0,0,.45)] transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:border-accent hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transform-none"
-  style="margin-bottom: env(safe-area-inset-bottom)"
+  class="fixed right-5 bottom-5 z-40 inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-bg-raised px-4 text-sm font-semibold text-text shadow-[0_12px_38px_-14px_rgba(0,0,0,.45)] transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:border-accent hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transform-none"
+  style="bottom: calc(1.25rem + var(--sticky-cta-height, 0px)); margin-bottom: env(safe-area-inset-bottom)"
 >
   <svg aria-hidden="true" viewBox="0 0 16 16" class="size-4" fill="none" stroke="currentColor" stroke-width="1.5">
     <path d="M14 9.5a1.5 1.5 0 0 1-1.5 1.5H5l-3 3V3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5Z" stroke-linejoin="round" />
@@ -28,7 +28,7 @@ import { MYRA_COPY } from "@lyrashield/myra"
   aria-label="Return to Myra support"
   class="fixed size-px overflow-hidden opacity-0"
 ></button>
-<div data-myra-turnstile class="fixed bottom-20 left-5 z-[60]"></div>
+<div data-myra-turnstile class="fixed right-5 bottom-20 z-[60]"></div>
 
 <section
   id="myra-panel"
@@ -36,7 +36,7 @@ import { MYRA_COPY } from "@lyrashield/myra"
   role="dialog"
   aria-modal="false"
   aria-label="Myra support"
-  class="fixed inset-0 z-50 flex flex-col bg-bg sm:inset-auto sm:bottom-6 sm:left-6 sm:z-40 sm:h-[min(620px,calc(100dvh-3rem))] sm:w-[min(420px,calc(100vw-2rem))] sm:overflow-hidden sm:rounded-2xl sm:border sm:border-border sm:bg-bg-raised sm:shadow-[0_28px_90px_-30px_rgba(0,0,0,.65)]"
+  class="fixed inset-0 z-50 flex flex-col bg-bg sm:inset-auto sm:right-6 sm:bottom-6 sm:z-40 sm:h-[min(620px,calc(100dvh-3rem))] sm:w-[min(420px,calc(100vw-2rem))] sm:overflow-hidden sm:rounded-2xl sm:border sm:border-border sm:bg-bg-raised sm:shadow-[0_28px_90px_-30px_rgba(0,0,0,.65)]"
 >
   <header class="flex items-center gap-3 border-b border-border bg-bg-raised px-4 py-3" style="padding-top: max(0.875rem, env(safe-area-inset-top))">
     <span aria-hidden="true" class="grid size-10 shrink-0 place-items-center rounded-xl border border-accent bg-accent-dim text-accent">
@@ -44,7 +44,7 @@ import { MYRA_COPY } from "@lyrashield/myra"
     </span>
     <div class="min-w-0">
       <p class="font-mono text-[10px] font-semibold tracking-[.16em] text-text-muted uppercase">LyraShield support</p>
-      <h2 class="text-base font-semibold leading-5 tracking-tight text-text">{MYRA_COPY.header}</h2>
+      <p class="text-base font-semibold leading-5 tracking-tight text-text">{MYRA_COPY.header}</p>
     </div>
     <div class="ml-auto flex items-center gap-1">
       <button
@@ -144,6 +144,18 @@ import { MYRA_COPY } from "@lyrashield/myra"
   const launcher = document.getElementById("myra-launcher")
   let pending: Promise<{ open: () => void }> | null = null
 
+  // Clear the whole conversion section, including its heading before the
+  // button enters view. Do not alter the open panel's visibility or state.
+  const conversions = new Set<Element>()
+  const conversionObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) conversions.add(entry.target)
+      else conversions.delete(entry.target)
+    }
+    launcher?.toggleAttribute("data-conversion-visible", conversions.size > 0)
+  })
+  document.querySelectorAll(".final-cta").forEach((section) => conversionObserver.observe(section))
+
   // The launcher is a dead affordance whenever the app's public Myra surface
   // is off — reveal it only after the status probe confirms it is live. Any
   // probe failure resolves to public:false and the launcher stays hidden.
@@ -175,6 +187,7 @@ import { MYRA_COPY } from "@lyrashield/myra"
   #myra-launcher[hidden] {
     display: none;
   }
+  #myra-launcher[data-conversion-visible] { visibility: hidden; pointer-events: none; }
 
   /* The mobile evidence tour uses the entire lower viewport for its active
      explanation; lift support clear of it while that chapter is pinned. */

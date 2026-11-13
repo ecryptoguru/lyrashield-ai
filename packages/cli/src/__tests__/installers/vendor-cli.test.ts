@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { execFile } from "node:child_process"
-import type { AgentEntry } from "@lyrashield/agent-registry"
+import { MCP_PACKAGE_SPEC, type AgentEntry } from "@lyrashield/agent-registry"
 import { installAgent } from "../../installers/install.js"
 
 vi.mock("node:child_process", () => ({
@@ -14,7 +14,7 @@ const API_KEY = "lsk_testkey123"
 // fixtures use the real registry argvs.
 const VENDOR_ARGV: Record<string, string[]> = {
   claude: ["mcp", "add"],
-  amp: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.11"],
+  amp: ["mcp", "add", "lyrashield", "--", "npx", "-y", MCP_PACKAGE_SPEC],
 }
 
 function fakeVendorAgent(command: string, args?: string[]): AgentEntry {

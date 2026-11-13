@@ -114,6 +114,7 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "GateVerdict",
   "AgentConnection",
   "AgentOperation",
+  "DelegatedScanProvenance",
   "LoopClosure",
   "SyncCursor",
   "ScanAttachment",
@@ -126,6 +127,18 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
  * removed, or renamed without updating exactly one of the two sets.
  */
 export const WORKSPACE_SCOPE_EXCLUSIONS = new Set<string>([
+  "UserScanSlot", // initiating-user RLS, independent of selected workspace
+  "ScanCapacityReservation", // account-owned retained accounting
+  // Durable-dispatch authority rows are guarded by the dedicated dispatch
+  // authority RLS role and its CI denial policy; the CI runtime role is denied
+  // every authority table. Their workspaceId is a correlation column for the
+  // authority transaction, never a tenant-facing read boundary.
+  "ScanDispatchOperation",
+  "ScanDispatchAttempt",
+  "ScanPhysicalExecution",
+  "ScanSupervisorJournalRecord",
+  "ScanExecutionActionIntent",
+  "ScanExecutionInvocationGuard",
   "WorkspaceMember",
   "OnboardingState",
   "WebhookEventTrack",
@@ -152,6 +165,7 @@ export const WORKSPACE_SCOPE_EXCLUSIONS = new Set<string>([
 // into account-RLS binding exactly like BillingAccount; `workspaceId` stays
 // nullable context and is never auto-injected.
 export const ACCOUNT_OWNED_MODELS = new Set<string>([
+  "ScanCapacityReservation",
   "BillingAccount",
   "UsageRecord",
   "MinutePack",
@@ -165,7 +179,7 @@ export const ACCOUNT_OWNED_MODELS = new Set<string>([
   "MyraAuditEvent",
 ])
 
-export const READ_OPS = new Set<string>([
+const READ_OPS = new Set<string>([
   "findMany",
   "findUnique",
   "findFirst",
@@ -182,7 +196,7 @@ export const READ_OPS = new Set<string>([
 // they target one row by unique id and routes already scope them via a prior
 // workspace-scoped read; leaving them out avoids surprising unique-where edge
 // cases. (S7)
-export const WRITE_SCOPE_OPS = new Set<string>(["updateMany", "deleteMany"])
+const WRITE_SCOPE_OPS = new Set<string>(["updateMany", "deleteMany"])
 
 type WorkspaceContext = {
   workspaceId: string | null
@@ -195,7 +209,7 @@ type WorkspaceContext = {
 // its extension reading an old store while reloaded transaction helpers bind a
 // new one, causing a protected write to escape its caller's transaction.
 // Only the storage instance is shared; request values remain async-local.
-const globalForWorkspace = globalThis as unknown as {
+const globalForWorkspace = globalThis as typeof globalThis & {
   lyrashieldWorkspaceStore?: AsyncLocalStorage<WorkspaceContext>
 }
 const workspaceStore =

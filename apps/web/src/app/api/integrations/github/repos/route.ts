@@ -1,8 +1,9 @@
+import { z } from "zod"
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { listInstallationRepos } from "@lyrashield/integrations"
+import { listInstallationRepos, listInstallationReposPage } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 
@@ -13,6 +14,19 @@ export async function GET(request: Request) {
   if (!workspaceId) {
     return NextResponse.json(
       { success: false, error: { code: "VALIDATION_ERROR", message: "workspaceId is required" } },
+      { status: 400 }
+    )
+  }
+
+  const pageParam = url.searchParams.get("page")
+  const page =
+    pageParam === null ? null : z.coerce.number().int().min(1).max(10_000).safeParse(pageParam)
+  if (page && !page.success) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: "page must be an integer from 1 to 10000" },
+      },
       { status: 400 }
     )
   }
@@ -43,20 +57,22 @@ export async function GET(request: Request) {
     }
 
     const installationId = Number(integration.externalId)
-    const repos = await listInstallationRepos(installationId)
+    const paged = page?.success ? await listInstallationReposPage(installationId, page.data) : null
+    const repos = paged ? paged.repositories : await listInstallationRepos(installationId)
 
+    const items = repos.map((r) => ({
+      id: r.id,
+      fullName: r.full_name,
+      name: r.name,
+      owner: r.owner.login,
+      defaultBranch: r.default_branch,
+      private: r.private,
+      htmlUrl: r.html_url,
+      installationId: String(installationId),
+    }))
     return NextResponse.json({
       success: true,
-      data: repos.map((r) => ({
-        id: r.id,
-        fullName: r.full_name,
-        name: r.name,
-        owner: r.owner.login,
-        defaultBranch: r.default_branch,
-        private: r.private,
-        htmlUrl: r.html_url,
-        installationId: String(installationId),
-      })),
+      data: paged ? { items, nextPage: paged.nextPage } : items,
     })
   } catch (error) {
     const authErr = authErrorResponse(error)

@@ -9,7 +9,6 @@
  */
 
 export {
-  issueLicenseForProviderOrder,
   issueSignedLicense,
   resolvePublishedFallbackBuild,
   resolveSigningPrivateKey,
@@ -21,17 +20,11 @@ export {
   generateRetrievalToken,
   hashRetrievalToken,
   encryptRetrievalKey,
-  sendLicenseIssuedEmail,
   sendLicenseRetrievalEmail,
   retrieveLicenseByToken,
   computeUpdateEligibleUntil,
   validateSeatCountForSku,
   machineCapForSku,
-  isIndividualSku,
-  isTeamSku,
-  INDIVIDUAL_MACHINE_CAP,
-  TEAM_MIN_SEATS,
-  RETRIEVAL_TOKEN_EXPIRY_DAYS,
   RETRIEVAL_TOKEN_EXPIRY_MS,
   FULFILLMENT_STATUS,
 } from "@lyrashield/billing"

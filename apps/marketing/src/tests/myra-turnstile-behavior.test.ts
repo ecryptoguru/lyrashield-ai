@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 interface TurnstileOptions {
   sitekey: string
+  action?: string
   size?: string
   appearance?: string
   execution?: string
@@ -182,6 +183,7 @@ describe("Turnstile challenge lifecycle", () => {
     await tick()
     const call = turnstile.renders[0]
     expect(call?.options.appearance).toBe("interaction-only")
+    expect(call?.options.action).toBe("lyrashield-public")
     expect(call?.options.execution).toBe("execute")
     expect(call?.options.size).toBe("flexible")
     expect(call?.options.sitekey).toBe("test-site-key")
@@ -338,9 +340,60 @@ describe("Turnstile challenge lifecycle", () => {
     turnstile.renders[0]?.options.callback?.("t")
     await expect(p2).resolves.toBe("t")
   })
+
+  it("a loaded script without the API fails closed and permits a later retry", async () => {
+    w.turnstile = undefined
+    const { getTurnstileToken } = await loadSession()
+    doc.hosts.push(turnstileHost())
+
+    const firstAttempt = getTurnstileToken()
+    await tick()
+    doc.head.children.find((child) => child.tagName === "SCRIPT")?.onload?.()
+    await expect(firstAttempt).resolves.toBeUndefined()
+
+    const retry = getTurnstileToken()
+    await tick()
+    const scripts = doc.head.children.filter((child) => child.tagName === "SCRIPT")
+    expect(scripts).toHaveLength(2)
+    w.turnstile = turnstile
+    scripts[1]?.onload?.()
+    await tick()
+    turnstile.renders[0]?.options.callback?.("fresh-proof")
+    await expect(retry).resolves.toBe("fresh-proof")
+  })
 })
 
 describe("session bootstrap deduplication", () => {
+  it("retries failed session issuance with a fresh challenge instead of its consumed proof", async () => {
+    const bodies: Array<{ turnstileToken: string }> = []
+    ;(globalThis as { fetch?: unknown }).fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return bodies.length === 1
+        ? Response.json(
+            {
+              error: {
+                code: "VERIFICATION_FAILED",
+                message: "Complete verification again, then retry.",
+              },
+            },
+            { status: 403 }
+          )
+        : Response.json({ data: { publicToken: "pub", sessionId: "sid" } })
+    })
+    const { ensureMyraSession } = await loadSession()
+    doc.hosts.push(turnstileHost())
+    const first = ensureMyraSession("https://api.test")
+    const rejected = expect(first).rejects.toThrow("Complete verification again, then retry.")
+    await tick()
+    turnstile.renders[0]?.options.callback?.("consumed-proof")
+    await rejected
+    const retry = ensureMyraSession("https://api.test")
+    await tick()
+    turnstile.renders[1]?.options.callback?.("fresh-proof")
+    await retry
+    expect(bodies.map((body) => body.turnstileToken)).toEqual(["consumed-proof", "fresh-proof"])
+  })
+
   it("mints a marketing public token without browser cookies", async () => {
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       expect(init?.credentials).toBe("omit")

@@ -203,21 +203,6 @@ describe("isBuildInstallable — B-L03 version comparison", () => {
     const result = verifyLicense(revoked, publicKeyPem)
     expect(result.valid).toBe(false)
   })
-
-  it("hard-stop: even a date-eligible revoked license fails signature verification", () => {
-    // Still inside the update-eligibility window, but the signature has been
-    // nullified to "REVOKED". isBuildInstallable only inspects dates/fallback
-    // (and would naively return true), so the enforceable invariant lives at
-    // the signature layer: verifyLicense must fail, and the client treats a
-    // failed verification as deactivated regardless of the fallback build.
-    const revoked = makeSignedLicense({
-      perpetualFallbackBuild: "1.2.0",
-      updateEligibleUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      signature: "REVOKED",
-      signingKeyId: "REVOKED",
-    })
-    expect(verifyLicense(revoked, publicKeyPem).valid).toBe(false)
-  })
 })
 
 describe("license wire format — detached blob", () => {

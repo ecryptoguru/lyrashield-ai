@@ -13,6 +13,24 @@ const props = {
   trialAvailable: true,
 }
 describe("BillingActions", () => {
+  it("labels Razorpay management as billing support even in the USD checkout region", () => {
+    const html = renderToString(
+      <BillingActions {...props} plan="PRO" selectedPlan="PRO" managementProvider="razorpay" />
+    )
+    expect(html).toContain("Billing support")
+    expect(html).toContain("Contact billing support for cancellation and payment help.")
+    expect(html).toContain('href="/billing/portal?workspaceId=ws"')
+    expect(html).not.toContain("Manage Subscription")
+  })
+
+  it("retains Polar subscription management even in the INR checkout region", () => {
+    const html = renderToString(
+      <BillingActions {...props} plan="PRO" managementProvider="polar" billingRegion="inr" />
+    )
+    expect(html).toContain("Manage Subscription")
+    expect(html).not.toContain("Billing support")
+  })
+
   it.each(["STARTER", "PRO", "LAUNCH_ASSURANCE"])(
     "keeps paid %s on subscription management",
     (plan) => {
@@ -46,6 +64,9 @@ describe("BillingActions", () => {
         expect(html).toContain(`Choose ${label}, ${interval} billing`)
     }
     expect(html).toContain("4,500<!-- --> agent-minutes / month")
+    expect(html).toContain(
+      'aria-label="Choose Starter, monthly billing, $29.00/mo — Monthly · $29.00/mo"'
+    )
   })
   it("labels prices in the server-resolved catalog currency without touching checkout", () => {
     // The chooser displays the catalog for the region the server resolved —

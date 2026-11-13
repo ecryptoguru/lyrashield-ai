@@ -80,6 +80,8 @@ export async function checkPayoutEligibility(affiliateId: string): Promise<Payou
     reasons.push("RazorpayX payouts are disabled")
   } else if (payoutMethod?.type === "payoneer") {
     reasons.push("Payoneer payouts are not approved")
+  } else if (payoutMethod && payoutMethod.type !== "razorpayx") {
+    reasons.push("Payout provider is not supported")
   }
 
   // Check tax form

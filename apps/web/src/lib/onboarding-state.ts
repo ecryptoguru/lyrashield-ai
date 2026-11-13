@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto"
 import { prisma } from "@lyrashield/db"
+import { deliverOnboardingWorkspaceAudit } from "./onboarding-workspace-audit"
 
 /**
  * Ensure a user has exactly one onboarding row even when the server component
@@ -24,6 +25,10 @@ export async function getOrCreateOnboardingState(userId: string) {
     where: { userId },
   })
   if (state) {
+    if (state.pendingWorkspaceCreatedAuditId) {
+      await deliverOnboardingWorkspaceAudit(userId, state.pendingWorkspaceCreatedAuditId)
+      return { ...state, pendingWorkspaceCreatedAuditId: null }
+    }
     return state
   }
 

@@ -42,9 +42,7 @@ export async function processRazorpayEvent(
       case "payment_link.paid":
         // Local license and affiliate effects run in their dedicated required
         // tracks. Billing records receipt without granting cloud entitlement.
-        if (
-          !resolveRazorpayCatalogEvent(event.event, event as unknown as Record<string, unknown>)
-        ) {
+        if (!resolveRazorpayCatalogEvent(event.event, event)) {
           return { handled: false, action: "payment_link.paid.unrelated", workspaceId: null }
         }
         return { handled: true, action: "payment_link.paid.received", workspaceId: null }
@@ -59,10 +57,7 @@ export async function processRazorpayEvent(
         const workspaceId = notes.workspaceId ?? null
         const accountId = notes.accountId ?? null
 
-        const catalog = resolveRazorpayCatalogEvent(
-          event.event,
-          event as unknown as Record<string, unknown>
-        )
+        const catalog = resolveRazorpayCatalogEvent(event.event, event)
         if (!catalog) {
           return { handled: false, action: "payment.captured.non_pack", workspaceId }
         }
@@ -117,10 +112,7 @@ export async function processRazorpayEvent(
           return { handled: false, action: "subscription.no_identity", workspaceId: null }
         }
 
-        const catalog = resolveRazorpayCatalogEvent(
-          event.event,
-          event as unknown as Record<string, unknown>
-        )
+        const catalog = resolveRazorpayCatalogEvent(event.event, event)
         if (catalog?.kind !== "plan") throw new Error("razorpay_subscription_catalog_mismatch")
 
         // These deliveries are evidence-bearing but must not create or alter

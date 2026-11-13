@@ -58,7 +58,7 @@ describe("BillingReturnNotice", () => {
         accountHasPaidPlan={false}
       />
     )
-    expect(html).toContain("The provider returned a canceled checkout status.")
+    expect(html).toContain("The provider returned a cancelled checkout status.")
     expect(html).toContain("Your current account state remains authoritative.")
     expect(html).not.toContain("Refresh billing status")
   })

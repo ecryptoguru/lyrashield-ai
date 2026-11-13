@@ -75,6 +75,9 @@ impl std::fmt::Display for VerifyError {
 struct ApiEnvelope<T> {
     success: bool,
     data: Option<T>,
+    /// Present on error responses. Part of the wire envelope; not read by the
+    /// success path, which reports its own typed errors.
+    #[allow(dead_code)]
     error: Option<serde_json::Value>,
 }
 

@@ -17,6 +17,8 @@ for (const coverage of ["0", "1"]) {
 const { writeFileSync } = require("node:fs")
 const reportPath = process.argv.find((arg) => arg.startsWith("--outputFile="))?.slice(13)
 if (!reportPath || process.argv.includes("--coverage") !== (process.env.LYRASHIELD_TEST_COVERAGE === "1")) process.exit(2)
+if (!process.argv.includes("--reporter=default") || !process.argv.includes("--reporter=json")) process.exit(2)
+console.error("Native Vitest diagnostic: Test timed out in 5000ms.")
 writeFileSync(reportPath, JSON.stringify({ testResults: [{ name: "sample.test.ts", assertionResults: [{ fullName: "sample suite reports the failing case", status: "failed", failureMessages: ["Error: expected true\\n    at sample.test.ts:4:3"] }] }] }))
 process.exit(1)
 `
@@ -38,6 +40,7 @@ process.exit(1)
       assert.equal(result.status, 1, result.stderr)
       assert.match(result.stderr, /sample suite reports the failing case/)
       assert.match(result.stderr, /at sample\.test\.ts:4:3/)
+      assert.match(result.stderr, /Native Vitest diagnostic: Test timed out in 5000ms/)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -69,6 +72,91 @@ test("CI suites that omit core do not try to read its report", () => {
     assert.equal(result.status, 0, result.stderr)
     assert.doesNotMatch(result.stderr, /Could not read core Vitest report/)
     assert.equal(readFileSync(join(dir, "calls"), "utf8"), "marketing\n")
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("CI ops omits only the two already verified native service suites", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lyrashield-ops-dedup-"))
+  try {
+    const node = join(dir, "node")
+    writeFileSync(
+      node,
+      `#!${process.execPath}\nrequire("node:fs").writeFileSync(process.env.OPS_ARGS, JSON.stringify(process.argv.slice(2)))\n`
+    )
+    chmodSync(node, 0o755)
+    const runner = fileURLToPath(new URL("../../../run-all-tests.mjs", import.meta.url))
+    for (const verified of ["0", "1"]) {
+      const argsPath = join(dir, `args-${verified}.json`)
+      const result = spawnSync(process.execPath, [runner], {
+        cwd: fileURLToPath(new URL("../../../", import.meta.url)),
+        env: {
+          ...process.env,
+          LYRASHIELD_TEST_SUITES: "ops",
+          LYRASHIELD_OPS_RUNTIME_ALREADY_VERIFIED: verified,
+          OPS_ARGS: argsPath,
+          PATH: `${dir}:${process.env.PATH}`,
+        },
+        encoding: "utf8",
+      })
+      assert.equal(result.status, 0, result.stderr)
+      const args = JSON.parse(readFileSync(argsPath, "utf8"))
+      if (verified === "0") {
+        assert.deepEqual(args, [
+          "--test",
+          ".github/scripts/tests/*.test.mjs",
+          "ops/monitoring/*.test.mjs",
+        ])
+      } else {
+        assert.ok(args.includes(".github/scripts/tests/webhook-cutover.test.mjs"))
+        assert.ok(args.includes(".github/scripts/tests/lighthouse-production.test.mjs"))
+        assert.ok(args.includes(".github/scripts/tests/webhook-deploy-dispatch.test.mjs"))
+        assert.ok(args.includes("ops/monitoring/*.test.mjs"))
+        assert.ok(
+          args.includes(".github/scripts/tests/webhook-cutover-verification.workflow.test.mjs")
+        )
+        assert.ok(args.every((arg) => !/webhook-(catalog|queue)\.runtime\.test\.mjs$/.test(arg)))
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("requested test suites execute sequentially and report wall time", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lyrashield-test-order-"))
+  try {
+    for (const command of ["pnpm", "vitest"]) {
+      const executable = join(dir, command)
+      writeFileSync(
+        executable,
+        `#!${process.execPath}\nconst fs=require("node:fs"); const name=process.argv[1].split("/").at(-1); fs.appendFileSync(process.env.SUITE_ORDER, "start:"+name+"\\n"); setTimeout(()=>fs.appendFileSync(process.env.SUITE_ORDER, "end:"+name+"\\n"), 40)\n`
+      )
+      chmodSync(executable, 0o755)
+    }
+    const runner = fileURLToPath(new URL("../../../run-all-tests.mjs", import.meta.url))
+    const result = spawnSync(process.execPath, [runner], {
+      cwd: fileURLToPath(new URL("../../../", import.meta.url)),
+      env: {
+        ...process.env,
+        CI: "",
+        RUNNER_TEMP: dir,
+        LYRASHIELD_TEST_SUITES: "marketing,core",
+        SUITE_ORDER: join(dir, "order"),
+        PATH: `${dir}:${process.env.PATH}`,
+      },
+      encoding: "utf8",
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /marketing tests exited with code 0 after \d+\.\d+s/)
+    assert.match(result.stdout, /core tests exited with code 0 after \d+\.\d+s/)
+    assert.deepEqual(readFileSync(join(dir, "order"), "utf8").trim().split("\n"), [
+      "start:pnpm",
+      "end:pnpm",
+      "start:vitest",
+      "end:vitest",
+    ])
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

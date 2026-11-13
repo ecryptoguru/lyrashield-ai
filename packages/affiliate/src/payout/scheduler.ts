@@ -8,7 +8,7 @@ import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { checkPayoutEligibility } from "./eligibility"
 import { requestPayout } from "./request"
-import { PAYOUT_DAY_OF_MONTH } from "../index"
+import { PAYOUT_DAY_OF_MONTH } from "../constants"
 import { createRazorpayXProvider } from "./providers/razorpayx"
 import { env } from "@lyrashield/config"
 
@@ -64,9 +64,7 @@ export async function payoutScheduler(): Promise<PayoutBatch[]> {
         ? "razorpayx"
         : providerType === "payoneer"
           ? "payoneer"
-          : providerType === "briskpe"
-            ? "briskpe"
-            : "manual"
+          : "manual"
 
     const result = await requestPayout({
       affiliateId: affiliate.id,
@@ -93,6 +91,7 @@ export async function payoutScheduler(): Promise<PayoutBatch[]> {
     select: {
       id: true,
       affiliateId: true,
+      idempotencyKey: true,
       amount: true,
       currency: true,
       affiliate: { select: { payoutMethod: true } },
@@ -117,6 +116,7 @@ export async function payoutScheduler(): Promise<PayoutBatch[]> {
     try {
       const result = await createRazorpayXProvider().send(
         payout.id,
+        payout.idempotencyKey,
         payout.amount.toString(),
         payout.currency,
         payout.affiliate.payoutMethod
@@ -137,9 +137,29 @@ export async function payoutScheduler(): Promise<PayoutBatch[]> {
           data: { providerPayoutId: result.providerPayoutId, failureCode: "PROVIDER_PENDING" },
         })
       } else if (result.rejected) {
-        await prisma.payout.updateMany({
-          where: { id: payout.id, status: "PROCESSING" },
-          data: { status: "FAILED", failureCode: "PROVIDER_REJECTED" },
+        await prisma.$transaction(async (tx) => {
+          const failed = await tx.payout.updateMany({
+            where: { id: payout.id, status: "PROCESSING" },
+            data: {
+              status: "FAILED",
+              failureCode: "PROVIDER_REJECTED",
+              ...(result.providerPayoutId ? { providerPayoutId: result.providerPayoutId } : {}),
+            },
+          })
+          if (failed.count === 0) return
+          const items = await tx.payoutItem.findMany({
+            where: { payoutId: payout.id, isReserveRelease: true },
+            select: { commissionId: true },
+          })
+          if (items.length === 0) return
+          await tx.commission.updateMany({
+            where: {
+              id: { in: items.map((item) => item.commissionId) },
+              status: "PAID",
+              reserveReleasedAt: { not: null },
+            },
+            data: { reserveReleasedAt: null, reserveReleasedAmount: null },
+          })
         })
       } else {
         await prisma.payout.updateMany({

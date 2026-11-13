@@ -3,6 +3,7 @@ export const INTERNAL_ACCOUNTING_EVENT_STAGES = new Set([
   "llm_usage",
   "budget_exceeded",
   "billing_settlement_intent",
+  "terminal_cost_legacy_expense_reviewed",
 ])
 
 export function filterDashboardScanEvents<T extends { stage: string }>(events: readonly T[]): T[] {

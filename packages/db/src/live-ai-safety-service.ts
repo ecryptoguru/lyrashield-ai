@@ -169,6 +169,31 @@ function requireDomain(value: string): string {
   return domain
 }
 
+/**
+ * Read-only proof lookup shared by scan admission and other domain-verification
+ * consumers. Bind the read to workspace RLS as well as the explicit workspace
+ * predicate so a valid proof can never be borrowed across tenants.
+ */
+export async function findCurrentDomainProof(
+  workspaceId: string,
+  url: string | null | undefined
+): Promise<{ domain: string | null; verified: boolean }> {
+  const domain = url ? normalizeDomainForProof(url) : null
+  if (!domain) return { domain, verified: false }
+  const proof = await withWorkspaceRLS(workspaceId, (tx) =>
+    tx.targetDomainVerification.findFirst({
+      where: {
+        workspaceId,
+        domain,
+        status: "VERIFIED",
+        expiresAt: { gt: new Date() },
+      },
+      select: { id: true },
+    })
+  )
+  return { domain, verified: Boolean(proof) }
+}
+
 export async function issueDnsDomainVerification(input: {
   workspaceId: string
   domain: string

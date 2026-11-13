@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { findingListItemSchema } from "@/lib/api-schemas"
+import { FINDINGS_LIST_CONTEXT_STORAGE_PREFIX } from "@/lib/findings-list-session-storage"
 import type { FindingListItem } from "./findings-client"
 
 /** Session-only navigation hint. Fresh server data remains authoritative. */
@@ -33,20 +34,7 @@ export function findingsContextKey(
   workspaceId: string,
   context: { filter: string; sort: string; scanId: string; target: string; q: string }
 ): string {
-  return `lyrashield:findings-list:${workspaceId}:${context.filter}:${context.sort}:${context.scanId}:${context.target}:${context.q}`
-}
-
-export function sameListContext(
-  a: { filter: string; sort: string; scanId: string; target: string; q: string },
-  b: { filter: string; sort: string; scanId: string; target: string; q: string }
-): boolean {
-  return (
-    a.filter === b.filter &&
-    a.sort === b.sort &&
-    a.scanId === b.scanId &&
-    a.target === b.target &&
-    a.q === b.q
-  )
+  return `${FINDINGS_LIST_CONTEXT_STORAGE_PREFIX}${workspaceId}:${context.filter}:${context.sort}:${context.scanId}:${context.target}:${context.q}`
 }
 
 export function saveFindingsListContext(key: string, context: FindingsListContext): void {

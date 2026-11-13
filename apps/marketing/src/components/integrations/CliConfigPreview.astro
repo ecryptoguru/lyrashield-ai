@@ -1,0 +1,45 @@
+---
+import { getAgent, getPublishedCliInstallCommand } from "@lyrashield/agent-registry"
+
+interface Props {
+  agentId: string
+  scope?: "global" | "project"
+}
+
+const { agentId, scope } = Astro.props
+const agent = getAgent(agentId)
+const baseCommand = agent ? getPublishedCliInstallCommand(agent) : null
+const installCommand = baseCommand
+  ? [baseCommand, scope ? "--" + scope : null].filter(Boolean).join(" ")
+  : null
+const previewCommand = installCommand ? installCommand + " --dry-run" : null
+---
+
+{installCommand ? (
+  <>
+    <h2>Install with the pinned CLI</h2>
+    <p>
+      CLI 0.2.14 has a matching installer for this client. Sign in first with{" "}
+      <code>npx -y lyrashield@0.2.14 login --oauth</code> for local stdio. Review the planned
+      changes before writing:
+    </p>
+    <pre><code>{previewCommand}</code></pre>
+    <p>When the preview is correct, run the installer:</p>
+    <pre><code>{installCommand}</code></pre>
+    <p>
+      The installer updates LyraShield's entry and preserves unrelated configuration. You can also
+      use the manual snippet below. Restart or reload the client and complete a read-only
+      authenticated call; an installed config entry alone does not prove client discovery.
+    </p>
+  </>
+) : (
+  <>
+    <h2>Manual configuration</h2>
+    <p>
+      No matching CLI installer is recorded for this client's configuration contract. Use the
+      manual snippet below and merge only LyraShield's entry, preserving existing servers, comments
+      where supported, and the file's current path and symlinks. Restart or reload the client and
+      complete a read-only authenticated call; an entry alone does not prove client discovery.
+    </p>
+  </>
+)}

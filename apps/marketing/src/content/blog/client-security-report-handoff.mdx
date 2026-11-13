@@ -15,7 +15,7 @@ faq:
   - q: "Should the client report include proof-of-concept details?"
     a: "Include the minimum safe detail needed for an authorized engineer to understand and reproduce the condition. Move sensitive requests, credentials, personal data, destructive steps or target coordinates into a more restricted evidence channel."
   - q: "How should retest status appear?"
-    a: "Name the fixed target, method, applicable coverage, date, result and limitations. Keep retest-confirmed separate from independently verified and show an incomplete or blocked retest as inconclusive rather than fixed."
+    a: "Name the fixed target, method, applicable coverage, date, result and limitations. Keep retest-confirmed separate from detection and show an incomplete or blocked retest as inconclusive rather than fixed."
   - q: "How should a security handoff report be shared?"
     a: "Use an access-controlled channel with named recipients, appropriate retention, version history and a revocation path. Avoid public links and ordinary email attachments for reports containing sensitive architecture or vulnerability evidence."
 ---
@@ -98,8 +98,7 @@ A technical finding should include:
 
 Keep evidence states precise:
 
-- **Detected:** a credible observation exists, but independent evidence is incomplete.
-- **Independently verified:** separate evidence supports the condition under recorded prerequisites.
+- **Detected:** a credible observation exists, but supporting evidence is incomplete.
 - **Retest-confirmed:** a fresh applicable check against the changed target did not observe the original condition.
 - **Inconclusive:** coverage or evidence was insufficient to decide.
 

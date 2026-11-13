@@ -20,7 +20,6 @@ vi.mock("@lyrashield/auth/server", () => ({
 }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { billing: { manage: "billing:manage" } } }))
 vi.mock("@lyrashield/logger", async () => (await import("../../../__tests__/mocks")).loggerModule())
-vi.mock("@lyrashield/affiliate", () => ({ resolveAttribution: vi.fn().mockResolvedValue(null) }))
 vi.mock("@/lib/rate-limit", () => ({
   checkBillingCheckoutRateLimit: vi.fn(() => ({ limited: false })),
   claimBillingCheckoutCreation: vi.fn(() => mocks.checkoutClaim),
@@ -146,5 +145,37 @@ describe("Cloud checkout admission", () => {
     mocks.checkoutClaim = "duplicate"
     expect((await POST(request())).status).toBe(409)
     expect(mocks.createPolar).not.toHaveBeenCalled()
+  })
+
+  it("attaches no affiliate metadata while new admission is frozen", async () => {
+    // A promo code that previously resolved to an approved affiliate is the
+    // exact input that used to add affiliate_id and click_id to the metadata.
+    expect((await POST(request({ promoCode: "AFFCODE1" }))).status).toBe(200)
+
+    const metadata = mocks.createPolar.mock.calls[0]![0].metadata as Record<string, unknown>
+    expect(metadata).not.toHaveProperty("affiliate_id")
+    expect(metadata).not.toHaveProperty("click_id")
+    expect(metadata).not.toHaveProperty("promo_code")
+    // The promo code keeps its published checkout meaning.
+    expect(metadata.promoCode).toBe("AFFCODE1")
+  })
+
+  it("attaches no affiliate metadata on the Razorpay rail either", async () => {
+    mocks.provider = "razorpay"
+    expect((await POST(request({ promoCode: "AFFCODE1" }))).status).toBe(200)
+
+    // The Razorpay client takes `notes`, not `metadata`. The old assertion read
+    // `metadata` back as undefined and vitest's property matcher threw on it.
+    // Read the payload the client really receives, guard the absent case so it
+    // cannot throw, then assert no affiliate key is present.
+    const razorpayCall = mocks.createRazorpay.mock.calls[0]![0] as Record<string, unknown>
+    const notes: Record<string, unknown> =
+      (razorpayCall.notes as Record<string, unknown> | undefined) ?? {}
+    expect(notes).not.toHaveProperty("affiliate_id")
+    expect(notes).not.toHaveProperty("click_id")
+    expect(notes).not.toHaveProperty("promo_code")
+    // The promo code keeps its published checkout meaning, which also proves
+    // this reads the real payload rather than an empty fallback.
+    expect(notes.promoCode).toBe("AFFCODE1")
   })
 })

@@ -4,8 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { authClient } from "@lyrashield/auth"
-import { invalidateAnalyticsPreference } from "@/lib/analytics"
+import { signOutAndClearSessionData } from "@/lib/sign-out"
 import { LogOut } from "lucide-react"
 import { Button, cn } from "@lyrashield/ui"
 import { WorkspaceSwitcher } from "./workspace-switcher"
@@ -139,9 +138,8 @@ export function V2Sidebar({
   }
 
   async function handleSignOut() {
-    const result = await authClient.signOut()
+    const result = await signOutAndClearSessionData()
     if (result.error) return
-    invalidateAnalyticsPreference()
     router.push("/sign-in")
     router.refresh()
   }
@@ -170,7 +168,7 @@ export function V2Sidebar({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="block text-[15px] font-bold tracking-tight">LyraShield AI</span>
-              <span className="border-primary/50 bg-primary/10 text-primary rounded border px-1 py-0.5 text-[9px] font-semibold tracking-[0.12em] uppercase">
+              <span className="border-primary/50 bg-primary/10 text-primary rounded border px-1 py-0.5 text-xs font-semibold tracking-[0.12em] uppercase">
                 Open beta
               </span>
             </div>

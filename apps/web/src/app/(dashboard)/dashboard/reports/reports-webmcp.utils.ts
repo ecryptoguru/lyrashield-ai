@@ -85,7 +85,7 @@ function resolveVisibleReport(
   return reports[0]!
 }
 
-export interface ScanReportOutput {
+interface ScanReportOutput {
   reportId: string
   title: string
   type: string

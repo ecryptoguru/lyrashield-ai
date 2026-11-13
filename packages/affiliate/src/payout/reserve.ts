@@ -6,7 +6,7 @@
  */
 
 import { prisma } from "@lyrashield/db"
-import { DEFAULT_RESERVE_PCT, DEFAULT_RESERVE_DAYS } from "../index"
+import { DEFAULT_RESERVE_PCT, DEFAULT_RESERVE_DAYS } from "../constants"
 
 export interface ReserveInfo {
   /** Whether the reserve is currently active. */

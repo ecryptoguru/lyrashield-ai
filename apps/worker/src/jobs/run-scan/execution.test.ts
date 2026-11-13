@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { lstat, readFile, rm } from "node:fs/promises"
+import { join } from "node:path"
+import { engineWorkspacePath } from "../../engine/workspace-path"
+import { createHash, randomUUID } from "node:crypto"
 
 const mocks = vi.hoisted(() => ({
+  assertColdDatabaseEpoch: vi.fn(),
+  logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   prisma: {
     targetDomainVerification: { findFirst: vi.fn() },
   },
   addScanEvent: vi.fn(),
   uploadEncryptedArtifact: vi.fn(),
+  readEncryptedArtifact: vi.fn(),
+  resolveScanAttachments: vi.fn(),
   authorizeDeterministicRetest: vi.fn(),
   checkoutDeterministicRetest: vi.fn(),
   fetchRelayAudit: vi.fn(),
@@ -17,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   interpretExitCode: vi.fn(),
   resolveEngineProfile: vi.fn(),
   runEngine: vi.fn(),
+  prepareRepositoryAuth: vi.fn(),
   resolveScanBudgetUsd: vi.fn(),
   requireEngineModel: vi.fn(),
   resolveEngineRuntimeBudgetMs: vi.fn(),
@@ -32,16 +41,21 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
+vi.mock("../../cold-database-epoch", () => ({
+  assertColdDatabaseEpoch: mocks.assertColdDatabaseEpoch,
+}))
 vi.mock("@lyrashield/evidence-storage", () => ({
   uploadEncryptedArtifact: mocks.uploadEncryptedArtifact,
+  readEncryptedArtifact: mocks.readEncryptedArtifact,
 }))
 vi.mock("@lyrashield/db", () => ({
   addScanEvent: mocks.addScanEvent,
+  resolveScanAttachments: mocks.resolveScanAttachments,
   prisma: mocks.prisma,
   resolveAuthenticatedAssessmentAuthorization: mocks.resolveAuthenticatedAssessmentAuthorization,
 }))
 vi.mock("@lyrashield/logger", () => ({
-  logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
+  logger: mocks.logger,
 }))
 vi.mock("@lyrashield/security", () => ({
   buildUrlTargetInstruction: vi.fn(() => "instruction"),
@@ -60,6 +74,9 @@ vi.mock("../../engine/relay-client", () => ({
   resolveSpecServerHosts: mocks.resolveSpecServerHosts,
   revokeRelayGrant: mocks.revokeRelayGrant,
 }))
+vi.mock("../../engine/repository-auth", () => ({
+  prepareRepositoryAuth: mocks.prepareRepositoryAuth,
+}))
 vi.mock("../../engine/runner", () => ({
   interpretExitCode: mocks.interpretExitCode,
   resolveEngineProfile: mocks.resolveEngineProfile,
@@ -71,6 +88,16 @@ vi.mock("../../engine/command-builder", () => ({
 vi.mock("./lifecycle-utils", () => ({
   requireEngineModel: mocks.requireEngineModel,
   resolveEngineRuntimeBudgetMs: mocks.resolveEngineRuntimeBudgetMs,
+  enterEngineBillablePhase: async (scanId: string, markStarted: () => void) => {
+    await mocks.addScanEvent(
+      scanId,
+      "billable_boundary",
+      "info",
+      "Automatic retries disabled before provider-billable analysis",
+      { retryPolicy: "fresh_scan_required" }
+    )
+    markStarted()
+  },
 }))
 vi.mock("./auth-session", () => ({
   resolveRelaySessionBinding: mocks.resolveRelaySessionBinding,
@@ -156,6 +183,91 @@ describe("executeScanTarget relay lifecycle", () => {
     mocks.runEngine.mockResolvedValue(engineResult)
   })
 
+  it.each(["changed", "missing", "unavailable"])(
+    "blocks a new paid claim and engine dispatch when the database epoch is %s",
+    async () => {
+      mocks.assertColdDatabaseEpoch.mockRejectedValue(new Error("Database admission closed"))
+      const input = params()
+      await expect(executeScanTarget(input)).rejects.toThrow("Database admission closed")
+      expect(input.markBillablePhaseStarted).not.toHaveBeenCalled()
+      expect(mocks.addScanEvent.mock.calls.some((call) => call[1] === "billable_boundary")).toBe(
+        false
+      )
+      expect(mocks.registerRelayGrant).not.toHaveBeenCalled()
+      expect(mocks.runEngine).not.toHaveBeenCalled()
+    }
+  )
+
+  it("rechecks the database epoch after the paid claim before native engine dispatch", async () => {
+    mocks.assertColdDatabaseEpoch
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("Database admission closed"))
+    const input = params()
+    await expect(executeScanTarget(input)).rejects.toThrow("Database admission closed")
+    expect(input.markBillablePhaseStarted).toHaveBeenCalledOnce()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledOnce()
+  })
+
+  it("prepares private Git credentials before billable work and sends a credential-free canonical URL", async () => {
+    const repositoryAuth = { repoFullName: "owner/private", token: randomUUID() }
+    mocks.prepareRepositoryAuth.mockResolvedValue(repositoryAuth)
+    const input = params({
+      target: {
+        ...targetFixture,
+        type: "REPO",
+        repoProvider: "github",
+        repoFullName: "owner/private",
+        installationId: "123",
+        url: null,
+      },
+      urlEngineBacked: false,
+    })
+    await executeScanTarget(input)
+    expect(mocks.prepareRepositoryAuth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        target: input.target,
+        scanRuntimeBudgetMs: 300_000,
+      })
+    )
+    expect(mocks.runEngine).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repositoryAuth,
+        target: expect.objectContaining({ repoUrl: "https://github.com/owner/private.git" }),
+      }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      undefined
+    )
+    expect(mocks.prepareRepositoryAuth.mock.invocationCallOrder[0]).toBeLessThan(
+      input.markBillablePhaseStarted.mock.invocationCallOrder[0]!
+    )
+  })
+
+  it("never enters billable work or launches the engine after repository authorization fails", async () => {
+    mocks.prepareRepositoryAuth.mockRejectedValue(
+      new Error("Repository authorization deadline exhausted")
+    )
+    const input = params({
+      target: {
+        ...targetFixture,
+        type: "REPO",
+        repoProvider: "github",
+        repoFullName: "owner/private",
+        installationId: "123",
+        url: null,
+      },
+      urlEngineBacked: false,
+    })
+    await expect(executeScanTarget(input)).rejects.toThrow(
+      "Repository authorization deadline exhausted"
+    )
+    expect(input.markBillablePhaseStarted).not.toHaveBeenCalled()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+
   it("revokes the relay grant in finally when the engine throws", async () => {
     mocks.runEngine.mockRejectedValue(new Error("engine crashed"))
 
@@ -163,7 +275,10 @@ describe("executeScanTarget relay lifecycle", () => {
 
     // Audit is drained before the grant dies; revocation still runs.
     expect(mocks.fetchRelayAudit).toHaveBeenCalledWith("scan-1", relayConfig)
-    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig)
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+      grant: "grant-1",
+      ownerId: mocks.registerRelayGrant.mock.calls[0]?.[4],
+    })
     expect(mocks.fetchRelayAudit.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.revokeRelayGrant.mock.invocationCallOrder[0]!
     )
@@ -179,14 +294,20 @@ describe("executeScanTarget relay lifecycle", () => {
     expect(mocks.uploadEncryptedArtifact).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: "ws-1", type: "relay_audit" })
     )
-    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig)
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+      grant: "grant-1",
+      ownerId: mocks.registerRelayGrant.mock.calls[0]?.[4],
+    })
   })
 
   it("revokes the grant after a successful engine run too", async () => {
     const result = await executeScanTarget(params())
 
     expect(result).toMatchObject({ ok: true })
-    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig)
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+      grant: "grant-1",
+      ownerId: mocks.registerRelayGrant.mock.calls[0]?.[4],
+    })
   })
 
   it("cleans a deterministic checkout when event persistence fails before handoff", async () => {
@@ -250,6 +371,237 @@ describe("executeScanTarget relay lifecycle", () => {
     expect(mocks.runEngine).not.toHaveBeenCalled()
   })
 
+  it.each([5_000, 15_000])(
+    "includes %i ms of relay setup in the claimed runtime budget",
+    async (delay) => {
+      let elapsed = 0
+      mocks.resolveEngineRuntimeBudgetMs.mockReturnValue(15_000)
+      mocks.registerRelayGrant.mockImplementationOnce(async () => {
+        elapsed += delay
+      })
+      const input = params({ elapsedScanMs: () => elapsed })
+      const result = await executeScanTarget(input)
+      if (delay < 15_000) {
+        expect(result.ok).toBe(true)
+        expect(mocks.runEngine.mock.calls[0]?.[2]).toBe(15_000 - delay)
+      } else {
+        expect(result).toMatchObject({
+          ok: false,
+          noEngineDispatchAfterClaim: true,
+          result: { errorCategory: "TIMEOUT" },
+        })
+        expect(input.markGlobalScanTimeout).toHaveBeenCalledOnce()
+        expect(mocks.runEngine).not.toHaveBeenCalled()
+      }
+      expect(mocks.revokeRelayGrant).toHaveBeenCalledOnce()
+    }
+  )
+
+  it("does not dispatch when the final forced status read fails after claim", async () => {
+    const isScanCancelled = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockRejectedValueOnce(new Error("status unavailable"))
+    const result = await executeScanTarget(params({ isScanCancelled }))
+    expect(isScanCancelled.mock.calls).toEqual([[true], [true]])
+    expect(result).toMatchObject({
+      ok: false,
+      noEngineDispatchAfterClaim: true,
+      result: { errorCategory: "SCAN_STATUS_UNAVAILABLE" },
+    })
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledOnce()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+
+  it("keeps plaintext off disk until claim and removes the owner's published input on a late cancel", async () => {
+    const scanId = randomUUID(),
+      root = engineWorkspacePath(scanId),
+      directory = join(root, "attachments")
+    const content = Buffer.from("owner-private attachment"),
+      checksum = createHash("sha256").update(content).digest("hex")
+    const plan = buildScanExecutionPlan({
+      workflow: "REVIEW_TARGET",
+      targetType: "WEB_APP",
+      mode: "STANDARD",
+      attachmentIds: ["att-one"],
+    })
+    mocks.resolveScanAttachments.mockResolvedValue([
+      {
+        id: "att-one",
+        filename: "a.txt",
+        mediaType: "text/plain",
+        storageUri: "fixture",
+        checksum,
+        byteLength: content.byteLength,
+      },
+    ])
+    mocks.readEncryptedArtifact.mockResolvedValue({ content, checksum })
+    let registered = false,
+      checkedPublished = false
+    mocks.addScanEvent.mockImplementation(async (_id, stage) => {
+      if (stage === "billable_boundary")
+        await expect(lstat(root)).rejects.toMatchObject({ code: "ENOENT" })
+      return { id: "event" }
+    })
+    mocks.registerRelayGrant.mockImplementationOnce(async () => {
+      registered = true
+    })
+    try {
+      const result = await executeScanTarget(
+        params({
+          scanId,
+          executionPlan: plan,
+          isScanCancelled: async (force) => {
+            expect(force).toBe(true)
+            if (!registered) return false
+            expect(await readFile(join(directory, "att-one-a.txt"))).toEqual(content)
+            checkedPublished = true
+            return true
+          },
+        })
+      )
+      expect(checkedPublished).toBe(true)
+      expect(result).toMatchObject({
+        ok: false,
+        noEngineDispatchAfterClaim: true,
+        result: { errorCategory: "CANCELLED" },
+      })
+      await expect(lstat(directory)).rejects.toMatchObject({ code: "ENOENT" })
+      expect(mocks.revokeRelayGrant).toHaveBeenCalledOnce()
+      expect(mocks.runEngine).not.toHaveBeenCalled()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("registers only the authorized retry after a confirmed paid-claim rollback", async () => {
+    const rollback = Object.assign(new Error("claim rolled back"), { code: "P2034" })
+    let rejectClaim = true
+    mocks.addScanEvent.mockImplementation(async (_scanId, type) => {
+      if (type === "billable_boundary" && rejectClaim) {
+        rejectClaim = false
+        throw rollback
+      }
+      return { id: "event" }
+    })
+    await expect(executeScanTarget(params())).rejects.toBe(rollback)
+    expect(mocks.registerRelayGrant).not.toHaveBeenCalled()
+    expect(mocks.revokeRelayGrant).not.toHaveBeenCalled()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+
+    const retry = params()
+    await expect(executeScanTarget(retry)).resolves.toMatchObject({ ok: true })
+    expect(mocks.registerRelayGrant).toHaveBeenCalledTimes(1)
+    expect(retry.markBillablePhaseStarted.mock.invocationCallOrder[0]!).toBeLessThan(
+      mocks.registerRelayGrant.mock.invocationCallOrder[0]!
+    )
+    expect(mocks.runEngine).toHaveBeenCalledTimes(1)
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledTimes(1)
+  })
+
+  it("never activates a relay or dispatches an engine when the paid claim is indeterminate or held", async () => {
+    const unknown = new Error("commit acknowledgement lost")
+    const held = new Error("paid claim held for reconciliation")
+    let claims = 0
+    mocks.addScanEvent.mockImplementation(async (_scanId, type) => {
+      if (type === "billable_boundary") throw ++claims === 1 ? unknown : held
+      return { id: "event" }
+    })
+    await expect(executeScanTarget(params())).rejects.toBe(unknown)
+    await expect(executeScanTarget(params())).rejects.toBe(held)
+    expect(mocks.registerRelayGrant).not.toHaveBeenCalled()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+    expect(mocks.revokeRelayGrant).not.toHaveBeenCalled()
+  })
+
+  it("keeps independent cleanup owners for duplicate deliveries with identical minted grants", async () => {
+    await executeScanTarget(params())
+    await executeScanTarget(params())
+    const owners = mocks.registerRelayGrant.mock.calls.map((call) => call[4])
+    expect(owners).toHaveLength(2)
+    expect(new Set(owners).size).toBe(2)
+    for (const ownerId of owners) {
+      expect(ownerId).toMatch(/^[0-9a-f-]{36}$/)
+      expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+        ownerId,
+        grant: "grant-1",
+      })
+      expect(
+        JSON.stringify([mocks.runEngine.mock.calls, mocks.addScanEvent.mock.calls])
+      ).not.toContain(ownerId)
+    }
+  })
+
+  it("revokes when relay registration has an ambiguous failure", async () => {
+    mocks.registerRelayGrant.mockRejectedValueOnce(new Error("RELAY_REGISTRATION_FAILED"))
+
+    await expect(executeScanTarget(params())).resolves.toMatchObject({
+      ok: false,
+      result: { errorCategory: "RELAY_SCOPE_UNAVAILABLE" },
+    })
+
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+      grant: "grant-1",
+      ownerId: mocks.registerRelayGrant.mock.calls[0]?.[4],
+    })
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+
+  it("keeps proof of no dispatch when the relay rejection cannot be audited", async () => {
+    mocks.registerRelayGrant.mockRejectedValueOnce(new Error("acknowledgement lost"))
+    mocks.addScanEvent.mockImplementation(async (_id, type) => {
+      if (type === "engine_skipped") throw new Error("audit unavailable")
+      return { id: "event" }
+    })
+    await expect(executeScanTarget(params())).resolves.toMatchObject({
+      ok: false,
+      noEngineDispatchAfterClaim: true,
+      result: { errorCategory: "RELAY_SCOPE_UNAVAILABLE" },
+    })
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledOnce()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+
+  it("revokes after relay audit failure without masking it when cleanup fails", async () => {
+    mocks.addScanEvent.mockImplementation(async (_scanId, eventName) => {
+      if (eventName === "relay_scope") throw new Error("relay scope audit unavailable")
+      return { id: "evt-1" }
+    })
+    mocks.revokeRelayGrant.mockRejectedValueOnce(new Error("revoke transport failed"))
+    mocks.logger.error.mockImplementationOnce(() => {
+      throw new Error("cleanup log unavailable")
+    })
+
+    await expect(executeScanTarget(params())).resolves.toMatchObject({
+      ok: false,
+      result: {
+        errorCategory: "RELAY_SCOPE_UNAVAILABLE",
+        errorMessage: "Could not establish relay scope for this verified target.",
+      },
+    })
+
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+      grant: "grant-1",
+      ownerId: mocks.registerRelayGrant.mock.calls[0]?.[4],
+    })
+    expect(mocks.addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "engine_skipped",
+      "error",
+      "Relay scope could not be established",
+      expect.objectContaining({ error: "relay scope audit unavailable" })
+    )
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "Failed to revoke relay grant after setup failure",
+      {
+        scanId: "scan-1",
+        setupErrorType: "Error",
+        cleanupErrorType: "Error",
+      }
+    )
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+
   it("forwards the stored execution plan into the engine command config", async () => {
     const plan = buildScanExecutionPlan({
       workflow: "REVIEW_CHANGES",
@@ -285,7 +637,7 @@ describe("executeScanTarget relay lifecycle", () => {
       "scan-1",
       expect.anything(),
       expect.anything(),
-      expect.anything()
+      undefined
     )
     // No relay grant is minted for a repository Review Changes run.
     expect(mocks.mintScanRelayGrant).not.toHaveBeenCalled()
@@ -320,7 +672,7 @@ describe("executeScanTarget relay lifecycle", () => {
       "scan-1",
       120_000,
       expect.anything(),
-      expect.anything()
+      undefined
     )
   })
 })
@@ -409,7 +761,8 @@ describe("executeScanTarget authenticated staging beta", () => {
       "scan-1",
       "grant-1",
       relayConfig,
-      sessionBinding
+      sessionBinding,
+      expect.any(String)
     )
     expect(mocks.resolveRelaySessionBinding).toHaveBeenCalledWith(
       authorization,
@@ -421,7 +774,7 @@ describe("executeScanTarget authenticated staging beta", () => {
       "scan-1",
       expect.anything(),
       expect.anything(),
-      expect.anything()
+      undefined
     )
     // The binding receipt records references, never session material.
     const boundEvent = mocks.addScanEvent.mock.calls.find(
