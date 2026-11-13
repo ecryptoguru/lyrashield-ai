@@ -199,6 +199,76 @@ function verifyControllerImages(fleet) {
 }
 
 /** Test seams are explicit trusted program dependencies; live defaults are the actual readers. */
+// Authenticated evidence artifacts are hash-addressed and owner/source bound.
+// The fleet hash cross-binds every supporting record to the same fleet.
+async function evidenceArtifact(deps, id, schema, identity, fleetHash) {
+  const artifact = await deps.readArtifact("evidence", id)
+  assert.equal(hash(artifact.raw), id)
+  assert.ok(Buffer.byteLength(artifact.raw) <= 4096)
+  const parsed = schema.parse(JSON.parse(artifact.raw))
+  assert.equal(parsed.owner, artifact.owner)
+  assert.equal(parsed.owner, identity.owner)
+  assert.equal(parsed.source, artifact.source)
+  assert.equal(parsed.source, identity.source)
+  if (fleetHash) assert.equal(parsed.fleetSha256, fleetHash)
+  return parsed
+}
+
+// The rollback pair must be a different, qualified artifact set than the fleet
+// being issued, so recovery can never restore the same bytes.
+async function qualifiedRollbackArtifact(deps, selectorRollback, fleet, migration) {
+  const archived = await deps.readArtifact("qualified-fleet", selectorRollback)
+  assert.equal(hash(archived.raw), selectorRollback)
+  const rollback = JSON.parse(archived.raw)
+  validateQualifiedFleetArchive(rollback)
+  assert.equal(rollback.pair.owner, archived.owner)
+  assert.equal(rollback.pair.productRevision, archived.source)
+  assert.equal(rollback.pair.engineRevision, fleet.engineRevision)
+  assert.equal(rollback.controlPlane.migrationChecksum, migration.baselineMigrationChecksum)
+  assert.notEqual(rollback.pair.workerDigest, fleet.workerDigest)
+  await deps.verifyImages(rollback.pair)
+  await deps.verifyControllers({ ...rollback.pair, ...rollback.controlPlane })
+  return rollback
+}
+
+// Builds the canonical record from authenticated evidence only. Every
+// assertion here is a provenance or identity binding; nothing is defaulted.
+function buildRecord({ selector, authenticated, source, native, fleet, fleetHash, journal, migration, policy, inventory, rollback, clock }) {
+  const [runId, attempt] = source.owner.split(":")
+  return {
+    kind: "runtime-fleet-qualification",
+    schema: "lyrashield-runtime-fleet-qualification/1",
+    purpose: "exact-artifact-release",
+    scope: "disposable-linux",
+    fleet,
+    sourceTree: native.sourceTree,
+    architecture: native.architecture,
+    evidence: {
+      native: selector.native,
+      migration: selector.migration,
+      policy: selector.policy,
+      journal: selector.journal,
+      rollback: selector.rollback,
+      inventory: hash(canonicalJson(inventory)),
+    },
+    journal: {
+      sealHash: journal.sealHash,
+      recoverySnapshotSha256: journal.recoverySnapshotSha256,
+      pinEnvelopeHash: journal.pinEnvelopeHash,
+      observedControlCasAckHash: journal.observedControlCasAckHash,
+    },
+    issuer: {
+      repositoryId: "1286618458",
+      repositoryOwnerId: "116722580",
+      workflow: ".github/workflows/issue-runtime-qualification.yml",
+      source: source.source,
+      runId,
+      attempt,
+    },
+    issuedAt: Math.floor(clock() / 1000),
+  }
+}
+
 export function createProtectedRuntimeFleetIssuer({
   readIdentity = readQualificationIssuerToken,
   readSource = verifyCurrentSource,
@@ -212,18 +282,57 @@ export function createProtectedRuntimeFleetIssuer({
   witness = issueRecordWitness,
   clock = Date.now,
 } = {}) {
-  async function evidence(id, schema, identity, fleetHash) {
-    const artifact = await readArtifact("evidence", id)
-    assert.equal(hash(artifact.raw), id)
-    assert.ok(Buffer.byteLength(artifact.raw) <= 4096)
-    const parsed = schema.parse(JSON.parse(artifact.raw))
-    assert.equal(parsed.owner, artifact.owner)
-    assert.equal(parsed.owner, identity.owner)
-    assert.equal(parsed.source, artifact.source)
-    assert.equal(parsed.source, identity.source)
-    if (fleetHash) assert.equal(parsed.fleetSha256, fleetHash)
-    return parsed
+  const deps = Object.freeze({
+    readIdentity,
+    readSource,
+    readArtifact,
+    verifyInventory,
+    verifyImages,
+    verifyControllers,
+    tree,
+    run,
+    verifySignature,
+    witness,
+    clock,
+  })
+  const evidence = (id, schema, identity, fleetHash) =>
+    evidenceArtifact(deps, id, schema, identity, fleetHash)
+  const qualifiedRollback = (selectorRollback, fleet, migration) =>
+    qualifiedRollbackArtifact(deps, selectorRollback, fleet, migration)
+
+  // Signs only bytes this process constructed. The remote signer never sees a
+  // caller-supplied digest, and the returned signature is verified in place.
+  async function signRecord(raw, refreshedToken) {
+    try {
+      run([
+        "login",
+        "--service-principal",
+        "--username",
+        configuration.clientId,
+        "--tenant",
+        configuration.tenantId,
+        "--federated-token",
+        refreshedToken,
+        "--allow-no-subscriptions",
+      ])
+      const result = run([
+        "keyvault",
+        "key",
+        "sign",
+        "--id",
+        runtimeQualificationKeyId,
+        "--algorithm",
+        "RS256",
+        "--digest",
+        createHash("sha256").update(raw).digest("base64"),
+      ])
+      verifySignature(raw, result)
+      return result
+    } finally {
+      run(["logout"])
+    }
   }
+
   return Object.freeze({
     async issue(input) {
       const selector = selectorSchema.parse(input)
@@ -237,6 +346,9 @@ export function createProtectedRuntimeFleetIssuer({
       assert.equal(native.fleetSha256, fleetHash)
       assert.equal(fleet.productRevision, source.source)
       assert.equal(native.sourceTree, tree())
+
+      // Authenticated evidence is cross-bound to the same fleet before any
+      // further read; a mismatch is an integrity failure, not a retry.
       const [migration, policy, journal] = await Promise.all([
         evidence(selector.migration, migrationSchema, authenticated.identity, fleetHash),
         evidence(selector.policy, policySchema, authenticated.identity, fleetHash),
@@ -245,7 +357,10 @@ export function createProtectedRuntimeFleetIssuer({
       assert.equal(migration.migrationChecksum, fleet.migrationChecksum)
       assert.equal(policy.runtimePolicyDigest, fleet.runtimePolicyDigest)
       assert.equal(journal.postgresHeadHash, journal.r2HeadHash)
+
       const inventory = await verifyInventory(selector.inventory)
+      // The independent inventory must stay non-authoritative: it proves what
+      // was observed, never that runtime authority was installed.
       assert.equal(inventory.qualified, false)
       assert.equal(inventory.nativeInventoryRechecked, true)
       assert.equal(inventory.runtimeAuthorityVerified, false)
@@ -253,91 +368,38 @@ export function createProtectedRuntimeFleetIssuer({
       assert.equal(inventory.engineRevision, fleet.engineRevision)
       await verifyImages(fleet)
       await verifyControllers(fleet)
-      const archived = await readArtifact("qualified-fleet", selector.rollback)
-      assert.equal(hash(archived.raw), selector.rollback)
-      const rollback = JSON.parse(archived.raw)
-      validateQualifiedFleetArchive(rollback)
-      assert.equal(rollback.pair.owner, archived.owner)
-      assert.equal(rollback.pair.productRevision, archived.source)
-      assert.equal(rollback.pair.engineRevision, fleet.engineRevision)
-      assert.equal(rollback.controlPlane.migrationChecksum, migration.baselineMigrationChecksum)
-      assert.notEqual(rollback.pair.workerDigest, fleet.workerDigest)
-      await verifyImages(rollback.pair)
-      await verifyControllers({ ...rollback.pair, ...rollback.controlPlane })
+
+      const rollback = await qualifiedRollback(selector.rollback, fleet, migration)
+
       const refreshed = await readIdentity()
       assert.equal(refreshed.identity.owner, authenticated.identity.owner)
       assert.equal(refreshed.identity.source, source.source)
-      const [runId, attempt] = source.owner.split(":")
-      const record = {
-        kind: "runtime-fleet-qualification",
-        schema: "lyrashield-runtime-fleet-qualification/1",
-        purpose: "exact-artifact-release",
-        scope: "disposable-linux",
-        fleet,
-        sourceTree: native.sourceTree,
-        architecture: native.architecture,
-        evidence: {
-          native: selector.native,
-          migration: selector.migration,
-          policy: selector.policy,
-          journal: selector.journal,
-          rollback: selector.rollback,
-          inventory: hash(canonicalJson(inventory)),
-        },
-        journal: {
-          sealHash: journal.sealHash,
-          recoverySnapshotSha256: journal.recoverySnapshotSha256,
-          pinEnvelopeHash: journal.pinEnvelopeHash,
-          observedControlCasAckHash: journal.observedControlCasAckHash,
-        },
-        issuer: {
-          repositoryId: "1286618458",
-          repositoryOwnerId: "116722580",
-          workflow: ".github/workflows/issue-runtime-qualification.yml",
-          source: source.source,
-          runId,
-          attempt,
-        },
-        issuedAt: Math.floor(clock() / 1000),
-      }
-      const raw = canonicalJson(record)
+      const raw = canonicalJson(
+        buildRecord({
+          selector,
+          authenticated,
+          source,
+          native,
+          fleet,
+          fleetHash,
+          journal,
+          migration,
+          policy,
+          inventory,
+          rollback,
+          clock,
+        })
+      )
       assert.ok(Buffer.byteLength(raw) <= 4096)
-      let result
-      try {
-        run([
-          "login",
-          "--service-principal",
-          "--username",
-          configuration.clientId,
-          "--tenant",
-          configuration.tenantId,
-          "--federated-token",
-          refreshed.token,
-          "--allow-no-subscriptions",
-        ])
-        result = run([
-          "keyvault",
-          "key",
-          "sign",
-          "--id",
-          runtimeQualificationKeyId,
-          "--algorithm",
-          "RS256",
-          "--digest",
-          createHash("sha256").update(raw).digest("base64"),
-        ])
-        verifySignature(raw, result)
-      } finally {
-        run(["logout"])
-      }
+      const result = await signRecord(raw, refreshed.token)
       const recordWitness = await witness(
         "runtime-fleet-qualification",
         raw,
         ".github/workflows/issue-runtime-qualification.yml"
       )
-      const envelope = Object.freeze({ raw, result })
+      const record = JSON.parse(raw)
       return Object.freeze({
-        envelope,
+        envelope: Object.freeze({ raw, result }),
         witness: recordWitness,
         receipt: {
           schema: "lyrashield-runtime-fleet-issuance-receipt/1",
