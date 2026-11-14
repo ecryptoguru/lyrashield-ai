@@ -105,46 +105,13 @@ export function createSupervisorHandler(
   }
 }
 
-async function handleRequest(
+async function handlePersistedRequests(
   request: IncomingMessage,
   response: ServerResponse,
   service: SupervisorService,
-  options: {
-    controlToken: string
-    scopedControlToken?: string
-    admission: "closed" | "open"
-    sandboxToolHandler?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
-    attemptProofIssuer?: (input: unknown) => Promise<unknown>
-    receiptConsumer?: (operationId: string) => Promise<unknown>
-    nativeResultReader?: (input: unknown) => Promise<unknown>
-    persistedCommandReader?: (input: unknown) => Promise<unknown>
-  }
-): Promise<void> {
-  const url = new URL(request.url ?? "/", "http://supervisor.invalid")
-  if (request.method === "GET" && url.pathname === "/healthz") {
-    sendJson(response, 200, { status: "ok", admission: options.admission })
-    return
-  }
-  if (url.pathname.startsWith("/v1/sandbox/")) {
-    if (!options.sandboxToolHandler) {
-      sendJson(response, 503, { code: "SANDBOX_TOOL_UNAVAILABLE" })
-      return
-    }
-    await options.sandboxToolHandler(request, response)
-    return
-  }
-  const scopedRoute =
-    request.method === "POST" &&
-    ["/v1/attempt-proof", "/v1/consume-receipts", "/v1/result", "/v1/commands"].includes(
-      url.pathname
-    )
-  if (
-    !authorized(request, options.controlToken) &&
-    !(scopedRoute && options.scopedControlToken && authorized(request, options.scopedControlToken))
-  ) {
-    sendJson(response, 401, { code: "UNAUTHORIZED", message: "control credential required" })
-    return
-  }
+  options: Parameters<typeof createSupervisorHandler>[1],
+  url: URL
+): Promise<boolean> {
   if (request.method === "POST" && url.pathname === "/v1/commands") {
     const value = await readJson(request)
     if (
@@ -187,7 +154,7 @@ async function handleRequest(
         : await deliver()
       sendJson(response, 200, result)
     } else sendJson(response, 200, await service.execute(value))
-    return
+    return true
   }
   if (request.method === "POST" && url.pathname === "/v1/consume-receipts") {
     if (!options.receiptConsumer || url.searchParams.size)
@@ -224,7 +191,7 @@ async function handleRequest(
         )
       : await consume()
     sendJson(response, 200, result)
-    return
+    return true
   }
   if (request.method === "POST" && url.pathname === "/v1/result") {
     if (!options.nativeResultReader || url.searchParams.size)
@@ -263,8 +230,52 @@ async function handleRequest(
         () => options.nativeResultReader!(scope)
       )
     )
+    return true
+  }
+  return false
+}
+
+async function handleRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  service: SupervisorService,
+  options: {
+    controlToken: string
+    scopedControlToken?: string
+    admission: "closed" | "open"
+    sandboxToolHandler?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
+    attemptProofIssuer?: (input: unknown) => Promise<unknown>
+    receiptConsumer?: (operationId: string) => Promise<unknown>
+    nativeResultReader?: (input: unknown) => Promise<unknown>
+    persistedCommandReader?: (input: unknown) => Promise<unknown>
+  }
+): Promise<void> {
+  const url = new URL(request.url ?? "/", "http://supervisor.invalid")
+  if (request.method === "GET" && url.pathname === "/healthz") {
+    sendJson(response, 200, { status: "ok", admission: options.admission })
     return
   }
+  if (url.pathname.startsWith("/v1/sandbox/")) {
+    if (!options.sandboxToolHandler) {
+      sendJson(response, 503, { code: "SANDBOX_TOOL_UNAVAILABLE" })
+      return
+    }
+    await options.sandboxToolHandler(request, response)
+    return
+  }
+  const scopedRoute =
+    request.method === "POST" &&
+    ["/v1/attempt-proof", "/v1/consume-receipts", "/v1/result", "/v1/commands"].includes(
+      url.pathname
+    )
+  if (
+    !authorized(request, options.controlToken) &&
+    !(scopedRoute && options.scopedControlToken && authorized(request, options.scopedControlToken))
+  ) {
+    sendJson(response, 401, { code: "UNAUTHORIZED", message: "control credential required" })
+    return
+  }
+  if (await handlePersistedRequests(request, response, service, options, url)) return
   if (request.method === "POST" && url.pathname === "/v1/attempt-proof") {
     if (!options.attemptProofIssuer || url.searchParams.size)
       throw new RuntimeControlError(

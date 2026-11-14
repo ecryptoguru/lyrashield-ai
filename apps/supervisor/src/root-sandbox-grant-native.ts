@@ -30,25 +30,8 @@ export type NativeSandboxGrantInput = {
   manifestInputJson: string
 }
 
-/** Same live native gate and authentic sandbox START history for issuance and renewal. */
-export async function confirmNativeSandboxGrantAuthority(input: NativeSandboxGrantInput) {
-  if (process.getuid?.() !== 0) unavailable()
-  const action = authorityActionSchema.parse(input.action)
-  if (!(
-    (action.phase === "EXECUTOR_CREATE" && action.executorKey === "engine") ||
-    (action.phase === "SANDBOX_TOOL" && action.executorKey === "sandbox")
-  ))
-    unavailable()
-  const policy = {
-    approvedProviderPolicies: new Map(),
-    supervisorAuthority: input.supervisorAuthority,
-  }
-  const origin = await createScanNativeOriginAuthorityVerifier(policy)(
-    input.connection,
-    action,
-    input.guardId
-  )
-  const connection: AuthoritySqlConnection = {
+function nativeOriginConnection(input: NativeSandboxGrantInput): AuthoritySqlConnection {
+  return {
     query(text, values = []) {
       if (text === "SELECT app.require_scan_execution_action_role()")
         return input.connection.query("SELECT app.require_scan_native_origin_reader()", values)
@@ -67,6 +50,27 @@ export async function confirmNativeSandboxGrantAuthority(input: NativeSandboxGra
       unavailable()
     },
   }
+}
+
+/** Same live native gate and authentic sandbox START history for issuance and renewal. */
+export async function confirmNativeSandboxGrantAuthority(input: NativeSandboxGrantInput) {
+  if (process.getuid?.() !== 0) unavailable()
+  const action = authorityActionSchema.parse(input.action)
+  if (!(
+    (action.phase === "EXECUTOR_CREATE" && action.executorKey === "engine") ||
+    (action.phase === "SANDBOX_TOOL" && action.executorKey === "sandbox")
+  ))
+    unavailable()
+  const policy = {
+    approvedProviderPolicies: new Map(),
+    supervisorAuthority: input.supervisorAuthority,
+  }
+  const origin = await createScanNativeOriginAuthorityVerifier(policy)(
+    input.connection,
+    action,
+    input.guardId
+  )
+  const connection = nativeOriginConnection(input)
   // This deadline is the current immutable attempt/account bound, not the short native invocation lease.
   const current = await createScanExecutionActionAuthorityVerifier(policy)(connection, action)
   const rows = (

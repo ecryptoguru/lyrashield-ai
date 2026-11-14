@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { readBrokerNativeResult } from "./broker-native-result"
 import type { Job } from "bullmq"
 import { z } from "zod"
 import {
@@ -29,12 +29,8 @@ import { serializeScanQueuePayload } from "@lyrashield/db/src/scan-queue-payload
 import { verifyScanJobAuthority, type StoredScanAuthority } from "./authority"
 import { verifyScanAdmission } from "./admission"
 import { readExecutionPolicy } from "./execution-policy"
-import { processScanJob, processNativeScanResult } from "../run-scan.job"
-import {
-  verifyNativeEngineResult,
-  type NativeEngineResultProof,
-  type VerifiedNativeEngineResult,
-} from "./native-engine-result"
+import { processScanJob } from "../run-scan.job"
+import { type NativeEngineResultProof } from "./native-engine-result"
 
 const id = z.string().min(1)
 export const workerBrokerAuthoritySchema = z
@@ -188,10 +184,17 @@ async function currentQueueSnapshot(scanId: string) {
     : null
 }
 
-async function validateCurrentAdmission(
-  authority: Extract<Awaited<ReturnType<typeof verifyScanJobAuthority>>, { ok: true }>,
-  targetType: string
-) {
+type BrokerDispatchIdentity = Pick<
+  WorkerBrokerAuthority,
+  "authorityEpochId" | "workerInstanceId" | "workerGrantId"
+> & { operationId: string }
+type BrokerDispatchStatus = Extract<
+  Awaited<ReturnType<WorkerBrokerInstallation["broker"]["status"]>>,
+  { kind: "available" }
+>
+type BrokerScanAuthority = Extract<Awaited<ReturnType<typeof verifyScanJobAuthority>>, { ok: true }>
+
+async function validateCurrentAdmission(authority: BrokerScanAuthority, targetType: string) {
   const { scanRecord, executionPlan, workspaceId, data } = authority
   const policy = await readExecutionPolicy(data.policyId, workspaceId)
   const engineBacked =
@@ -245,6 +248,119 @@ async function syncBrokerReceipts(installation: WorkerBrokerInstallation, operat
   return result
 }
 
+async function settleBrokerTerminalState(
+  installation: WorkerBrokerInstallation,
+  authority: BrokerScanAuthority,
+  identity: BrokerDispatchIdentity,
+  status: BrokerDispatchStatus,
+  current: Awaited<ReturnType<typeof readCurrentAuthority>>["current"],
+  receipts: Awaited<ReturnType<typeof syncBrokerReceipts>>,
+  operation: { operationId: string }
+): Promise<ScanJobResult | undefined> {
+  if (status.state === "TERMINATED" && current && TERMINAL_SCAN_STATUSES.has(current.status)) {
+    // Receipt ingestion has settled its private execution fence. The normal
+    // runtime writer releases holds only against the immutable physical
+    // cleanup proof; a paid intent still requires canonical settlement.
+    const proof = await bounded(() =>
+      readScanDispatchCleanupProof(authority.workspaceId, authority.data.scanId)
+    )
+    if (!proof) return retainedBrokerScanResult("BROKER_CLEANUP_PROOF_UNAVAILABLE")
+    await confirmScanCapacityStopped(
+      authority.workspaceId,
+      authority.data.scanId,
+      proof.noBillableWork,
+      proof.billingDisposition
+    )
+    await releaseStoppedScanSlot(authority.workspaceId, authority.data.scanId)
+    return retainedBrokerScanResult(
+      proof.noBillableWork ? "BROKER_DISPATCH_STOPPED" : "BROKER_SETTLEMENT_REQUIRED"
+    )
+  }
+  if (current?.status === "CANCELLED") {
+    if (!status.attemptId) return retainedBrokerScanResult("BROKER_CANCELLED_RETAINED")
+    const stopped = await bounded(
+      () =>
+        status.state === "UNKNOWN"
+          ? installation.broker.reconcile({ ...identity, attemptId: status.attemptId! })
+          : installation.broker.stop({
+              ...identity,
+              attemptId: status.attemptId!,
+              reasonCode: "SCAN_CANCELLED",
+            }),
+      true
+    )
+    return retainedBrokerScanResult(
+      stopped.kind === "committed" &&
+        stopped.operationId === operation.operationId &&
+        stopped.attemptId === status.attemptId
+        ? "BROKER_STOP_PENDING"
+        : "BROKER_OUTCOME_UNKNOWN"
+    )
+  }
+  if (
+    status.state === "UNKNOWN" ||
+    receipts.dispositions.some((disposition) => disposition.status === "UNKNOWN")
+  ) {
+    if (status.state === "UNKNOWN" && status.attemptId)
+      await bounded(
+        () => installation.broker.reconcile({ ...identity, attemptId: status.attemptId! }),
+        true
+      )
+    return retainedBrokerScanResult("BROKER_OUTCOME_UNKNOWN")
+  }
+}
+
+async function verifyBrokerPublication(
+  installation: WorkerBrokerInstallation,
+  authority: BrokerScanAuthority,
+  operation: { operationId: string; requestDigest: string },
+  data: ScanJobData
+): Promise<ScanJobResult | undefined> {
+  const snapshot = await bounded(() => currentQueueSnapshot(authority.data.scanId))
+  if (!snapshot) return retainedBrokerScanResult("BROKER_PUBLICATION_UNAVAILABLE")
+  const published = await bounded(() =>
+    installation.publication.verifyDispatch(
+      {
+        operationId: operation.operationId,
+        workspaceId: authority.workspaceId,
+      },
+      snapshot
+    )
+  )
+  if (
+    published.kind !== "published" ||
+    published.row.operationId !== operation.operationId ||
+    published.row.id !== authority.data.scanId ||
+    published.row.workspaceId !== authority.workspaceId ||
+    published.row.executionPlanHash !== authority.scanRecord.executionPlanHash ||
+    published.row.requestDigest !== operation.requestDigest ||
+    published.row.payloadInputJson !== serializeScanQueuePayload(data)
+  )
+    return retainedBrokerScanResult("BROKER_PUBLICATION_UNAVAILABLE")
+  if (!(await installationIsCurrent(installation)))
+    return retainedBrokerScanResult("BROKER_AUTHORITY_UNAVAILABLE")
+}
+
+async function stopRevokedAdmission(
+  installation: WorkerBrokerInstallation,
+  identity: BrokerDispatchIdentity,
+  status: BrokerDispatchStatus
+) {
+  if (
+    status.attemptId &&
+    ["PREPARING", "PREPARED", "START_PENDING", "ACTIVE", "STOPPING"].includes(status.state)
+  )
+    await bounded(
+      () =>
+        installation.broker.stop({
+          ...identity,
+          attemptId: status.attemptId!,
+          reasonCode: "SCAN_AUTHORIZATION_REVOKED",
+        }),
+      true
+    )
+}
+
 async function dispatchBoundJob(
   job: Job<ScanJobData, ScanJobResult>,
   installation: WorkerBrokerInstallation,
@@ -278,72 +394,17 @@ async function dispatchBoundJob(
           ? "BROKER_DISPATCH_PREPARED"
           : "BROKER_START_PENDING"
       )
-    if (status.state === "TERMINATED" && current && TERMINAL_SCAN_STATUSES.has(current.status)) {
-      // Receipt ingestion has settled its private execution fence. The normal
-      // runtime writer releases holds only against the immutable physical
-      // cleanup proof; a paid intent still requires canonical settlement.
-      const proof = await bounded(() =>
-        readScanDispatchCleanupProof(authority.workspaceId, authority.data.scanId)
-      )
-      if (!proof) return retainedBrokerScanResult("BROKER_CLEANUP_PROOF_UNAVAILABLE")
-      await confirmScanCapacityStopped(
-        authority.workspaceId,
-        authority.data.scanId,
-        proof.noBillableWork,
-        proof.billingDisposition
-      )
-      await releaseStoppedScanSlot(authority.workspaceId, authority.data.scanId)
-      return retainedBrokerScanResult(
-        proof.noBillableWork ? "BROKER_DISPATCH_STOPPED" : "BROKER_SETTLEMENT_REQUIRED"
-      )
-    }
-    if (current?.status === "CANCELLED") {
-      if (!status.attemptId) return retainedBrokerScanResult("BROKER_CANCELLED_RETAINED")
-      const stopped = await bounded(
-        () =>
-          status.state === "UNKNOWN"
-            ? installation.broker.reconcile({ ...identity, attemptId: status.attemptId! })
-            : installation.broker.stop({
-                ...identity,
-                attemptId: status.attemptId!,
-                reasonCode: "SCAN_CANCELLED",
-              }),
-        true
-      )
-      return retainedBrokerScanResult(
-        stopped.kind === "committed" &&
-          stopped.operationId === operation.operationId &&
-          stopped.attemptId === status.attemptId
-          ? "BROKER_STOP_PENDING"
-          : "BROKER_OUTCOME_UNKNOWN"
-      )
-    }
-    if (
-      status.state === "UNKNOWN" ||
-      receipts.dispositions.some((disposition) => disposition.status === "UNKNOWN")
-    ) {
-      if (status.state === "UNKNOWN" && status.attemptId)
-        await bounded(
-          () => installation.broker.reconcile({ ...identity, attemptId: status.attemptId! }),
-          true
-        )
-      return retainedBrokerScanResult("BROKER_OUTCOME_UNKNOWN")
-    }
-    const stopRevokedAdmission = async () => {
-      if (
-        status.attemptId &&
-        ["PREPARING", "PREPARED", "START_PENDING", "ACTIVE", "STOPPING"].includes(status.state)
-      )
-        await bounded(
-          () =>
-            installation.broker.stop({
-              ...identity,
-              attemptId: status.attemptId!,
-              reasonCode: "SCAN_AUTHORIZATION_REVOKED",
-            }),
-          true
-        )
-    }
+    const terminalResult = await settleBrokerTerminalState(
+      installation,
+      authority,
+      identity,
+      status,
+      current,
+      receipts,
+      operation
+    )
+    if (terminalResult) return terminalResult
+
     if (
       !current ||
       current.deletedAt ||
@@ -351,78 +412,27 @@ async function dispatchBoundJob(
       !target ||
       target.type !== authority.executionPlan!.targetType
     ) {
-      await stopRevokedAdmission()
+      await stopRevokedAdmission(installation, identity, status)
       return retainedBrokerScanResult("SCAN_AUTHORIZATION_REVOKED")
     }
     const admission = await bounded(() => validateCurrentAdmission(authority, target.type))
     if (!admission.ok) {
-      await stopRevokedAdmission()
+      await stopRevokedAdmission(installation, identity, status)
       return admission.result
     }
     if (
       target.type === "REPO" &&
       ["START_PENDING", "ACTIVE", "STOPPING", "TERMINATED"].includes(status.state)
     ) {
-      if (!status.attemptId || !installation.results)
-        return retainedBrokerScanResult("BROKER_RESULT_PENDING")
-      const raw = await installation.results.read(operation.operationId, status.attemptId)
-      if (raw) {
-        const proof = await installation.results.proof(operation.operationId)
-        let native: VerifiedNativeEngineResult
-        try {
-          native = verifyNativeEngineResult(raw, proof, {
-            operationId: operation.operationId,
-            attemptId: status.attemptId,
-            workspaceId: authority.workspaceId,
-            scanId: authority.data.scanId,
-            authorityEpochId: installation.authority.authorityEpochId,
-            productRevision: installation.authority.productRevision,
-            engineRevision: installation.authority.engineRevision,
-            sourceRevision: authority.executionPlan!.source?.revision ?? "",
-          })
-        } catch {
-          // Root authenticated finished bytes still permit exact signed cleanup when the output cannot be finalized.
-          if (
-            proof.action.operationId === operation.operationId &&
-            proof.action.attemptId === status.attemptId &&
-            proof.action.scanId === authority.data.scanId &&
-            proof.action.workspaceId === authority.workspaceId &&
-            proof.action.authorityEpochId === installation.authority.authorityEpochId &&
-            proof.action.phase === "EXECUTOR_CREATE" &&
-            proof.action.executorKey === "engine" &&
-            raw.length === proof.totalBytes &&
-            `sha256:${createHash("sha256").update(raw).digest("hex")}` === proof.sha256 &&
-            !["STOPPING", "TERMINATED"].includes(status.state)
-          ) {
-            await installation.broker.stop({
-              ...identity,
-              attemptId: status.attemptId,
-              reasonCode: "ENGINE_OUTPUT_INCOMPLETE",
-            })
-          }
-          return retainedBrokerScanResult("BROKER_RESULT_INCOMPLETE")
-        }
-        const cleanup = await readScanDispatchCleanupProof(
-          authority.workspaceId,
-          authority.data.scanId
-        )
-        if (
-          !cleanup ||
-          cleanup.operationId !== native.action.operationId ||
-          cleanup.attemptId !== native.action.attemptId ||
-          cleanup.authorityEpochId !== native.action.authorityEpochId
-        ) {
-          native.cleanup()
-          if (!["STOPPING", "TERMINATED"].includes(status.state))
-            await installation.broker.stop({
-              ...identity,
-              attemptId: status.attemptId,
-              reasonCode: "ENGINE_OUTPUT_CAPTURED",
-            })
-          return retainedBrokerScanResult("BROKER_STOP_PENDING")
-        }
-        return processNativeScanResult(job, native)
-      }
+      const nativeResult = await readBrokerNativeResult(
+        job,
+        installation,
+        authority,
+        identity,
+        status,
+        operation
+      )
+      if (nativeResult) return nativeResult
       if (status.state === "ACTIVE") {
         if (afterCommitState === "ACTIVE") return retainedBrokerScanResult("BROKER_START_PENDING")
         const next = await bounded(
@@ -439,29 +449,13 @@ async function dispatchBoundJob(
     }
     if (!["QUEUED", "WAITING_CAPACITY", "PREPARED"].includes(status.state))
       return retainedBrokerScanResult("BROKER_DISPATCH_PENDING")
-    const snapshot = await bounded(() => currentQueueSnapshot(authority.data.scanId))
-    if (!snapshot) return retainedBrokerScanResult("BROKER_PUBLICATION_UNAVAILABLE")
-    const published = await bounded(() =>
-      installation.publication.verifyDispatch(
-        {
-          operationId: operation.operationId,
-          workspaceId: authority.workspaceId,
-        },
-        snapshot
-      )
+    const publicationError = await verifyBrokerPublication(
+      installation,
+      authority,
+      operation,
+      parsed.data
     )
-    if (
-      published.kind !== "published" ||
-      published.row.operationId !== operation.operationId ||
-      published.row.id !== authority.data.scanId ||
-      published.row.workspaceId !== authority.workspaceId ||
-      published.row.executionPlanHash !== authority.scanRecord.executionPlanHash ||
-      published.row.requestDigest !== operation.requestDigest ||
-      published.row.payloadInputJson !== serializeScanQueuePayload(parsed.data)
-    )
-      return retainedBrokerScanResult("BROKER_PUBLICATION_UNAVAILABLE")
-    if (!(await installationIsCurrent(installation)))
-      return retainedBrokerScanResult("BROKER_AUTHORITY_UNAVAILABLE")
+    if (publicationError) return publicationError
     // The canonical pipeline persists deterministic surface receipts and the
     // result manifest. Its stored plan is rechecked before every scanner; these
     // two launch tiers have no repository executor or model-backed work.

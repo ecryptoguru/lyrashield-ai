@@ -46,6 +46,50 @@ async function checkRetestWorkerAvailable(assertAvailable: () => Promise<void>):
   await assertAvailable()
 }
 
+async function resolveMergeRetestSource(
+  workspaceId: string,
+  anchorContext: Parameters<typeof findFixPrMergeAnchor>[1],
+  recoveryIdentity: FixPrMergeReevaluationOptions["recoveryIdentity"],
+  resolveRetestSource: FixPrMergeReevaluationOptions["resolveRetestSource"]
+) {
+  const sourceTarget = await withWorkspaceRLS(workspaceId, async (tx) => {
+    // Observe the current target for a recovery candidate before taking write locks.
+    // handleFixPrMerged still independently authenticates the recovery identity.
+    const anchor = await findFixPrMergeAnchor(tx, anchorContext, false, Boolean(recoveryIdentity))
+    if (!anchor) return null
+    const prior = await tx.retest.findFirst({
+      where: {
+        workspaceId,
+        findingId: anchor.findingId,
+        resultBefore: `Automatic fix PR retest: ${anchor.pullRequestId}`,
+      },
+      select: { id: true },
+    })
+    // Redelivery uses the existing immutable scan; no new provider ref is needed.
+    if (prior) return null
+    return tx.target.findFirst({ where: { workspaceId, id: anchor.targetId, deletedAt: null } })
+  })
+  // The trusted caller resolves provider refs after this read scope closes, before either write lock.
+  const source = sourceTarget ? await resolveRetestSource(sourceTarget) : undefined
+  if (
+    sourceTarget?.type === "REPO" &&
+    !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(source?.revision ?? "")
+  )
+    throw new Error("SCAN_REF_UNRESOLVED")
+
+  return { sourceTarget, source }
+}
+
+async function reevaluateMergeGate(workspaceId: string, outcome: FixPrMergeOutcome | null) {
+  // Gate evaluation cannot hold open or roll back the scan/association commit.
+  if (outcome)
+    await evaluateGateForTarget(workspaceId, outcome.targetId).catch((error) => {
+      logger.warn("Gate re-evaluation after fix PR merge failed (non-fatal)", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
+}
+
 /**
  * WP3 loop-closure orchestration: mark a merged fix PR, then queue a REAL
  * retest — a new scan of the finding's target that the retest binds to — and
@@ -83,30 +127,12 @@ export async function handleFixPrMergedAndReevaluate({
   const advisoryKey = `fix-loop:${workspaceId}:${branchName}`
   const anchorContext = { workspaceId, branchName, prNumber, repoOwner, repoName }
 
-  const sourceTarget = await withWorkspaceRLS(workspaceId, async (tx) => {
-    // Observe the current target for a recovery candidate before taking write locks.
-    // handleFixPrMerged still independently authenticates the recovery identity.
-    const anchor = await findFixPrMergeAnchor(tx, anchorContext, false, Boolean(recoveryIdentity))
-    if (!anchor) return null
-    const prior = await tx.retest.findFirst({
-      where: {
-        workspaceId,
-        findingId: anchor.findingId,
-        resultBefore: `Automatic fix PR retest: ${anchor.pullRequestId}`,
-      },
-      select: { id: true },
-    })
-    // Redelivery uses the existing immutable scan; no new provider ref is needed.
-    if (prior) return null
-    return tx.target.findFirst({ where: { workspaceId, id: anchor.targetId, deletedAt: null } })
-  })
-  // The trusted caller resolves provider refs after this read scope closes, before either write lock.
-  const source = sourceTarget ? await resolveRetestSource(sourceTarget) : undefined
-  if (
-    sourceTarget?.type === "REPO" &&
-    !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(source?.revision ?? "")
+  const { sourceTarget, source } = await resolveMergeRetestSource(
+    workspaceId,
+    anchorContext,
+    recoveryIdentity,
+    resolveRetestSource
   )
-    throw new Error("SCAN_REF_UNRESOLVED")
 
   const { handleFixPrMerged } = await import("./fix-proposal-service")
   // This helper commits merge state separately so failed retest creation can
@@ -248,13 +274,7 @@ export async function handleFixPrMergedAndReevaluate({
     },
     { timeout: 30_000 }
   )
-  // Gate evaluation cannot hold open or roll back the scan/association commit.
-  if (outcome)
-    await evaluateGateForTarget(workspaceId, outcome.targetId).catch((error) => {
-      logger.warn("Gate re-evaluation after fix PR merge failed (non-fatal)", {
-        error: error instanceof Error ? error.message : String(error),
-      })
-    })
+  await reevaluateMergeGate(workspaceId, outcome)
   return outcome
 }
 

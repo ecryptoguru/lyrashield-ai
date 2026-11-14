@@ -153,6 +153,38 @@ async function readObserver(
 }
 
 /** The fixed root-mounted installation is the only production mode source. */
+const workerOperationInventorySchema = z
+  .object({
+    schema: z.literal("lyrashield-root-worker-operation-inventory/1"),
+    authority: observedAuthority,
+    operations: z
+      .array(
+        z
+          .object({
+            operationId: id,
+            workspaceId: id,
+            scanId: id,
+            attemptId: id,
+            state: z.enum([
+              "PREPARING",
+              "PREPARED",
+              "START_PENDING",
+              "ACTIVE",
+              "STOPPING",
+              "UNKNOWN",
+              "TERMINATED",
+            ]),
+          })
+          .strict()
+      )
+      .max(32),
+  })
+  .strict()
+
+const cleanupOperationInventorySchema = workerOperationInventorySchema.extend({
+  authority: cleanupAuthority,
+})
+
 export async function loadProtectedWorkerBrokerInstallation(): Promise<
   WorkerBrokerInstallation | undefined
 > {
@@ -204,40 +236,13 @@ export async function loadProtectedWorkerBrokerInstallation(): Promise<
       cleanup: {
         async inventory(cursor) {
           if (cursor !== undefined) id.parse(cursor)
-          const result = z
-            .object({
-              schema: z.literal("lyrashield-root-worker-operation-inventory/1"),
-              authority: cleanupAuthority,
-              operations: z
-                .array(
-                  z
-                    .object({
-                      operationId: id,
-                      workspaceId: id,
-                      scanId: id,
-                      attemptId: id,
-                      state: z.enum([
-                        "PREPARING",
-                        "PREPARED",
-                        "START_PENDING",
-                        "ACTIVE",
-                        "STOPPING",
-                        "UNKNOWN",
-                        "TERMINATED",
-                      ]),
-                    })
-                    .strict()
-                )
-                .max(32),
+          const result = cleanupOperationInventorySchema.parse(
+            await readObserver({
+              schema: 1,
+              method: "cleanup-inventory",
+              ...(cursor ? { cursor } : {}),
             })
-            .strict()
-            .parse(
-              await readObserver({
-                schema: 1,
-                method: "cleanup-inventory",
-                ...(cursor ? { cursor } : {}),
-              })
-            )
+          )
           requireInstallation(readConfiguration().hash === installed.hash)
           for (const key of Object.keys(observed) as (keyof typeof observed)[])
             if (key !== "expiresAt" && key !== "purpose")
@@ -258,36 +263,9 @@ export async function loadProtectedWorkerBrokerInstallation(): Promise<
         },
         async inventory(cursor) {
           if (cursor !== undefined) id.parse(cursor)
-          const result = z
-            .object({
-              schema: z.literal("lyrashield-root-worker-operation-inventory/1"),
-              authority: observedAuthority,
-              operations: z
-                .array(
-                  z
-                    .object({
-                      operationId: id,
-                      workspaceId: id,
-                      scanId: id,
-                      attemptId: id,
-                      state: z.enum([
-                        "PREPARING",
-                        "PREPARED",
-                        "START_PENDING",
-                        "ACTIVE",
-                        "STOPPING",
-                        "UNKNOWN",
-                        "TERMINATED",
-                      ]),
-                    })
-                    .strict()
-                )
-                .max(32),
-            })
-            .strict()
-            .parse(
-              await readObserver({ schema: 1, method: "inventory", ...(cursor ? { cursor } : {}) })
-            )
+          const result = workerOperationInventorySchema.parse(
+            await readObserver({ schema: 1, method: "inventory", ...(cursor ? { cursor } : {}) })
+          )
           requireCurrentDescriptor(result.authority)
           return result.operations
         },

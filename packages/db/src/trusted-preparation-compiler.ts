@@ -100,6 +100,47 @@ function requireStagedInputs(
   if (totalBytes > SCAN_ATTACHMENT_MAX_TOTAL_BYTES) preparationProofFailure()
 }
 
+function preparedCommandVerifier(
+  frozenPolicy: ReturnType<typeof trustedPreparationHostPolicySchema.parse>
+) {
+  const installedCapability = createInstalledExecutionAuthorityCapability()
+  return async (client: AuthoritySqlConnection, command: PrepareCommand) => {
+    const result = await client.query(
+      `SELECT o."commandInputJson",o."commandInputChecksum"
+        FROM "ScanDispatchOutbox" o JOIN "ScanDispatchAttempt" a ON a."attemptId"=o."attemptId" AND a."operationId"=o."operationId"
+        WHERE o.id=$1 AND o."operationId"=$2 AND o."attemptId"=$3 AND a."workspaceId"=$4
+        AND a."authorityEpochId"=$5 AND o."commandType"='PREPARE' AND o.status='PENDING'
+        AND a."authorityTransactionId"=pg_current_xact_id()::text AND app.scan_preparation_gate_held()
+        AND a."authorityDeadlineAt">clock_timestamp() AT TIME ZONE 'UTC'`,
+      [
+        command.commandId,
+        command.attempt.operationId,
+        command.attempt.attemptId,
+        command.attempt.workspaceId,
+        command.attempt.authorityEpochId,
+      ]
+    )
+    if (result.rows.length !== 1) preparationProofFailure()
+    const row = result.rows[0]!
+    if (typeof row.commandInputJson !== "string" || typeof row.commandInputChecksum !== "string")
+      preparationProofFailure()
+    const stored = readStoredDispatchCommand(row.commandInputJson, row.commandInputChecksum)
+    if (!stored || stored.type !== "PREPARE" || canonicalJson(stored) !== canonicalJson(command))
+      preparationProofFailure()
+    const installed = await installedCapability.verifyAction(
+      client,
+      deriveCurrentPrepareBinding(stored, row.commandInputChecksum)
+    )
+    const delegation = requireCurrentPreparationDelegation(installed.preparation, installed)
+    if (
+      delegation.preparationPolicyChecksum !== sha256Hex(canonicalJson(frozenPolicy)) ||
+      delegation.issuerKeyHash !== frozenPolicy.issuerKeyHash ||
+      delegation.issuerKeyId !== frozenPolicy.issuerKeyId
+    )
+      preparationProofFailure()
+  }
+}
+
 /** Only a protected installation supplies policy, key and signed staging-catalog reader. */
 export function createTrustedPreparationCompiler(options: {
   hostPolicy: unknown
@@ -227,46 +268,8 @@ export function createTrustedPreparationCompiler(options: {
     }
   }
   if (frozenPolicy.schema !== "lyrashield-preparation-host-policy/2") return compiler
-  const installedCapability = createInstalledExecutionAuthorityCapability()
-  return Object.assign(compiler, {
-    async verifyPreparedCommand(client: AuthoritySqlConnection, command: PrepareCommand) {
-      const result = await client.query(
-        `SELECT o."commandInputJson",o."commandInputChecksum"
-        FROM "ScanDispatchOutbox" o JOIN "ScanDispatchAttempt" a ON a."attemptId"=o."attemptId" AND a."operationId"=o."operationId"
-        WHERE o.id=$1 AND o."operationId"=$2 AND o."attemptId"=$3 AND a."workspaceId"=$4
-        AND a."authorityEpochId"=$5 AND o."commandType"='PREPARE' AND o.status='PENDING'
-        AND a."authorityTransactionId"=pg_current_xact_id()::text AND app.scan_preparation_gate_held()
-        AND a."authorityDeadlineAt">clock_timestamp() AT TIME ZONE 'UTC'`,
-        [
-          command.commandId,
-          command.attempt.operationId,
-          command.attempt.attemptId,
-          command.attempt.workspaceId,
-          command.attempt.authorityEpochId,
-        ]
-      )
-      if (result.rows.length !== 1) preparationProofFailure()
-      const row = result.rows[0]!
-      if (typeof row.commandInputJson !== "string" || typeof row.commandInputChecksum !== "string")
-        preparationProofFailure()
-      const stored = readStoredDispatchCommand(row.commandInputJson, row.commandInputChecksum)
-      if (!stored || stored.type !== "PREPARE" || canonicalJson(stored) !== canonicalJson(command))
-        preparationProofFailure()
-      const installed = await installedCapability.verifyAction(
-        client,
-        deriveCurrentPrepareBinding(stored, row.commandInputChecksum)
-      )
-      const delegation = requireCurrentPreparationDelegation(installed.preparation, installed)
-      if (
-        delegation.preparationPolicyChecksum !== sha256Hex(canonicalJson(frozenPolicy)) ||
-        delegation.issuerKeyHash !== frozenPolicy.issuerKeyHash ||
-        delegation.issuerKeyId !== frozenPolicy.issuerKeyId
-      )
-        preparationProofFailure()
-    },
-  })
+  return Object.assign(compiler, { verifyPreparedCommand: preparedCommandVerifier(frozenPolicy) })
 }
-
 function compileProtectedExecutors(
   authority: ScanPreparationCommandAuthority,
   frozenPolicy: ReturnType<typeof trustedPreparationHostPolicySchema.parse>,

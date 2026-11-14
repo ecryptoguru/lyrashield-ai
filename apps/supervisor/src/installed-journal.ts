@@ -9,6 +9,7 @@ import { bindingFor } from "./authority-bindings"
 import { createSupervisorAuthorityJournal } from "./authority-journal"
 import type { loadDatabaseSupervisorAuthority } from "./database-authority"
 import { createInstalledSupervisorToolJournal } from "./installed-tool-journal"
+import { installedJournalMirrorRole } from "./installed-journal-connections"
 
 function unavailable(): never {
   throw new Error("Protected independent supervisor journal is unavailable")
@@ -36,39 +37,11 @@ export async function loadInstalledSupervisorJournal(
     (!publishes && !receiptUrl)
   )
     unavailable()
-  let mirrorRole: string
-  try {
-    const url = new URL(mirrorUrl),
-      execution = new URL(authority.supervisorAuthority.connectionString)
-    const receipt = receiptUrl ? new URL(receiptUrl) : undefined
-    mirrorRole = decodeURIComponent(url.username)
-    if (
-      !/^postgres(?:ql)?:$/.test(url.protocol) ||
-      !/^[a-z][a-z0-9_]{2,62}$/.test(mirrorRole) ||
-      ["postgres", "service_role", "app_runtime_prod", "app_system_prod"].includes(mirrorRole) ||
-      decodeURIComponent(execution.username) === mirrorRole ||
-      url.hostname !== execution.hostname ||
-      (url.port || "5432") !== (execution.port || "5432") ||
-      url.pathname !== execution.pathname ||
-      (receipt !== undefined &&
-        (!/^postgres(?:ql)?:$/.test(receipt.protocol) ||
-          !/^[a-z][a-z0-9_]{2,62}$/.test(decodeURIComponent(receipt.username)) ||
-          [
-            mirrorRole,
-            decodeURIComponent(execution.username),
-            "postgres",
-            "service_role",
-            "app_runtime_prod",
-            "app_system_prod",
-          ].includes(decodeURIComponent(receipt.username)) ||
-          receipt.hostname !== execution.hostname ||
-          (receipt.port || "5432") !== (execution.port || "5432") ||
-          receipt.pathname !== execution.pathname))
-    )
-      unavailable()
-  } catch {
-    unavailable()
-  }
+  const mirrorRole = installedJournalMirrorRole(
+    mirrorUrl,
+    authority.supervisorAuthority.connectionString,
+    receiptUrl
+  )
   const pool = new pg.Pool({
     ...createPgConnectionConfig(mirrorUrl),
     max: 2,

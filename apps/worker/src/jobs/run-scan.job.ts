@@ -1,9 +1,9 @@
 import {
-  isVerifiedNativeEngineResult,
-  type VerifiedNativeEngineResult,
-} from "./run-scan/native-engine-result"
-import { readScanDispatchCleanupProof } from "@lyrashield/db/src/scan-dispatch-cleanup-proof"
-import { notifyScanFailed } from "../notifications"
+  recordScannerCompletion,
+  notifyTerminalScanFailure,
+} from "./run-scan/scan-completion-events"
+import { readNativeCleanupProof, assertVerifiedNativeResult } from "./run-scan/native-cleanup-proof"
+import { type VerifiedNativeEngineResult } from "./run-scan/native-engine-result"
 import { readExecutionPolicy, failScanWithTimeout } from "./run-scan/execution-policy"
 import {
   prepareScanCapacity,
@@ -26,7 +26,6 @@ import {
 } from "@lyrashield/config"
 import type { checkoutDeterministicRetest } from "../engine/deterministic-retest"
 
-import { summarizeVibeSecurityCoverage } from "@lyrashield/security"
 import { executeScanTarget, resolveEngineTerminalError } from "./run-scan/execution"
 import { createEngineMinuteMeter, type ScanTerminalError } from "./run-scan/settlement"
 import {
@@ -57,6 +56,7 @@ import {
   finalizeExecutionDenial,
   executorProvenStopped,
   readScanTerminalState,
+  persistScanFailure,
 } from "./run-scan/lifecycle-guards"
 import { resumePendingScanFinalization } from "./run-scan/pending-finalization"
 import {
@@ -94,7 +94,7 @@ export async function processNativeScanResult(
   job: Job<ScanJobData, ScanJobResult>,
   native: VerifiedNativeEngineResult
 ): Promise<ScanJobResult> {
-  if (!isVerifiedNativeEngineResult(native)) throw new Error("Native result authority unavailable")
+  assertVerifiedNativeResult(native)
   try {
     return await processStoredScanJob(job, native)
   } finally {
@@ -110,18 +110,9 @@ async function processStoredScanJob(
   if (!authority.ok) return authority.result
   const { data, scanRecord, workspaceId, executionPlan } = authority
   const { scanId, targetId, goal, mode, policyId } = data
-  const nativeCleanup = native ? await readScanDispatchCleanupProof(workspaceId, scanId) : null
-  if (
-    native &&
-    (native.action.scanId !== scanId ||
-      native.action.workspaceId !== workspaceId ||
-      native.engineResult.sourceRevision !== executionPlan?.source?.revision ||
-      !nativeCleanup ||
-      nativeCleanup.operationId !== native.action.operationId ||
-      nativeCleanup.attemptId !== native.action.attemptId ||
-      nativeCleanup.authorityEpochId !== native.action.authorityEpochId)
-  )
-    throw new Error("Native cleanup or source proof unavailable")
+  const nativeCleanup = native
+    ? await readNativeCleanupProof(native, workspaceId, scanId, executionPlan)
+    : null
   const elapsedScanMs = scanElapsedClock(scanRecord.startedAt)
 
   // Wrap the entire job in workspace context so the Prisma client extension's
@@ -575,48 +566,7 @@ async function processStoredScanJob(
       costReconciled = triageOverlay.costReconciled
       reconciliationReason = triageOverlay.reconciliationReason
 
-      try {
-        await addScanEvent(
-          scanId,
-          "scanners_complete",
-          "info",
-          `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, url=${orchestratorResult.urlFindings.length}, agent_config=${orchestratorResult.agentConfigFindings.length}, sast=${orchestratorResult.sastFindings.length}, iac=${orchestratorResult.iacFindings.length}, ml_supply_chain=${orchestratorResult.mlSupplyChainFindings.length}, ai_app_security=${orchestratorResult.aiAppSecurityFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
-          {
-            engine: orchestratorResult.engineFindings.length,
-            sca: orchestratorResult.scaFindings.length,
-            secrets: orchestratorResult.secretsFindings.length,
-            url: orchestratorResult.urlFindings.length,
-            agentConfig: orchestratorResult.agentConfigFindings.length,
-            sast: orchestratorResult.sastFindings.length,
-            iac: orchestratorResult.iacFindings.length,
-            mlSupplyChain: orchestratorResult.mlSupplyChainFindings.length,
-            aiAppSecurity: orchestratorResult.aiAppSecurityFindings.length,
-            falsePositivesFiltered: orchestratorResult.filteredFalsePositives,
-            stats: orchestratorResult.stats,
-          }
-        )
-      } catch (eventErr) {
-        log.warn("Failed to persist scanners_complete event", {
-          scanId,
-          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-        })
-      }
-
-      const coverage = summarizeVibeSecurityCoverage(orchestratorResult.allFindings)
-      try {
-        await addScanEvent(
-          scanId,
-          "coverage_contract",
-          "info",
-          `Vibe Security 50: ${coverage.reviewControlsRequested} code/URL review controls requested where applicable; ${coverage.matchedControlRanks.length} produced findings; ${coverage.evidenceControlsRequired} require deployment or human evidence`,
-          coverage
-        )
-      } catch (eventErr) {
-        log.warn("Failed to persist coverage_contract event", {
-          scanId,
-          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-        })
-      }
+      const coverage = await recordScannerCompletion(scanId, orchestratorResult)
 
       const grace = finalizationGrace()
       const finalization = await finalizeScanLifecycle({
@@ -664,19 +614,12 @@ async function processStoredScanJob(
         return terminalResult ?? { status: "completed", summary: scanSummary }
       }
       if (terminalResult) {
-        if (terminalResult.errorCategory !== "BUDGET_EXCEEDED") {
-          try {
-            await notifyScanFailed(workspaceId, scanId, terminalResult.errorMessage)
-          } catch (notificationError) {
-            log.warn("Failed to send scan failure notification", {
-              scanId,
-              error:
-                notificationError instanceof Error
-                  ? notificationError.message
-                  : String(notificationError),
-            })
-          }
-        }
+        await notifyTerminalScanFailure(
+          workspaceId,
+          scanId,
+          terminalResult.errorCategory,
+          terminalResult.errorMessage
+        )
         return terminalResult
       }
 
@@ -792,20 +735,13 @@ async function processStoredScanJob(
         throw error
       }
 
-      try {
-        const update = billablePhaseStarted ? updateScanStatus : updateUnclaimedScanStatus
-        await update(scanId, "FAILED" as ScanStatus, {
-          errorCategory: finalErrorCategory,
-          errorMessage: finalErrorMessage,
-        })
-      } catch (updateErr) {
-        log.error("Failed to update scan status on error", {
-          scanId,
-          errorType: updateErr instanceof Error ? updateErr.name : "UNKNOWN",
-        })
-        // ponytail: let BullMQ retain the terminal infrastructure failure when the DB cannot.
-        throw error
-      }
+      await persistScanFailure(
+        scanId,
+        billablePhaseStarted,
+        finalErrorCategory,
+        finalErrorMessage,
+        error
+      )
 
       return {
         status: "failed",

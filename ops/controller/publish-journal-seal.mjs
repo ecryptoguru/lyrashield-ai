@@ -99,12 +99,7 @@ async function assertSealMirrorRole(pool, expectedRole) {
   check(proof.rows.length === 1 && proof.rows[0]?.safe === true)
 }
 
-/** Fixed installed root configuration, genuine remote stores, original pending selector only. */
-export async function publishInstalledJournalSeal({
-  source,
-  resumeSealHash,
-  streamKind = "controller",
-}) {
+function readInstalledPublicationConfiguration(source, resumeSealHash, streamKind) {
   check(streamKind === "controller" || streamKind === "tools")
   const filePrefix = streamKind === "tools" ? "tool-journal" : "journal"
   const configurationPath = `/etc/lyrashield/control/${filePrefix}-seal-publisher.json`
@@ -156,6 +151,17 @@ export async function publishInstalledJournalSeal({
       policy.checkpointKeyHash !== policy.originalKeyHash &&
         policy.checkpointKeyHash !== policy.wrapperKeyHash
     )
+  return { configBytes, configurationPath, storagePath, config, policy, env, identity, checkpoint }
+}
+
+/** Fixed installed root configuration, genuine remote stores, original pending selector only. */
+export async function publishInstalledJournalSeal({
+  source,
+  resumeSealHash,
+  streamKind = "controller",
+}) {
+  const { configBytes, configurationPath, storagePath, config, policy, env, identity, checkpoint } =
+    readInstalledPublicationConfiguration(source, resumeSealHash, streamKind)
   const closers = []
   let publishedSealHash
   try {

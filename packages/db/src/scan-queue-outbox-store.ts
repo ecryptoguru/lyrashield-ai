@@ -173,6 +173,15 @@ function assertStoreBounds(pool: pg.Pool, leaseMs: number) {
     throw new ScanQueueOutboxError("QUEUE_DATABASE_BOUNDS_REQUIRED")
 }
 
+async function quarantine(client: pg.PoolClient, row: QueueOutboxRow, reasonCode: string) {
+  if (row.state === "PENDING" || row.state === "LEASED")
+    await client.query(
+      'UPDATE "ScanQueueOutbox" SET state=\'UNKNOWN\', "lastErrorCode"=$2, "updatedAt"=CURRENT_TIMESTAMP WHERE id=$1',
+      [row.outboxId, reasonCode]
+    )
+  return { kind: "unknown", reasonCode } as const
+}
+
 export function createScanQueueOutboxStore(pool: pg.Pool, leaseMs: number) {
   assertStoreBounds(pool, leaseMs)
 
@@ -205,15 +214,6 @@ export function createScanQueueOutboxStore(pool: pg.Pool, leaseMs: number) {
     } finally {
       client?.release(true)
     }
-  }
-
-  async function quarantine(client: pg.PoolClient, row: QueueOutboxRow, reasonCode: string) {
-    if (row.state === "PENDING" || row.state === "LEASED")
-      await client.query(
-        'UPDATE "ScanQueueOutbox" SET state=\'UNKNOWN\', "lastErrorCode"=$2, "updatedAt"=CURRENT_TIMESTAMP WHERE id=$1',
-        [row.outboxId, reasonCode]
-      )
-    return { kind: "unknown", reasonCode } as const
   }
 
   return {

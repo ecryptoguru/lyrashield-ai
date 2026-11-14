@@ -1,3 +1,4 @@
+import { resolveReviewChangesSource } from "./scan-repository-source"
 import { scanCreationConflict } from "../../../lib/scan-admission-conflicts"
 import { releaseUnstartedScanSlot } from "@lyrashield/db"
 import { withCookieMutation, authErrorResponse } from "../../../lib/api-auth"
@@ -37,12 +38,7 @@ import {
   enqueueScanJob,
   ScanWorkerUnavailableError,
 } from "../../../lib/queue"
-import {
-  getBranchRefSha,
-  getDefaultBranch,
-  getMergeBaseSha,
-  resolveRepositoryScanSource,
-} from "@lyrashield/integrations"
+import { resolveRepositoryScanSource } from "@lyrashield/integrations"
 import {
   checkFreeUrlScanRateLimit,
   checkScanCreateRateLimit,
@@ -55,20 +51,6 @@ import {
   resolveDelegatedScanAdmission,
   type DelegatedScanAdmission,
 } from "./scan-operation-admission"
-
-/** Full lowercase git object IDs (SHA-1 = 40, SHA-256 = 64) pass through as
- * immutable revisions; anything else resolves through the installation. */
-const FULL_GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
-
-async function resolveRepoRevision(
-  installationId: number,
-  owner: string,
-  repo: string,
-  ref: string
-): Promise<string> {
-  if (FULL_GIT_OBJECT_ID.test(ref)) return ref.toLowerCase()
-  return getBranchRefSha(installationId, owner, repo, ref)
-}
 
 /**
  * Concurrent in-flight reviews per workspace (shared with the scheduled-scan
@@ -479,28 +461,15 @@ async function post(request: Request) {
         })
       }
       try {
-        const headSha = await resolveRepoRevision(
+        const source = await resolveReviewChangesSource({
           installationId,
           repoOwner,
           repoName,
-          data.headRef ??
-            target.branch ??
-            (await getDefaultBranch(installationId, repoOwner, repoName))
-        )
-        const baseSha = await resolveRepoRevision(
-          installationId,
-          repoOwner,
-          repoName,
-          data.baseRef!
-        )
-        const mergeBaseSha = await getMergeBaseSha(
-          installationId,
-          repoOwner,
-          repoName,
-          baseSha,
-          headSha
-        )
-        if (!mergeBaseSha) {
+          headRef: data.headRef,
+          branch: target.branch,
+          baseRef: data.baseRef!,
+        })
+        if (!source) {
           return refuseScan({
             workspaceId,
             actorUserId,
@@ -513,11 +482,7 @@ async function post(request: Request) {
             workflow: data.workflow,
           })
         }
-        planSource = {
-          revision: headSha,
-          baseRevision: baseSha,
-          mergeBaseRevision: mergeBaseSha,
-        }
+        planSource = source
       } catch (resolveErr) {
         logger.warn("Failed to resolve Review Changes refs", {
           workspaceId,

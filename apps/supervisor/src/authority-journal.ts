@@ -2,20 +2,15 @@ import {
   IndependentAuthorityError,
   IndependentAuthorityJournal,
   JournalReadLimitError,
-  MAX_SUPERVISOR_JOURNAL_PAGE_BYTES,
   MAX_SUPERVISOR_JOURNAL_RECORD_BYTES,
   SignedJournal,
   authorityEventSchema,
   canonicalJson,
   sha256Hex,
-  bindSupervisorJournalSnapshot,
   supervisorJournalCursorSchema,
   supervisorRecoveryRequestSchema,
   type AttemptBinding,
-  type AuthorityEvent,
-  type IndependentAuthorityJournalOptions,
   type JournalPort,
-  type JournalRecord,
   type BoundedAuthorityMirror,
   type BoundedConditionalObjectStore,
   type SupervisorJournalPage,
@@ -32,6 +27,16 @@ import {
   type SupervisorJournalEvent,
 } from "./journal-events"
 import { inspectJournalPath, journalPathsOverlap } from "./journal-paths"
+import { readBoundedJournalPage, fallbackJournalPage } from "./authority-journal-pages"
+import type {
+  DurabilityOptions,
+  OriginalRecord,
+  OriginalEventPosition,
+  WrappedEvent,
+  WrappedRecord,
+  SupervisorAuthorityJournalOptions,
+} from "./authority-journal-options"
+export type { SupervisorAuthorityJournalOptions } from "./authority-journal-options"
 import { bindingFor, attemptFor, same, conflict } from "./authority-bindings"
 import {
   recoverSignedEvent,
@@ -39,13 +44,7 @@ import {
   validRecoveryHold,
   validRecoverySuffix,
   eventCommandId,
-  type RecoveryAuthorizer,
 } from "./authority-recovery"
-
-type OriginalRecord = JournalRecord<SupervisorJournalEvent>
-type OriginalEventPosition = Pick<OriginalRecord, "payload" | "sequence">
-type WrappedEvent = AuthorityEvent<OriginalRecord>
-type WrappedRecord = JournalRecord<WrappedEvent>
 
 // Closed prototype safeguard. Continuing production recovery needs authenticated
 // checkpoints/compaction or truly bounded paging; STOP/append have no such ceiling.
@@ -55,30 +54,6 @@ export const SUPERVISOR_CURSOR_HISTORY_LIMITS = {
   wrappedMaxBytes: 1024 * 1024,
 } as const
 type LocalSnapshot = { originals: OriginalRecord[]; wrapped: WrappedRecord[] }
-
-type DurabilityOptions = Omit<
-  IndependentAuthorityJournalOptions<OriginalRecord>,
-  "local" | "payloadSchema" | "authorize" | "authorizeConfirmed"
-> & {
-  // Must atomically validate current persisted epoch, operation, attempt,
-  // workspace, scan and authority revision. Journal evidence is not permission
-  // to perform an executor or provider action.
-  authorize: (event: WrappedEvent, binding: AttemptBinding) => Promise<boolean>
-  authorizeConfirmed?: (record: WrappedRecord, binding: AttemptBinding) => Promise<boolean>
-  // Mandatory even for genesis: authenticate the persisted active stream/epoch
-  // independently of whether there are any events to authorize.
-  authorizeStream: (stream: { epochId: string; supervisorInstanceId: string }) => Promise<boolean>
-  // Independently compare current persisted command/attempt/epoch/grant authority;
-  // request IDs/digest only select the original record and never grant permission.
-  authorizeRecovery: RecoveryAuthorizer
-  onConfirmed?: (record: OriginalRecord) => Promise<void>
-  readOnly?: boolean
-}
-
-export interface SupervisorAuthorityJournalOptions extends DurabilityOptions {
-  original: JournalPort<SupervisorJournalEvent>
-  local: JournalPort<WrappedEvent>
-}
 
 /**
  * Two signed local streams: originals remain intact, while the independent
@@ -583,68 +558,12 @@ export class SupervisorAuthorityJournal
         }
         this.originals = this.cursorOriginals
         this.rangeRead = true
-        const originals = await this.options.original.readRange!(cursor.afterSequence, {
-          maxBytes: 1024 * 1024,
-          maxRecords: cursor.limit,
-        })
-        if (originals.previousHash !== cursor.afterHash) {
-          throw new IndependentAuthorityError(
-            "CURSOR_CONFLICT",
-            "cursor predecessor does not match"
-          )
-        }
-        if (!same(originals.head, this.cursorOriginals!.at(-1) ?? null)) {
-          conflict("original range head changed outside the supervisor")
-        }
-        const confirmed = await this.independent.loadConfirmedRange(cursor.afterSequence, {
-          maxBytes: 2 * 1024 * 1024,
-          maxRecords: originals.records.length || cursor.limit,
-        })
-        if (
-          !same(confirmed.head?.payload.payload ?? null, originals.head) ||
-          !same(
-            confirmed.records.map((record) => record.payload.payload),
-            originals.records
-          )
-        ) {
-          conflict("bounded original and independent streams disagree")
-        }
-        const snapshotHead = this.independent.confirmedHead()
-        const snapshotCursor = bindSupervisorJournalSnapshot(cursor, snapshotHead)
-        const page: SupervisorJournalPage<SupervisorJournalEvent> = {
-          records: [],
-          snapshotHead,
-          nextCursor: snapshotCursor,
-          hasMore: originals.hasMore,
-        }
-        for (const record of confirmed.records) {
-          const next = {
-            records: [...page.records, record],
-            snapshotHead,
-            nextCursor: {
-              ...snapshotCursor,
-              afterSequence: record.sequence,
-              afterHash: record.payload.payload.hash,
-            },
-            hasMore: record.sequence < (originals.head?.sequence ?? 0),
-          }
-          if (Buffer.byteLength(canonicalJson(next)) > MAX_SUPERVISOR_JOURNAL_PAGE_BYTES) {
-            if (!page.records.length)
-              throw new IndependentAuthorityError("READ_LIMIT", "page cannot make bounded progress")
-            break
-          }
-          Object.assign(page, next)
-        }
-        if (
-          !same(
-            originals,
-            await this.options.original.readRange!(cursor.afterSequence, {
-              maxBytes: 1024 * 1024,
-              maxRecords: cursor.limit,
-            })
-          )
+        const page = await readBoundedJournalPage(
+          this.options.original,
+          this.independent,
+          cursor,
+          this.cursorOriginals!.at(-1) ?? null
         )
-          conflict("original range changed during readback")
         await this.assertStreamAuthorized()
         return page
       })
@@ -668,49 +587,7 @@ export class SupervisorAuthorityJournal
         )
       }
       const history = await this.confirmedHistory()
-      const previous = cursor.afterSequence
-        ? history[cursor.afterSequence - 1]?.payload.payload
-        : null
-      if (
-        cursor.afterSequence > history.length ||
-        cursor.afterHash !== (previous?.hash ?? "0".repeat(64))
-      ) {
-        throw new IndependentAuthorityError("CURSOR_CONFLICT", "cursor predecessor does not match")
-      }
-      const snapshotHead = this.independent.confirmedHead()
-      const snapshotCursor = bindSupervisorJournalSnapshot(cursor, snapshotHead)
-      const page: SupervisorJournalPage<SupervisorJournalEvent> = {
-        records: [],
-        snapshotHead,
-        nextCursor: snapshotCursor,
-        hasMore: cursor.afterSequence < history.length,
-      }
-      for (const record of history.slice(
-        cursor.afterSequence,
-        cursor.afterSequence + cursor.limit
-      )) {
-        const candidate = {
-          records: [...page.records, record],
-          snapshotHead,
-          nextCursor: {
-            ...snapshotCursor,
-            afterSequence: record.payload.payload.sequence,
-            afterHash: record.payload.payload.hash,
-          },
-          hasMore: record.payload.payload.sequence < history.length,
-        }
-        if (Buffer.byteLength(canonicalJson(candidate)) > MAX_SUPERVISOR_JOURNAL_PAGE_BYTES) {
-          if (!page.records.length) {
-            throw new IndependentAuthorityError(
-              "RECORD_TOO_LARGE",
-              "original record exceeds read limit"
-            )
-          }
-          break
-        }
-        Object.assign(page, candidate)
-      }
-      return structuredClone(page)
+      return fallbackJournalPage(cursor, this.independent.confirmedHead(), history)
     }, snapshot)
   }
 }

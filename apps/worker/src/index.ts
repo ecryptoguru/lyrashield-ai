@@ -1,3 +1,5 @@
+import { attachScanWorkerErrorHandlers } from "./scan-worker-events"
+import { startWebhookTrackRetryWorker } from "./webhook-track-retry-worker"
 import {
   assertColdDatabaseEpoch,
   configureColdDatabaseEpochFailureHandler,
@@ -13,10 +15,8 @@ import {
   closeAiResultCacheRedis,
   unregisterScanWorker,
   SCAN_WORKER_HEARTBEAT_MS,
-  WEBHOOK_TRACK_RETRY_QUEUE_NAME,
   type WebhookTrackRetryJobData,
 } from "@lyrashield/integrations"
-import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
 import { FIX_GENERATE_QUEUE_NAME, type FixGenerateJobData } from "@lyrashield/integrations"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processWorkerScanJob } from "./jobs/scan-job-processor"
@@ -25,7 +25,6 @@ import {
   legacyWorkerLifecycleEnabled,
   initializeWorkerAuthorityStartup,
 } from "./worker-authority-startup"
-import { processWebhookTrackRetry } from "./jobs/webhook-track-retry.job"
 import { processQueuedFixGenerateJob, type FixGenerateJobResult } from "./jobs/fix-generate.job"
 import { startScheduleRunner } from "./schedules"
 import { startBillingJobsScheduler } from "./billing-jobs-scheduler"
@@ -38,7 +37,6 @@ import {
   terminateActiveEngineProcesses,
 } from "./engine/runner"
 import {
-  reconcileFailedQueueJob,
   reconcileScanQueue,
   reconcileScanQueueIfNeeded,
   type QueueReconciliationResult,
@@ -495,62 +493,15 @@ async function main(): Promise<void> {
     logger.info("Job completed", { jobId: job.id, result })
     void scanWorkerHeartbeat.heartbeat().catch(() => {})
   })
-  worker.on("failed", (job, error) => {
-    logger.error("Job failed in queue", { jobId: job?.id, reason: error.message })
-    if (job?.id) {
-      void reconcileFailedQueueJob(job.id, error.message, job.attemptsMade, job.opts.attempts ?? 1)
-    }
-  })
+  attachScanWorkerErrorHandlers(worker)
 
-  worker.on("error", (error) => {
-    logger.error("Worker error", { error: error.message, stack: error.stack })
-  })
-
-  // Webhook required-track retries (findings 12 / 18A). Separate BullMQ queue
-  // + worker sharing the same connection options; the processor delegates to
-  // the shared executor in @lyrashield/billing via injected handlers.
-  webhookTrackRetryWorker = new Worker<WebhookTrackRetryJobData, void>(
-    WEBHOOK_TRACK_RETRY_QUEUE_NAME,
-    async (job) => {
-      const result = await processWebhookTrackRetry(job, { dispatchAffiliate })
-      logger.info("Webhook track retry processed", {
-        jobId: job.id,
-        webhookEventId: job.data.webhookEventId,
-        track: job.data.track,
-        outcome: result.outcome,
-        retryRepresented: result.retryRepresented,
-      })
-    },
-    {
-      connection: {
-        url: env.REDIS_URL || "redis://localhost:6379",
-        maxRetriesPerRequest: null,
-      },
-      concurrency: WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY,
-      autorun: false,
-      // Keep instant job pickup while avoiding BullMQ's five-second idle poll,
-      // which alone exceeds a 500,000-command monthly managed Redis budget.
-      drainDelay: MANAGED_REDIS_DRAIN_DELAY_SECONDS,
-      stalledInterval: MANAGED_REDIS_STALLED_INTERVAL_MS,
+  await startWebhookTrackRetryWorker(
+    MANAGED_REDIS_DRAIN_DELAY_SECONDS,
+    MANAGED_REDIS_STALLED_INTERVAL_MS,
+    (created) => {
+      webhookTrackRetryWorker = created
     }
   )
-  await webhookTrackRetryWorker.waitUntilReady()
-  webhookTrackRetryWorker.on("failed", (job, error) => {
-    logger.error("Webhook track retry job failed in queue", {
-      jobId: job?.id,
-      webhookEventId: job?.data?.webhookEventId,
-      track: job?.data?.track,
-      reason: error.message,
-    })
-  })
-  webhookTrackRetryWorker.on("error", (error) => {
-    logger.error("Webhook track retry worker error", { error: error.message })
-  })
-  webhookTrackRetryWorker.run().catch((error) => {
-    logger.error("Webhook track retry worker stopped unexpectedly", {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  })
 
   // WP3 fix-PR producer: assembles a validated patch from a finding's
   // engine-emitted structured fix and stores it for the approval-bound PR flow.

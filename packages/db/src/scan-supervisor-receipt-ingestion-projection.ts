@@ -252,6 +252,63 @@ async function verifyRecoveryHold(
     receiptFailure("SUPERVISOR_RECOVERY_HOLD_MISMATCH")
 }
 
+async function finalizeSupervisorProjection(
+  client: pg.PoolClient,
+  operationId: string,
+  confirmedSequence: number,
+  sourceCount: number,
+  final: Map<string, { command: Command; status: string; receiptId: string }>
+) {
+  for (const outcome of final.values())
+    if (outcome.status === "UNKNOWN")
+      await quarantine(client, operationId, outcome.command, outcome.receiptId)
+  const preparations = new Set<string>()
+  for (const outcome of final.values())
+    if (
+      outcome.status === "PREPARED" &&
+      (await applyAuthenticatedPreparation(client, operationId, outcome.command, outcome.receiptId))
+    )
+      preparations.add(outcome.command.id)
+  const starts = new Set<string>()
+  for (const outcome of final.values())
+    if (
+      outcome.status === "STARTED" &&
+      (await applyAuthenticatedStart(client, operationId, outcome.command, outcome.receiptId))
+    )
+      starts.add(outcome.command.id)
+  const cleanups = new Set<string>()
+  for (const outcome of final.values())
+    if (
+      await applyAuthenticatedCleanup(
+        client,
+        operationId,
+        outcome.command,
+        outcome.receiptId,
+        outcome.status
+      )
+    )
+      cleanups.add(outcome.command.id)
+  return {
+    operationId,
+    confirmedSequence,
+    receipts: sourceCount,
+    dispositions: [...final.values()].map(({ command, status }) => ({
+      commandId: command.id,
+      status:
+        status === "UNKNOWN"
+          ? "UNKNOWN"
+          : preparations.has(command.id)
+            ? "PREPARED"
+            : starts.has(command.id)
+              ? "STARTED"
+              : cleanups.has(command.id)
+                ? status
+                : "HELD",
+      observedStatus: status,
+    })),
+  }
+}
+
 export async function projectSupervisorSnapshot(
   client: pg.PoolClient,
   authority: SupervisorReceiptAuthority,
@@ -403,52 +460,5 @@ export async function projectSupervisorSnapshot(
     if (disposition && (disposition === "UNKNOWN" || final.get(command.id)?.status !== "UNKNOWN"))
       final.set(command.id, { command, status: disposition, receiptId })
   }
-  for (const outcome of final.values())
-    if (outcome.status === "UNKNOWN")
-      await quarantine(client, operationId, outcome.command, outcome.receiptId)
-  const preparations = new Set<string>()
-  for (const outcome of final.values())
-    if (
-      outcome.status === "PREPARED" &&
-      (await applyAuthenticatedPreparation(client, operationId, outcome.command, outcome.receiptId))
-    )
-      preparations.add(outcome.command.id)
-  const starts = new Set<string>()
-  for (const outcome of final.values())
-    if (
-      outcome.status === "STARTED" &&
-      (await applyAuthenticatedStart(client, operationId, outcome.command, outcome.receiptId))
-    )
-      starts.add(outcome.command.id)
-  const cleanups = new Set<string>()
-  for (const outcome of final.values())
-    if (
-      await applyAuthenticatedCleanup(
-        client,
-        operationId,
-        outcome.command,
-        outcome.receiptId,
-        outcome.status
-      )
-    )
-      cleanups.add(outcome.command.id)
-  return {
-    operationId,
-    confirmedSequence,
-    receipts: sourceCount,
-    dispositions: [...final.values()].map(({ command, status }) => ({
-      commandId: command.id,
-      status:
-        status === "UNKNOWN"
-          ? "UNKNOWN"
-          : preparations.has(command.id)
-            ? "PREPARED"
-            : starts.has(command.id)
-              ? "STARTED"
-              : cleanups.has(command.id)
-                ? status
-                : "HELD",
-      observedStatus: status,
-    })),
-  }
+  return finalizeSupervisorProjection(client, operationId, confirmedSequence, sourceCount, final)
 }

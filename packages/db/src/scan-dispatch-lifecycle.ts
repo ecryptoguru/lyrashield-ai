@@ -45,176 +45,185 @@ type Scope = {
   grantLive: boolean
 }
 
-export function createScanDispatchLifecycle(options: {
+type LifecycleOptions = {
   context: DispatchBrokerContext
   nativeTransaction: DispatchBrokerContext["transaction"]
   cleanupTransaction: DispatchBrokerContext["transaction"]
   cleanupLockOperation: DispatchBrokerContext["lockOperation"]
   stageTransaction?: DispatchBrokerContext["transaction"]
   authority?: ProofAuthority
-}) {
-  const authority = options.authority
-  async function readScope(
-    input: StartPaidDispatchInput | ReconcileDispatchInput,
-    phase: "execution" | "cleanup"
-  ): Promise<Scope> {
-    const transaction = phase === "cleanup" ? options.cleanupTransaction : options.nativeTransaction
-    const result = await transaction(input.operationId, async (client) => {
-      await (phase === "cleanup" ? options.cleanupLockOperation : options.context.lockOperation)(
-        client,
-        input
-      )
-      const row = (
-        await client.query<Scope>(
-          `SELECT a."workspaceId",a."scanId",a."workerInstanceGrantId" AS "workerGrantId",
-        g."instanceId" AS "workerInstanceId",a."authorityEpochId",p."commandInputChecksum" AS "prepareChecksum",
-        (a."authorityAcceptedAt" IS NOT NULL) AS checked,
-        (g."revokedAt" IS NULL AND g."expiresAt">clock_timestamp() AT TIME ZONE 'UTC') AS "grantLive"
-        FROM "ScanDispatchAttempt" a
-        JOIN "ScanWorkerInstanceGrant" g ON g.id=a."workerInstanceGrantId" AND g."authorityEpochId"=a."authorityEpochId"
-        JOIN "ScanDispatchOutbox" p ON p."operationId"=a."operationId" AND p."attemptId"=a."attemptId" AND p."commandType"='PREPARE'
-        WHERE a."operationId"=$1 AND a."attemptId"=$2 AND a."workspaceId"=app.current_workspace_id()`,
-          [input.operationId, input.attemptId]
-        )
-      ).rows[0]
-      if (
-        !row ||
-        !row.checked ||
-        (phase === "execution" && row.grantLive !== true) ||
-        row.workerGrantId !== input.workerGrantId ||
-        row.workerInstanceId !== input.workerInstanceId ||
-        row.authorityEpochId !== input.authorityEpochId
-      )
-        unavailable()
-      return row
-    })
-    if (result.kind !== "committed") unavailable()
-    return result.value
-  }
-  async function proof(
-    input: StartPaidDispatchInput | ReconcileDispatchInput,
-    scope: Scope,
-    type: SupervisorAttemptProofInput["type"],
-    commandId: string
-  ) {
-    if (!authority?.readAttemptProof || authority.authorityEpochId !== scope.authorityEpochId)
-      unavailable()
-    const requested: SupervisorAttemptProofInput = {
-      operationId: input.operationId,
-      attemptId: input.attemptId,
-      workspaceId: scope.workspaceId,
-      scanId: scope.scanId,
-      authorityEpochId: scope.authorityEpochId,
-      type,
-      commandId,
-      challenge: randomBytes(32).toString("hex"),
-      ...(type.startsWith("START_")
-        ? { executorKey: executorKeySchema.parse((input as StartPaidDispatchInput).executorKey) }
-        : {}),
-    }
-    const value = verifySupervisorAttemptProof(
-      await authority.readAttemptProof(requested),
-      requested,
-      {
-        publicKey: authority.attemptProofPublicKey ?? "",
-        supervisorInstanceId: authority.supervisorInstanceId,
-      }
+}
+
+async function readScope(
+  options: LifecycleOptions,
+  input: StartPaidDispatchInput | ReconcileDispatchInput,
+  phase: "execution" | "cleanup"
+): Promise<Scope> {
+  const transaction = phase === "cleanup" ? options.cleanupTransaction : options.nativeTransaction
+  const result = await transaction(input.operationId, async (client) => {
+    await (phase === "cleanup" ? options.cleanupLockOperation : options.context.lockOperation)(
+      client,
+      input
     )
-    if (value.prepareChecksum !== scope.prepareChecksum) unavailable()
-    return value
-  }
-  async function readStart(client: pg.PoolClient, input: StartPaidDispatchInput) {
     const row = (
-      await client.query<{
-        startId: string
-        kind: string
-        authorityProofInputJson: string | null
-        authorityProofChecksum: string | null
-        createdAt: Date
-      }>(
-        `SELECT s."startId",s.kind::text,s."authorityProofInputJson",s."authorityProofChecksum",s."createdAt" AT TIME ZONE 'UTC' AS "createdAt"
-      FROM "ScanDispatchStart" s JOIN "ScanDispatchAttempt" a ON a."operationId"=s."operationId" AND a."attemptId"=s."attemptId"
-      WHERE s."operationId"=$1 AND s."attemptId"=$2 AND a."workspaceId"=app.current_workspace_id()`,
+      await client.query<Scope>(
+        `SELECT a."workspaceId",a."scanId",a."workerInstanceGrantId" AS "workerGrantId",
+      g."instanceId" AS "workerInstanceId",a."authorityEpochId",p."commandInputChecksum" AS "prepareChecksum",
+      (a."authorityAcceptedAt" IS NOT NULL) AS checked,
+      (g."revokedAt" IS NULL AND g."expiresAt">clock_timestamp() AT TIME ZONE 'UTC') AS "grantLive"
+      FROM "ScanDispatchAttempt" a
+      JOIN "ScanWorkerInstanceGrant" g ON g.id=a."workerInstanceGrantId" AND g."authorityEpochId"=a."authorityEpochId"
+      JOIN "ScanDispatchOutbox" p ON p."operationId"=a."operationId" AND p."attemptId"=a."attemptId" AND p."commandType"='PREPARE'
+      WHERE a."operationId"=$1 AND a."attemptId"=$2 AND a."workspaceId"=app.current_workspace_id()`,
         [input.operationId, input.attemptId]
       )
     ).rows[0]
-    if (!row) return null
     if (
-      !authority ||
-      !row.authorityProofInputJson ||
-      sha256Hex(row.authorityProofInputJson) !== row.authorityProofChecksum
+      !row ||
+      !row.checked ||
+      (phase === "execution" && row.grantLive !== true) ||
+      row.workerGrantId !== input.workerGrantId ||
+      row.workerInstanceId !== input.workerInstanceId ||
+      row.authorityEpochId !== input.authorityEpochId
     )
       unavailable()
-    const retained = supervisorAttemptProofSchema.parse(JSON.parse(row.authorityProofInputJson))
-    verifySupervisorAttemptProof(
-      retained,
-      {
-        ...retained.input,
-        operationId: input.operationId,
-        attemptId: input.attemptId,
-        authorityEpochId: input.authorityEpochId,
-      },
-      {
-        publicKey: authority.attemptProofPublicKey ?? "",
-        supervisorInstanceId: authority.supervisorInstanceId,
-      },
-      row.createdAt
-    )
     return row
+  })
+  if (result.kind !== "committed") unavailable()
+  return result.value
+}
+async function proof(
+  authority: ProofAuthority | undefined,
+  input: StartPaidDispatchInput | ReconcileDispatchInput,
+  scope: Scope,
+  type: SupervisorAttemptProofInput["type"],
+  commandId: string
+) {
+  if (!authority?.readAttemptProof || authority.authorityEpochId !== scope.authorityEpochId)
+    unavailable()
+  const requested: SupervisorAttemptProofInput = {
+    operationId: input.operationId,
+    attemptId: input.attemptId,
+    workspaceId: scope.workspaceId,
+    scanId: scope.scanId,
+    authorityEpochId: scope.authorityEpochId,
+    type,
+    commandId,
+    challenge: randomBytes(32).toString("hex"),
+    ...(type.startsWith("START_")
+      ? { executorKey: executorKeySchema.parse((input as StartPaidDispatchInput).executorKey) }
+      : {}),
   }
-  async function insert(
-    client: pg.PoolClient,
-    input: StartPaidDispatchInput | ReconcileDispatchInput,
-    value: SupervisorAttemptProof
-  ) {
-    if (!authority) unavailable()
-    if (
-      value.command.type.startsWith("START_") &&
-      (
-        await client.query(
-          `SELECT 1 FROM "ScanDispatchOutbox" WHERE "operationId"=$1 AND "attemptId"=$2 AND "commandType" IN ('START_PAID','START_UNMETERED')
-        AND status IN ('PENDING','LEASED','DELIVERED','ACCEPTED') LIMIT 1`,
-          [input.operationId, input.attemptId]
-        )
-      ).rowCount
-    )
-      throw new ScanDispatchAuthorityError(
-        "PREPARATION_AUTHORITY_BUSY",
-        "Previous executor must complete before the next command is frozen"
-      )
-    verifySupervisorAttemptProof(value, value.input, {
+  const value = verifySupervisorAttemptProof(
+    await authority.readAttemptProof(requested),
+    requested,
+    {
       publicKey: authority.attemptProofPublicKey ?? "",
       supervisorInstanceId: authority.supervisorInstanceId,
-    })
-    const bytes = canonicalJson(value),
-      commandBytes = canonicalJson(value.command)
-    if (
-      (
-        await client.query(
-          "SELECT app.scan_dispatch_lifecycle_proof_current($1,false) AS current",
-          [bytes]
-        )
-      ).rows[0]?.current !== true
+    }
+  )
+  if (value.prepareChecksum !== scope.prepareChecksum) unavailable()
+  return value
+}
+async function readStart(
+  authority: ProofAuthority | undefined,
+  client: pg.PoolClient,
+  input: StartPaidDispatchInput
+) {
+  const row = (
+    await client.query<{
+      startId: string
+      kind: string
+      authorityProofInputJson: string | null
+      authorityProofChecksum: string | null
+      createdAt: Date
+    }>(
+      `SELECT s."startId",s.kind::text,s."authorityProofInputJson",s."authorityProofChecksum",s."createdAt" AT TIME ZONE 'UTC' AS "createdAt"
+    FROM "ScanDispatchStart" s JOIN "ScanDispatchAttempt" a ON a."operationId"=s."operationId" AND a."attemptId"=s."attemptId"
+    WHERE s."operationId"=$1 AND s."attemptId"=$2 AND a."workspaceId"=app.current_workspace_id()`,
+      [input.operationId, input.attemptId]
     )
-      unavailable()
-    await client.query(
-      `INSERT INTO "ScanDispatchOutbox" (id,"operationId","attemptId","commandType","executorKey",sequence,"commandDigest","commandInputJson","commandInputChecksum","authorityProofInputJson","authorityProofChecksum",status,attempts,"availableAt","createdAt","updatedAt")
-      VALUES($1,$2,$3,$4::"ScanDispatchCommandType",$5,$6,$7,$8,$7,$9,$10,'PENDING',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-      [
-        value.command.commandId,
-        input.operationId,
-        input.attemptId,
-        value.command.type,
-        "executorKey" in value.command ? value.command.executorKey : "",
-        value.command.type.startsWith("START_") ? 2 : value.command.type === "STOP" ? 3 : 4,
-        sha256Hex(commandBytes),
-        commandBytes,
+  ).rows[0]
+  if (!row) return null
+  if (
+    !authority ||
+    !row.authorityProofInputJson ||
+    sha256Hex(row.authorityProofInputJson) !== row.authorityProofChecksum
+  )
+    unavailable()
+  const retained = supervisorAttemptProofSchema.parse(JSON.parse(row.authorityProofInputJson))
+  verifySupervisorAttemptProof(
+    retained,
+    {
+      ...retained.input,
+      operationId: input.operationId,
+      attemptId: input.attemptId,
+      authorityEpochId: input.authorityEpochId,
+    },
+    {
+      publicKey: authority.attemptProofPublicKey ?? "",
+      supervisorInstanceId: authority.supervisorInstanceId,
+    },
+    row.createdAt
+  )
+  return row
+}
+async function insert(
+  authority: ProofAuthority | undefined,
+  client: pg.PoolClient,
+  input: StartPaidDispatchInput | ReconcileDispatchInput,
+  value: SupervisorAttemptProof
+) {
+  if (!authority) unavailable()
+  if (
+    value.command.type.startsWith("START_") &&
+    (
+      await client.query(
+        `SELECT 1 FROM "ScanDispatchOutbox" WHERE "operationId"=$1 AND "attemptId"=$2 AND "commandType" IN ('START_PAID','START_UNMETERED')
+      AND status IN ('PENDING','LEASED','DELIVERED','ACCEPTED') LIMIT 1`,
+        [input.operationId, input.attemptId]
+      )
+    ).rowCount
+  )
+    throw new ScanDispatchAuthorityError(
+      "PREPARATION_AUTHORITY_BUSY",
+      "Previous executor must complete before the next command is frozen"
+    )
+  verifySupervisorAttemptProof(value, value.input, {
+    publicKey: authority.attemptProofPublicKey ?? "",
+    supervisorInstanceId: authority.supervisorInstanceId,
+  })
+  const bytes = canonicalJson(value),
+    commandBytes = canonicalJson(value.command)
+  if (
+    (
+      await client.query("SELECT app.scan_dispatch_lifecycle_proof_current($1,false) AS current", [
         bytes,
-        sha256Hex(bytes),
-      ]
-    )
-    return value.command.commandId
-  }
+      ])
+    ).rows[0]?.current !== true
+  )
+    unavailable()
+  await client.query(
+    `INSERT INTO "ScanDispatchOutbox" (id,"operationId","attemptId","commandType","executorKey",sequence,"commandDigest","commandInputJson","commandInputChecksum","authorityProofInputJson","authorityProofChecksum",status,attempts,"availableAt","createdAt","updatedAt")
+    VALUES($1,$2,$3,$4::"ScanDispatchCommandType",$5,$6,$7,$8,$7,$9,$10,'PENDING',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+    [
+      value.command.commandId,
+      input.operationId,
+      input.attemptId,
+      value.command.type,
+      "executorKey" in value.command ? value.command.executorKey : "",
+      value.command.type.startsWith("START_") ? 2 : value.command.type === "STOP" ? 3 : 4,
+      sha256Hex(commandBytes),
+      commandBytes,
+      bytes,
+      sha256Hex(bytes),
+    ]
+  )
+  return value.command.commandId
+}
+
+export function createScanDispatchLifecycle(options: LifecycleOptions) {
+  const authority = options.authority
   return {
     async start(
       input: StartPaidDispatchInput,
@@ -222,10 +231,10 @@ export function createScanDispatchLifecycle(options: {
     ): Promise<StartPaidDispatchResult> {
       if (!options.stageTransaction || !authority?.readAttemptProof) unavailable()
       const executorKey = executorKeySchema.parse(input.executorKey)
-      const scope = await readScope(input, "execution"),
+      const scope = await readScope(options, input, "execution"),
         type = kind === "PAID" ? "START_PAID" : "START_UNMETERED"
       const existing = await options.nativeTransaction(input.operationId, async (client) => {
-        const stage = await readStart(client, input)
+        const stage = await readStart(authority, client, input)
         if (stage && stage.kind !== kind) unavailable()
         const command = (
           await client.query<{ id: string }>(
@@ -248,7 +257,7 @@ export function createScanDispatchLifecycle(options: {
       const commandId = createId()
       let startId = existing.value.stage?.startId
       if (!startId) {
-        const initial = await proof(input, scope, type, commandId)
+        const initial = await proof(authority, input, scope, type, commandId)
         const context = {
           ...options.context,
           preparationAuthority: undefined,
@@ -262,12 +271,12 @@ export function createScanDispatchLifecycle(options: {
         if (staged.kind !== "committed") return staged
         startId = staged.startId
       }
-      const fresh = await proof(input, scope, type, commandId)
+      const fresh = await proof(authority, input, scope, type, commandId)
       const frozen = await options.nativeTransaction(input.operationId, async (client) => {
         await options.context.lockOperation(client, input)
-        const stage = await readStart(client, input)
+        const stage = await readStart(authority, client, input)
         if (!stage || stage.kind !== kind || stage.startId !== startId) unavailable()
-        const id = await insert(client, input, fresh)
+        const id = await insert(authority, client, input, fresh)
         return {
           state: "START_PENDING" as const,
           attemptId: input.attemptId,
@@ -282,7 +291,7 @@ export function createScanDispatchLifecycle(options: {
     async cleanup(input: StopDispatchInput | ReconcileDispatchInput, type: "STOP" | "RECONCILE") {
       // Cleanup keeps the original checked identity; signed STOP and retained native
       // ownership authorize removal after the worker's execution grant is retired.
-      const scope = await readScope(input, "cleanup")
+      const scope = await readScope(options, input, "cleanup")
       const replay = await options.cleanupTransaction(input.operationId, async (client) => {
         let selectedType = type
         if (type === "RECONCILE") {
@@ -331,7 +340,7 @@ export function createScanDispatchLifecycle(options: {
           attemptId: input.attemptId,
           commandId: replay.value.commandId,
         }
-      const fresh = await proof(input, scope, type, createId())
+      const fresh = await proof(authority, input, scope, type, createId())
       const outcome = await options.cleanupTransaction(input.operationId, async (client) => {
         const operation = await options.cleanupLockOperation(client, input)
         if (
@@ -342,7 +351,7 @@ export function createScanDispatchLifecycle(options: {
               )
         )
           unavailable()
-        const commandId = await insert(client, input, fresh)
+        const commandId = await insert(authority, client, input, fresh)
         // UNKNOWN remains sticky until authenticated physical cleanup resolves it.
         if (type === "STOP" && operation.state !== "UNKNOWN")
           await client.query(
