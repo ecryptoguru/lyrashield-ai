@@ -190,10 +190,14 @@ export type UrlModeAvailability =
       reason: string
     }
 
-// Launch offering: URL and API targets admit only the deterministic tier.
-// Standard, Deep and Custom are removed from the launch offering; re-adding an
-// id here is a deliberate product decision, not a config change.
-export const RELEASED_URL_PROFILE_IDS = new Set<string>(["WEB_APP_SAFE", "API_SAFE"])
+export const RELEASED_URL_PROFILE_IDS = new Set<string>([
+  "WEB_APP_SAFE",
+  "WEB_APP_STANDARD",
+  "WEB_APP_DEEP",
+  "API_SAFE",
+  "API_STANDARD",
+  "API_DEEP",
+])
 
 const URL_SCAN_MODES: readonly UrlScanMode[] = ["SAFE", "STANDARD", "DEEP"]
 

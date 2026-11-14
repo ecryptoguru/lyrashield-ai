@@ -57,32 +57,19 @@ describe("URL scan capabilities", () => {
 
   it("gates URL modes by release state and OpenAPI requirement", () => {
     expect(getUrlModeAvailability("API", "SAFE", false)).toEqual({ available: true })
-    expect(getUrlModeAvailability("WEB_APP", "QUICK", false)).toEqual({ available: true })
-    // The launch offering admits only the deterministic tier.
-    expect(getUrlModeAvailability("WEB_APP", "STANDARD", false)).toEqual({
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "Engine Review is not available yet.",
-    })
-    expect(getUrlModeAvailability("WEB_APP", "DEEP", false)).toEqual({
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "Deep Live Review is not available yet.",
-    })
-    expect(getUrlModeAvailability("API", "STANDARD", true)).toEqual({
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "Engine Contract Review is not available yet.",
-    })
-    expect(getUrlModeAvailability("API", "DEEP", true)).toEqual({
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "Deep Contract Review is not available yet.",
-    })
+    expect(getUrlModeAvailability("WEB_APP", "STANDARD", false)).toEqual({ available: true })
+    expect(getUrlModeAvailability("WEB_APP", "DEEP", false)).toEqual({ available: true })
+    expect(getUrlModeAvailability("API", "STANDARD", true)).toEqual({ available: true })
+    expect(getUrlModeAvailability("API", "DEEP", true)).toEqual({ available: true })
     expect(getUrlModeAvailability("API", "STANDARD", false)).toEqual({
       available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "Engine Contract Review is not available yet.",
+      code: "API_SPEC_REQUIRED",
+      reason: "Engine Contract Review requires an OpenAPI document.",
+    })
+    expect(getUrlModeAvailability("API", "DEEP", false)).toEqual({
+      available: false,
+      code: "API_SPEC_REQUIRED",
+      reason: "Deep Contract Review requires an OpenAPI document.",
     })
   })
 
@@ -98,25 +85,29 @@ describe("URL scan capabilities", () => {
       resolveTargetScanMode({ targetType: "API", mode: "STANDARD", hasApiSpec: false })
     ).toEqual({
       ok: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "Engine Contract Review is not available yet.",
+      code: "API_SPEC_REQUIRED",
+      reason: "Engine Contract Review requires an OpenAPI document.",
     })
 
-    // The launch offering admits only the deterministic tier, so an unsupported
-    // tier is refused before an API specification is considered.
     const apiStandard = resolveTargetScanMode({
       targetType: "API",
       mode: "STANDARD",
       hasApiSpec: true,
     })
-    expect(apiStandard.ok).toBe(false)
+    expect(apiStandard.ok).toBe(true)
+    if (apiStandard.ok) {
+      expect(apiStandard.profile?.id).toBe("API_STANDARD")
+    }
 
     const webStandard = resolveTargetScanMode({
       targetType: "WEB_APP",
       mode: "STANDARD",
       hasApiSpec: false,
     })
-    expect(webStandard.ok).toBe(false)
+    expect(webStandard.ok).toBe(true)
+    if (webStandard.ok) {
+      expect(webStandard.profile?.id).toBe("WEB_APP_STANDARD")
+    }
 
     expect(
       resolveTargetScanMode({ targetType: "WEB_APP", mode: "FAKE", hasApiSpec: false })
@@ -146,19 +137,13 @@ describe("URL scan capabilities", () => {
   })
 
   it("rejects only truly unsupported modes through availability", () => {
-    // CUSTOM maps onto Deep, which is outside the launch offering.
-    expect(getUrlModeAvailability("WEB_APP", "CUSTOM", false)).toMatchObject({
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-    })
+    expect(getUrlModeAvailability("WEB_APP", "CUSTOM", false)).toEqual({ available: true })
+    // API Deep via Custom still requires an OpenAPI document.
     expect(getUrlModeAvailability("API", "CUSTOM", false)).toMatchObject({
       available: false,
-      code: "URL_MODE_UNAVAILABLE",
+      code: "API_SPEC_REQUIRED",
     })
-    expect(getUrlModeAvailability("API", "CUSTOM", true)).toMatchObject({
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-    })
+    expect(getUrlModeAvailability("API", "CUSTOM", true)).toEqual({ available: true })
     expect(getUrlModeAvailability("WEB_APP", "UNKNOWN", false)).toMatchObject({
       available: false,
       code: "URL_MODE_UNSUPPORTED",

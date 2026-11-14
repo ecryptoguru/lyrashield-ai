@@ -64,7 +64,7 @@ function updateOrHold(pr, update, hold) {
     return { action: "update", number: pr.number }
   } catch (error) {
     const detail = `${error?.code ?? ""} ${error?.stderr ?? ""}`
-    if (!/workflow/i.test(detail)) throw error
+    if (!/create or update workflow/i.test(detail)) throw error
     hold(pr.number, pr.head.sha)
     return { action: "disable-auto-merge", number: pr.number }
   }

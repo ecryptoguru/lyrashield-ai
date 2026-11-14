@@ -157,8 +157,6 @@ function fixture() {
     }
     if (path === `${root}/git/ref/heads/main`) return { object: { sha: main } }
     if (path === `${root}/pulls`) return paginate(state.pulls)
-    const files = new RegExp(`^${root}/pulls/(\\d+)/files$`).exec(path)
-    if (files) return paginate(state.files.get(Number(files[1])) ?? [])
     if (path.startsWith(`${root}/pulls/`)) {
       const number = Number(path.split("/").at(-1))
       return state.details.get(number) ?? state.pulls.find((pr) => pr.number === number)

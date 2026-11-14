@@ -66,11 +66,6 @@ const apiTarget = {
   apiSpecUrl: "https://api.example.com/openapi.json",
 }
 
-const apiTargetNoSpec = {
-  ...apiTarget,
-  apiSpecUrl: null,
-}
-
 describe("PATCH /api/schedules/[id]", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -91,8 +86,8 @@ describe("PATCH /api/schedules/[id]", () => {
     } as never)
   })
 
-  it("refuses a mode outside the launch offering", async () => {
-    vi.mocked(prisma.target.findFirst).mockResolvedValue(apiTargetNoSpec as never)
+  it("refuses a removed URL tier even when the profile registry still resolves it", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(apiTarget as never)
 
     const res = await PATCH(
       makePatchRequest("sched-1", { workspaceId: "ws-1", mode: "STANDARD" }),
@@ -103,7 +98,7 @@ describe("PATCH /api/schedules/[id]", () => {
 
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error.code).toBe("URL_MODE_UNAVAILABLE")
+    expect(json.error.code).toBe("URL_MODE_UNSUPPORTED")
     expect(updateSchedule).not.toHaveBeenCalled()
   })
 
