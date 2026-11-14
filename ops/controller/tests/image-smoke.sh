@@ -8,7 +8,7 @@ image=$1
 umask 077
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
-arguments=(--rm --network none --read-only --tmpfs /tmp:rw,nosuid,noexec,size=16m,mode=0700 --cap-drop ALL --security-opt no-new-privileges --user 0 --entrypoint node)
+arguments=(--rm --network none --read-only --tmpfs "/tmp:rw,nosuid,noexec,size=16m,mode=0700" --cap-drop ALL --security-opt no-new-privileges --user 0 --entrypoint node)
 
 # Every executable dependency comes from the immutable image, not a host bind mount.
 docker run "${arguments[@]}" "$image" --input-type=module -e '
@@ -49,7 +49,7 @@ cmp "$temporary/error" "$temporary/expected"
 
 # Root can never issue a publication from a writable container filesystem.
 status=0
-docker run --rm --network none --tmpfs /tmp:rw,nosuid,noexec,size=16m,mode=0700 --cap-drop ALL --security-opt no-new-privileges --user 0 --entrypoint node "$image" --import tsx /app/src/publish-journal-seal.mjs invalid-source > "$temporary/output" 2> "$temporary/error" || status=$?
+docker run --rm --network none --tmpfs "/tmp:rw,nosuid,noexec,size=16m,mode=0700" --cap-drop ALL --security-opt no-new-privileges --user 0 --entrypoint node "$image" --import tsx /app/src/publish-journal-seal.mjs invalid-source > "$temporary/output" 2> "$temporary/error" || status=$?
 [[ $status = 1 && ! -s "$temporary/output" ]]
 rg -q 'Immutable publisher root filesystem is unavailable' "$temporary/error"
 printf '%s\n' 'Publisher and native helpers loaded; malformed authority and writable root denied.'

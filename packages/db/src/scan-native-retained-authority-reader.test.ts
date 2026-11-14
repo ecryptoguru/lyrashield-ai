@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto"
+import { createHmac, randomBytes } from "node:crypto"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -29,15 +29,17 @@ const action: AuthorityAction = {
   actionChecksum: "b".repeat(64),
   executorKey: "scanner",
 }
+const originalSigningSecret = randomBytes(32).toString("hex")
+const wrapperSigningSecret = randomBytes(32).toString("hex")
 const authority = {
   streamId: "stream-one",
   authorityEpochId: "epoch-one",
   supervisorInstanceId: "supervisor-one",
-  connectionString: "postgresql://fixture:fixture@localhost:1/lyrashield_test",
-  originalSigningSecret: "o".repeat(48),
-  originalKeyHash: sha256Hex("o".repeat(48)),
-  wrapperSigningSecret: "w".repeat(48),
-  wrapperKeyHash: sha256Hex("w".repeat(48)),
+  connectionString: `postgresql://fixture:${randomBytes(24).toString("hex")}@localhost:1/lyrashield_test`,
+  originalSigningSecret,
+  originalKeyHash: sha256Hex(originalSigningSecret),
+  wrapperSigningSecret,
+  wrapperKeyHash: sha256Hex(wrapperSigningSecret),
   readJournal: async () => null,
 }
 let root: string, row: Record<string, unknown>
@@ -176,7 +178,7 @@ describe("retained root read authentication", () => {
     ).rejects.toThrow()
   })
   it("rejects independently substituted wrapper signing authority", async () => {
-    const secret = "different-wrapper-secret-000000000000000000000000"
+    const secret = randomBytes(32).toString("hex")
     await expect(
       readScanNativeRetirementGuard(connection(), action, "guard-one", {
         ...authority,

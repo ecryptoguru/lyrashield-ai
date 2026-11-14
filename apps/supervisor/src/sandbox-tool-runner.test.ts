@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { randomUUID } from "node:crypto"
 import { requestNativeExecutor } from "./native-executor-client"
 import { createSandboxToolRunner } from "./sandbox-tool-runner"
 
@@ -23,12 +24,12 @@ const scope = {
   ownership,
   sandboxHandle: ownership.ownershipId,
 }
-const credential = {
-  token: "signed-scoped-token",
-  attemptId: scope.attemptId,
-  sandboxHandle: scope.sandboxHandle,
-}
 function fixture() {
+  const credential = {
+    token: randomUUID(),
+    attemptId: scope.attemptId,
+    sandboxHandle: scope.sandboxHandle,
+  }
   const authorizeRead = vi.fn(async () => undefined),
     publish = vi.fn(),
     run = vi.fn(),
@@ -47,7 +48,7 @@ function fixture() {
   const result = createSandboxToolRunner(
     options as unknown as Parameters<typeof createSandboxToolRunner>[0]
   )
-  return { ...result, authorizeRead, publish, run, complete, options }
+  return { ...result, authorizeRead, publish, run, complete, options, credential }
 }
 describe("actual stopped sandbox state", () => {
   it.each([{ state: "PRESENT", ownership, running: false }, { state: "ABSENT" }])(
@@ -55,7 +56,7 @@ describe("actual stopped sandbox state", () => {
     async (inspection) => {
       vi.mocked(requestNativeExecutor).mockResolvedValue(inspection)
       const f = fixture()
-      expect(await f.runner.state(credential)).toEqual({
+      expect(await f.runner.state(f.credential)).toEqual({
         binding: {
           attemptId: scope.attemptId,
           operationId: scope.operationId,
@@ -69,8 +70,8 @@ describe("actual stopped sandbox state", () => {
       expect(f.run).not.toHaveBeenCalled()
       expect(f.complete).not.toHaveBeenCalled()
       expect(f.options.verifyCapability).toHaveBeenCalledWith(
-        credential.token,
-        credential,
+        f.credential.token,
+        f.credential,
         "invoke"
       )
     }
@@ -78,13 +79,13 @@ describe("actual stopped sandbox state", () => {
   it("rejects revoked current authority or a foreign native ownership instead of issuing state or a renewal", async () => {
     const f = fixture()
     f.authorizeRead.mockRejectedValueOnce(new Error("current grant revoked"))
-    await expect(f.runner.state(credential)).rejects.toThrow("revoked")
+    await expect(f.runner.state(f.credential)).rejects.toThrow("revoked")
     vi.mocked(requestNativeExecutor).mockResolvedValue({
       state: "PRESENT",
       ownership: { ...ownership, containerId: "e".repeat(64) },
       running: false,
     })
-    await expect(f.runner.state(credential)).rejects.toThrow("unavailable")
+    await expect(f.runner.state(f.credential)).rejects.toThrow("unavailable")
     expect(f.publish).not.toHaveBeenCalled()
     expect(f.run).not.toHaveBeenCalled()
   })

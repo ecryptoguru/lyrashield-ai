@@ -311,7 +311,7 @@ test("transports an explicit held archive without minting its witness or recover
     readIdentity: async () => ({ identity }),
     witness: async (kind, body) => {
       calls.push(`witness:${kind}`)
-      return JSON.stringify({ kind, digest: sha(body), token: "synthetic" })
+      return JSON.stringify({ kind, digest: sha(body), token: randomBytes(24).toString("hex") })
     },
     verifyArtifact: async (kind, hash) => {
       calls.push(`verify:${kind}`)
