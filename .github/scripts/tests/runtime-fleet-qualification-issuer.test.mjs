@@ -237,6 +237,54 @@ test("rejects unauthenticated or non-held evidence before any credential exchang
   }
 })
 
+test("rejects incomplete native checks and mismatched rollback tuples before signing", async () => {
+  const badNative = structuredClone(evidence.native)
+  badNative.checks.admission.state = "FAILED"
+  const nativeRaw = rawOf(badNative)
+  const failures = [
+    {
+      selector: { ...selector, native: hash(nativeRaw) },
+      raw: nativeRaw,
+      owner: "42:1",
+      source,
+      kind: "evidence",
+    },
+    ...[
+      { pair: { ...archived.pair, workerDigest: fleet.workerDigest } },
+      { pair: { ...archived.pair, engineRevision: "f".repeat(40) } },
+      { controlPlane: { ...archived.controlPlane, migrationChecksum: digest("f") } },
+      { source: "f".repeat(40) },
+      { owner: "43:1" },
+    ].map((change) => {
+      const { source: artifactSource, owner: artifactOwner, ...fields } = change
+      const body = { ...archived, ...fields }
+      const raw = rawOf(body)
+      return {
+        selector: { ...selector, rollback: hash(raw) },
+        raw,
+        owner: artifactOwner ?? body.pair.owner,
+        source: artifactSource ?? body.pair.productRevision,
+        kind: "qualified-fleet",
+      }
+    }),
+  ]
+  for (const failure of failures) {
+    const calls = []
+    const badId = hash(failure.raw)
+    await assert.rejects(
+      createProtectedRuntimeFleetIssuer({
+        ...common,
+        readArtifact: async (kind, id) =>
+          id === badId
+            ? { raw: failure.raw, owner: failure.owner, source: failure.source }
+            : common.readArtifact(kind, id),
+        run: (args) => calls.push(args[0]),
+      }).issue(failure.selector)
+    )
+    assert.deepEqual(calls, [], failure.kind)
+  }
+})
+
 test("stops at signing failure and always logs out without emitting a record", async () => {
   const calls = []
   await assert.rejects(

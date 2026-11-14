@@ -25,6 +25,7 @@ import {
 
 const require = createRequire(new URL("../../apps/web/package.json", import.meta.url))
 const { z } = require("zod")
+const issuerWorkflow = ".github/workflows/issue-runtime-qualification.yml"
 const sha = z.string().regex(/^[a-f0-9]{64}$/),
   revision = z.string().regex(/^[a-f0-9]{40}$/)
 const image = z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -260,7 +261,7 @@ function buildRecord({ selector, authenticated, source, native, fleet, fleetHash
     issuer: {
       repositoryId: "1286618458",
       repositoryOwnerId: "116722580",
-      workflow: ".github/workflows/issue-runtime-qualification.yml",
+      workflow: issuerWorkflow,
       source: source.source,
       runId,
       attempt,
@@ -272,7 +273,7 @@ function buildRecord({ selector, authenticated, source, native, fleet, fleetHash
 export function createProtectedRuntimeFleetIssuer({
   readIdentity = readQualificationIssuerToken,
   readSource = verifyCurrentSource,
-  readArtifact = verifiedArtifact,
+  readArtifact = (kind, digest) => verifiedArtifact(kind, digest, issuerWorkflow),
   verifyInventory = verifyIndependentSandboxInventory,
   verifyImages = verifyImageSources,
   verifyControllers = verifyControllerImages,
@@ -392,11 +393,7 @@ export function createProtectedRuntimeFleetIssuer({
       )
       assert.ok(Buffer.byteLength(raw) <= 4096)
       const result = await signRecord(raw, refreshed.token)
-      const recordWitness = await witness(
-        "runtime-fleet-qualification",
-        raw,
-        ".github/workflows/issue-runtime-qualification.yml"
-      )
+      const recordWitness = await witness("runtime-fleet-qualification", raw, issuerWorkflow)
       const record = JSON.parse(raw)
       return Object.freeze({
         envelope: Object.freeze({ raw, result }),
