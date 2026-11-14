@@ -27,7 +27,9 @@ This overlay records the deferrals and removals that bound the current Cloud lau
 ### Enterprise, infrastructure-expansion and speculative integration roadmap
 
 - **Status.** Already deferred further down this document, in `Current Phase 2 direction` and `Explicitly deferred`: enterprise SSO/OIDC and SCIM, advanced policy, private worker, VPC/self-hosting, data residency, IaC/container/cloud-account and reachability scanning, SIEM/Jira/CI integration adapters, plus a large speculative integration catalog.
-- **Reason, impact and re-entry condition.** Unchanged and recorded there. They are cross-referenced here rather than restated, so the launch does not carry a second backlog and nothing is pulled forward by this overlay.
+- **Reason.** Each item depends on a governance, procurement or deployment model that the single-tenant Cloud launch does not have. The launch path is one hosted product with one control plane; enterprise identity, customer-managed keys, data residency and customer-VPC deployment all require contractual and operational machinery that does not exist yet. The speculative adapters are deferred because there is no validated named-customer demand, and a generic signed outbound webhook is preferred over many narrow adapters.
+- **Impact.** No enterprise SSO, SCIM, private worker, VPC/self-hosted or residency option is offered; no compliance mapping beyond mapped scanner evidence is claimed; and no SIEM/Jira/CI adapter is shipped. This is a scope boundary, not a defect, and it does not affect the retained Cloud launch.
+- **Re-entry condition.** Not yet defined for these items. The dated direction above states that Phase 2 proceeds only after the launch gates close and 2–3 design partners validate demand, and that the expansion branch is chosen on validated demand. Until that happens these items stay deferred; a specific item re-enters only when a design partner requires it and the corresponding governance or contractual work is scoped and authorized.
 
 ### LyraShield Local/Desktop launch and its deferred roadmap
 

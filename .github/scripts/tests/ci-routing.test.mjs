@@ -448,14 +448,27 @@ test("the selected PR image-build gate never pushes and feeds the required aggre
   assert.match(job, /^    name: Container image build \(no push\)$/m)
   assert.match(
     job,
-    /^    if: needs\.changes\.outputs\.web-image == 'true' \|\| needs\.changes\.outputs\.worker-image == 'true' \|\| needs\.changes\.outputs\.egress-image == 'true'$/m
+    /^    if: needs\.changes\.outputs\.web-image == 'true' \|\| needs\.changes\.outputs\.worker-image == 'true' \|\| needs\.changes\.outputs\.egress-image == 'true' \|\| needs\.changes\.outputs\.controller-image == 'true'$/m
   )
   assert.match(job, /^    permissions:\n      contents: read$/m)
   assert.doesNotMatch(job, /id-token|environment:|secrets\.(?!GITHUB_TOKEN)/)
-  // Every build step is a no-push build of a release target.
+  // Every build step is a no-push build of a release target, including the three
+  // control-plane roles whose sources select the same job.
   const targets = [...job.matchAll(/^ {10}target: (.+)$/gm)].map((match) => match[1])
-  assert.deepEqual(targets.sort(), ["egress-proxy", "runner", "worker"])
-  assert.equal([...job.matchAll(/^ {10}push: false$/gm)].length, 3)
+  assert.deepEqual(targets.sort(), [
+    "controller",
+    "egress-proxy",
+    "provider-gateway",
+    "runner",
+    "supervisor",
+    "worker",
+  ])
+  assert.equal([...job.matchAll(/^ {10}push: false$/gm)].length, 6)
+  for (const role of ["controller", "supervisor", "provider-gateway"]) {
+    const step = job.split(`target: ${role}`)[0].split("- name: ").pop()
+    assert.match(step, /Build [a-z-]+ image \(no push\)\n/)
+    assert.match(step, /if: needs\.changes\.outputs\.controller-image == 'true'/)
+  }
   assert.doesNotMatch(job, /^ {10}push: true$/m)
   assert.match(
     workflow,
