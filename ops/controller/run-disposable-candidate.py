@@ -122,7 +122,38 @@ def load_input(path):
             labels.get("org.opencontainers.image.source")
             == "https://github.com/ecryptoguru/lyrashield-ai"
         )
+        require(labels.get("com.lyrashield.engine.revision") == value["engineRevision"])
     return value
+
+
+def stream_owned_images(outer, image_ids):
+    """Transfer only the verified image set without duplicating an archive in the VM."""
+    source = subprocess.Popen(
+        [DOCKER, "image", "save", *image_ids],
+        env=ENV,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    target = None
+    try:
+        target = subprocess.Popen(
+            [DOCKER, "exec", "--interactive", outer, "docker", "image", "load"],
+            env=ENV,
+            stdin=source.stdout,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        source.stdout.close()
+        target.wait(timeout=240)
+        source.wait(timeout=5)
+        require(target.returncode == 0 and source.returncode == 0)
+    finally:
+        source.stdout.close()
+        for child in (target, source):
+            if child is not None:
+                if child.poll() is None:
+                    child.kill()
+                child.wait()
 
 
 def main():
@@ -140,15 +171,6 @@ def main():
     outer = ""
     with tempfile.TemporaryDirectory(prefix="lyrashield-disposable-candidate-") as work:
         staging = Path(work)
-        archive = staging / "images.tar"
-        docker(
-            "image",
-            "save",
-            "--output",
-            str(archive),
-            *dict.fromkeys([*image_ids.values(), infrastructure_ids["registry"]]),
-            timeout=240,
-        )
         try:
             outer = docker(
                 "create",
@@ -178,16 +200,11 @@ def main():
                     break
                 require(time.monotonic() < end)
                 time.sleep(0.2)
-            docker("cp", str(archive), outer + ":/tmp/images.tar", timeout=240)
-            docker(
-                "exec",
+            stream_owned_images(
                 outer,
-                "docker",
-                "image",
-                "load",
-                "--input",
-                "/tmp/images.tar",
-                timeout=240,
+                list(
+                    dict.fromkeys([*image_ids.values(), infrastructure_ids["registry"]])
+                ),
             )
             registry = docker(
                 "exec",
@@ -211,6 +228,22 @@ def main():
                         docker("exec", outer, "docker", "image", "inspect", tag)
                     )[0]
                     require(image["Id"] == identity)
+                    if role in (
+                        "broker",
+                        "supervisor",
+                        "provider-gateway",
+                        "worker",
+                        "host",
+                    ):
+                        labels = image["Config"].get("Labels") or {}
+                        require(
+                            labels.get("org.opencontainers.image.revision")
+                            == value["sourceRevision"]
+                            and labels.get("com.lyrashield.engine.revision")
+                            == value["engineRevision"]
+                            and labels.get("org.opencontainers.image.source")
+                            == "https://github.com/ecryptoguru/lyrashield-ai"
+                        )
                     candidates = [
                         reference
                         for reference in image["RepoDigests"]
