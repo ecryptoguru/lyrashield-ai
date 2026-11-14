@@ -49,7 +49,9 @@ const record = {
     runId: "42",
     attempt: "1",
   },
-  issuedAt: Math.floor(Date.parse("2026-11-13T00:00:00.000Z") / 1000),
+  // Relative to the run: a fixed timestamp silently ages out of the 24-hour
+  // freshness window and fails this required check for unrelated changes.
+  issuedAt: Math.floor(Date.now() / 1000) - 60,
 }
 const raw = JSON.stringify(record)
 const expected = {

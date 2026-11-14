@@ -1,6 +1,6 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
 import { getSchedule, updateSchedule, deleteSchedule, prisma } from "@lyrashield/db"
-import { PatchScheduleSchema, resolveTargetScanMode } from "@lyrashield/types"
+import { PatchScheduleSchema, resolveTargetScanMode, resolveUrlReviewMode } from "@lyrashield/types"
 import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -71,6 +71,16 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
       })
       if (!target) {
         return apiError("TARGET_NOT_FOUND", "Target not found", 404)
+      }
+      // A stored mode must stay inside the launch offering, not only inside the
+      // profile registry the worker can still resolve.
+      const offering = resolveUrlReviewMode({
+        targetType: target.type,
+        mode: updateData.mode,
+        hasApiSpec: Boolean(target.apiSpecUrl),
+      })
+      if (!offering.ok) {
+        return apiError(offering.code, offering.reason, 400)
       }
       const resolved = resolveTargetScanMode({
         targetType: target.type,

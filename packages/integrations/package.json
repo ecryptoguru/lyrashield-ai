@@ -19,6 +19,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@lyrashield/db": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   }
