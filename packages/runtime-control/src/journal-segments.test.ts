@@ -128,6 +128,28 @@ describe("segmented signed journal", () => {
     await expect(restarted.append({ value: "must fail" })).rejects.toThrow()
   })
 
+  it("rejects invalid UTF-8 that decodes to the same signed payload after restart", async () => {
+    const { path, journal } = await fixture()
+    await journal.append({ value: "\uFFFD" })
+    await journal.close()
+
+    const original = await readFile(path)
+    const replacement = Buffer.from("\uFFFD", "utf8")
+    const offset = original.indexOf(replacement)
+    expect(offset).toBeGreaterThanOrEqual(0)
+    const tampered = Buffer.concat([
+      original.subarray(0, offset),
+      Buffer.from([0xff]),
+      original.subarray(offset + replacement.length),
+    ])
+    expect(tampered.toString("utf8")).toBe(original.toString("utf8"))
+    await writeFile(path, tampered)
+
+    const restarted = new SignedJournal(path, secret, parse, segmentOptions)
+    await expect(restarted.load()).rejects.toThrow(/invalid utf-8/i)
+    await expect(restarted.append({ value: "must fail" })).rejects.toThrow()
+  })
+
   it("rejects a modified closed segment while the writer is active", async () => {
     const { root, journal } = await fixture()
     for (let index = 0; index < 8; index++)
