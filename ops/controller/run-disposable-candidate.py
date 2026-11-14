@@ -311,6 +311,8 @@ def main():
                 "--read-only",
                 "--pid",
                 "host",
+                "--cgroupns",
+                "host",
                 "--network",
                 "host",
                 "--user",

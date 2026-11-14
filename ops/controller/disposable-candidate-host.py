@@ -105,6 +105,21 @@ def module(name):
     return loaded
 
 
+def owned_root_container(reference):
+    identities = docker("ps", "--all", "--quiet", "--no-trunc").decode().split()
+    require(len(identities) == 1 and re.fullmatch(r"[a-f0-9]{64}", identities[0]))
+    rows = json.loads(docker("container", "inspect", identities[0]))
+    require(
+        len(rows) == 1
+        and rows[0]["Id"] == identities[0]
+        and rows[0]["Config"]["Image"] == reference
+        and rows[0]["HostConfig"]["ReadonlyRootfs"] is True
+        and rows[0]["State"]["Running"] is True
+        and rows[0]["State"]["Pid"] == os.getpid()
+    )
+    return rows[0]
+
+
 def load_catalog():
     require(os.geteuid() == 0 and sys.platform == "linux")
     info = CATALOG.lstat()
@@ -153,13 +168,7 @@ def load_catalog():
         )
     )
     # Never attach to an existing host fleet: only this root control container may exist.
-    rows = json.loads(docker("container", "inspect", os.environ.get("HOSTNAME", "")))
-    require(len(rows) == 1 and rows[0]["HostConfig"]["ReadonlyRootfs"] is True)
-    require(rows[0]["Config"]["Image"] == value["images"]["host"])
-    require(
-        set(docker("ps", "--all", "--quiet", "--no-trunc").decode().split())
-        == {rows[0]["Id"]}
-    )
+    owned_root_container(value["images"]["host"])
     for role, reference in value["images"].items():
         images = json.loads(docker("image", "inspect", reference))
         require(len(images) == 1 and reference in images[0]["RepoDigests"])
