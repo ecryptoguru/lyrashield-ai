@@ -591,3 +591,46 @@ test("privileged workflow checks out only trusted main and uses an app token", (
   assert.match(workflow, /create-github-app-token@[0-9a-f]{40}/)
   assert.doesNotMatch(workflow, /head\.sha|head\.ref|pull_request\.head/)
 })
+
+test("a transiently skewed run total is re-read instead of failing the queue", () => {
+  let reads = 0
+  const path = `${root}/actions/workflows/release-production.yml/runs?branch=main&status=in_progress`
+  const api = () => {
+    reads += 1
+    // First read leads the rows it serves; the re-read agrees with them.
+    return { total_count: reads === 1 ? 1 : 0, workflow_runs: [] }
+  }
+  // The queue decision itself is exercised by runAutoMergeQueue; this pins the
+  // pagination helper's contract through the exported entry point.
+  const result = runAutoMergeQueue({
+    api: (endpoint) => {
+      if (endpoint.includes("/git/ref/heads/main")) return { object: { sha: main } }
+      if (endpoint.includes("/pulls?")) return []
+      return api()
+    },
+    updateBranch: () => assert.fail("no branch update"),
+    mergeReady: () => assert.fail("no merge"),
+    disableAutoMerge: () => assert.fail("no auto-merge disable"),
+  })
+  assert.equal(result.action, "wait")
+  assert.ok(reads >= 2)
+})
+
+test("a persistent paginated mismatch still fails closed", () => {
+  const path = `${root}/actions/workflows/release-production.yml/runs?branch=main&status=in_progress`
+  assert.throws(
+    () =>
+      runAutoMergeQueue({
+        api: (endpoint) => {
+          if (endpoint.includes("/git/ref/heads/main")) return { object: { sha: main } }
+          if (endpoint.includes("/pulls?")) return []
+          assert.ok(endpoint.includes("release-production"))
+          return { total_count: 1, workflow_runs: [] }
+        },
+        updateBranch: () => assert.fail("no branch update"),
+        mergeReady: () => assert.fail("no merge"),
+        disableAutoMerge: () => assert.fail("no auto-merge disable"),
+      }),
+    /incomplete paginated response/
+  )
+})
