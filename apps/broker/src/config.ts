@@ -94,6 +94,13 @@ function receiptAuthority(env: NodeJS.ProcessEnv): BrokerConfig["receiptAuthorit
  * Fail-closed installation. The broker holds the only dispatch-authority write
  * path, so a missing database URL or control token stops startup instead of
  * serving a control socket that cannot bind authority or authenticate callers.
+ *
+ * Preparation is deliberately not installed here. The compiler must be built
+ * from verified protected host policy and an installed signing identity, which
+ * only the protected host composition can supply; constructing one from
+ * environment would let an operator-supplied string become command authority.
+ * Until that installation exists, PREPARE stays closed with
+ * PREPARATION_AUTHORITY_CLOSED rather than committing an unverified bundle.
  */
 export function loadBrokerConfig(env: NodeJS.ProcessEnv = process.env): BrokerConfig {
   const connectionString = required(env, "LYRASHIELD_SCAN_EXECUTION_DATABASE_URL")
