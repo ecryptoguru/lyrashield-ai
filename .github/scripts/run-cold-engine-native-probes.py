@@ -12,7 +12,7 @@ import tempfile
 import tomllib
 from uuid import uuid4
 
-ENGINE = "2b1d044308ec2c31c1a657ff0aa808b3e900ce24"
+ENGINE = "0793bcb9644a1985165963375586124c993c020a"
 FILES = ("run-cold-engine-native-probes.py", "cold-engine-native-probe.py",
          "run-engine-physical-ceiling-drill.py", "cold-sandbox-native-probe.py")
 SANDBOX_CASES = ("sandbox-provider-credentials-and-socket-absent",
