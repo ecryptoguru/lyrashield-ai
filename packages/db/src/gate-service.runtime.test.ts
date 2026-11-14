@@ -38,6 +38,15 @@ import {
   completeRetestsForScan,
 } from "../../../apps/worker/src/engine/result-integrity"
 
+// Hoisting runs this guard before imports can construct the runtime client.
+await vi.hoisted(async () => {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1" && process.env.RLS_RUNTIME_DATABASE_URL) {
+    const { assertDisposableDatabasePair } =
+      await import("../../../.github/scripts/vitest-database-env.mjs")
+    assertDisposableDatabasePair(process.env)
+  }
+})
+
 const owner = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 })
@@ -209,6 +218,7 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
       assertRetestAllowed: guard,
       repoFullName: undefined,
       assertRetestWorkerAvailable: async () => {},
+      resolveRetestSource: async () => ({ revision: "a".repeat(40) }),
     }
     const outcomes = await Promise.all(
       Array.from({ length: 5 }, () => handleFixPrMergedAndReevaluate(options))
@@ -414,6 +424,7 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
           assertRetestAllowed: async () => {},
           repoFullName: undefined,
           assertRetestWorkerAvailable: async () => {},
+          resolveRetestSource: async () => ({ revision: "a".repeat(40) }),
         })
       ).rejects.toThrow("late transaction failure")
     } finally {
@@ -428,6 +439,7 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
       assertRetestAllowed: async () => {},
       repoFullName: undefined,
       assertRetestWorkerAvailable: async () => {},
+      resolveRetestSource: async () => ({ revision: "a".repeat(40) }),
     })
     expect(recovered?.retestScanId).toBeTruthy()
     expect(await owner.scan.count({ where: { workspaceId: id } })).toBe(count + 1)

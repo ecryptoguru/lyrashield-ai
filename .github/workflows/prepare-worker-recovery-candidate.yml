@@ -1,6 +1,19 @@
 name: Prepare webhook recovery images without production access
 
 on:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      runtime_qualification:
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      prepared_fleet:
+        description: Same-run exact image tuple after disposable rehearsal
+        value: ${{ jobs.receipt.outputs.prepared_fleet }}
   workflow_dispatch:
     inputs:
       source_sha:
@@ -17,7 +30,7 @@ concurrency:
 
 env:
   SOURCE_SHA: ${{ inputs.source_sha }}
-  ENGINE_REVISION: 0793bcb9644a1985165963375586124c993c020a
+  ENGINE_REVISION: 7fa1c5afeda2b0d8521876cee9e89168665d77a3
 
 jobs:
   build:
@@ -34,6 +47,9 @@ jobs:
       web_image: ${{ steps.references.outputs.web_image }}
       worker_image: ${{ steps.references.outputs.worker_image }}
       egress_proxy_image: ${{ steps.references.outputs.egress_proxy_image }}
+      broker_image: ${{ steps.references.outputs.broker_image }}
+      supervisor_image: ${{ steps.references.outputs.supervisor_image }}
+      provider_gateway_image: ${{ steps.references.outputs.provider_gateway_image }}
       engine_revision: ${{ env.ENGINE_REVISION }}
     steps:
       - name: Require exact current main
@@ -109,6 +125,9 @@ jobs:
             echo "web=$repository/lyrashield-web:$tag"
             echo "worker=$repository/lyrashield-worker:$tag"
             echo "egress=$repository/lyrashield-egress-proxy:$tag"
+            echo "broker=$repository/lyrashield-broker:$tag"
+            echo "supervisor=$repository/lyrashield-supervisor:$tag"
+            echo "provider_gateway=$repository/lyrashield-provider-gateway:$tag"
           } >> "$GITHUB_OUTPUT"
       - name: Verify public build configuration
         env:
@@ -168,12 +187,55 @@ jobs:
           labels: org.opencontainers.image.revision=${{ inputs.source_sha }}
           cache-from: type=gha,scope=release-egress-proxy
           cache-to: type=gha,mode=max,scope=recovery-egress-proxy
+      - name: Build broker candidate
+        if: inputs.runtime_qualification == true
+        id: broker
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: controller
+          push: true
+          sbom: true
+          tags: ${{ steps.tags.outputs.broker }}
+          build-args: |
+            PRODUCT_REVISION=${{ inputs.source_sha }}
+            ENGINE_REVISION=${{ env.ENGINE_REVISION }}
+      - name: Build supervisor candidate
+        if: inputs.runtime_qualification == true
+        id: supervisor
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: supervisor
+          push: true
+          sbom: true
+          tags: ${{ steps.tags.outputs.supervisor }}
+          build-args: |
+            PRODUCT_REVISION=${{ inputs.source_sha }}
+            ENGINE_REVISION=${{ env.ENGINE_REVISION }}
+      - name: Build provider gateway candidate
+        if: inputs.runtime_qualification == true
+        id: provider-gateway
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: provider-gateway
+          push: true
+          sbom: true
+          tags: ${{ steps.tags.outputs.provider_gateway }}
+          build-args: |
+            PRODUCT_REVISION=${{ inputs.source_sha }}
+            ENGINE_REVISION=${{ env.ENGINE_REVISION }}
       - name: Bind exact candidate digests
         id: references
         env:
           WEB_DIGEST: ${{ steps.web.outputs.digest }}
           WORKER_DIGEST: ${{ steps.worker.outputs.digest }}
           EGRESS_DIGEST: ${{ steps.egress.outputs.digest }}
+          BROKER_DIGEST: ${{ steps.broker.outputs.digest }}
+          SUPERVISOR_DIGEST: ${{ steps.supervisor.outputs.digest }}
+          GATEWAY_DIGEST: ${{ steps.provider-gateway.outputs.digest }}
+          RUNTIME_QUALIFICATION: ${{ inputs.runtime_qualification }}
         run: |
           set -euo pipefail
           for digest in "$WEB_DIGEST" "$WORKER_DIGEST" "$EGRESS_DIGEST"; do
@@ -184,6 +246,14 @@ jobs:
             echo "web_image=$repository/lyrashield-web@$WEB_DIGEST"
             echo "worker_image=$repository/lyrashield-worker@$WORKER_DIGEST"
             echo "egress_proxy_image=$repository/lyrashield-egress-proxy@$EGRESS_DIGEST"
+            if [ "$RUNTIME_QUALIFICATION" = true ]; then
+              for digest in "$BROKER_DIGEST" "$SUPERVISOR_DIGEST" "$GATEWAY_DIGEST"; do
+                [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+              done
+              echo "broker_image=$repository/lyrashield-broker@$BROKER_DIGEST"
+              echo "supervisor_image=$repository/lyrashield-supervisor@$SUPERVISOR_DIGEST"
+              echo "provider_gateway_image=$repository/lyrashield-provider-gateway@$GATEWAY_DIGEST"
+            fi
           } >> "$GITHUB_OUTPUT"
       - name: Verify the exact prepared web and worker image contracts
         env:
@@ -198,6 +268,7 @@ jobs:
       product_source_sha: ${{ inputs.source_sha }}
       engine_revision: ${{ needs.build.outputs.engine_revision }}
       worker_image: ${{ needs.build.outputs.worker_image }}
+      cold_release: ${{ inputs.runtime_qualification == true }}
     permissions:
       contents: read
       packages: read
@@ -206,7 +277,28 @@ jobs:
     name: Record verified candidate identities
     needs: [build, rehearse]
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      prepared_fleet: ${{ steps.prepared-fleet.outputs.prepared_fleet }}
     steps:
+      - name: Checkout tuple binder
+        if: inputs.runtime_qualification == true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Bind the rehearsed same-run fleet
+        if: inputs.runtime_qualification == true
+        id: prepared-fleet
+        env:
+          WEB_IMAGE: ${{ needs.build.outputs.web_image }}
+          WORKER_IMAGE: ${{ needs.build.outputs.worker_image }}
+          EGRESS_PROXY_IMAGE: ${{ needs.build.outputs.egress_proxy_image }}
+          BROKER_IMAGE: ${{ needs.build.outputs.broker_image }}
+          SUPERVISOR_IMAGE: ${{ needs.build.outputs.supervisor_image }}
+          PROVIDER_GATEWAY_IMAGE: ${{ needs.build.outputs.provider_gateway_image }}
+          SANDBOX_IMAGE: ${{ needs.rehearse.outputs.cold_sandbox_image }}
+        run: node .github/scripts/prepared-runtime-fleet.mjs
       - name: Write verified preparation receipt
         env:
           WEB_IMAGE: ${{ needs.build.outputs.web_image }}

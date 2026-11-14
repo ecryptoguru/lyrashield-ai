@@ -202,6 +202,44 @@ test("qualification witnesses bind the isolated issuer job and environment separ
   assert.throws(() => verifyRecordWitness(jwt(qualified), keys, x, kind, digest, now))
 })
 
+test("issuer evidence witnesses bind the qualification job and never authorize deployment evidence", () => {
+  const workflow = ".github/workflows/issue-runtime-qualification.yml"
+  const issuerEvidence = {
+    ...claims,
+    sub: `repo:${repo}:environment:release-qualification`,
+    environment: "release-qualification",
+    job_workflow_ref: `${repo}/${workflow}@refs/heads/main`,
+  }
+  verifyRecordWitness(jwt(issuerEvidence), keys, x, "evidence", digest, now, workflow)
+  assert.throws(() => verifyRecordWitness(jwt(issuerEvidence), keys, x, "evidence", digest, now))
+  for (const field of ["environment", "sub", "job_workflow_ref", "sha", "run_attempt", "aud"]) {
+    assert.throws(() =>
+      verifyRecordWitness(
+        jwt({ ...issuerEvidence, [field]: "foreign" }),
+        keys,
+        x,
+        "evidence",
+        digest,
+        now,
+        workflow
+      )
+    )
+  }
+  assert.throws(() => verifyRecordWitness(jwt(claims), keys, x, "evidence", digest, now, workflow))
+  for (const kind of ["operation", "continuity", "hold-acquisition"])
+    assert.throws(() =>
+      verifyRecordWitness(
+        jwt({ ...issuerEvidence, aud: `urn:lyrashield:paired:v1:${kind}:${digest}` }),
+        keys,
+        x,
+        kind,
+        digest,
+        now,
+        workflow
+      )
+    )
+})
+
 test("consumer-only held baseline and action lease require signed isolated issuer provenance", async (t) => {
   const workflow = ".github/workflows/issue-runtime-qualification.yml"
   let requests = 0
@@ -495,7 +533,11 @@ test("caller workflow identity threads through owner, witness and protected arti
   mkdirSync(records, { mode: 0o700 })
   const actual = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim()
   const caller = repo + "/" + callerPath + "@refs/heads/main"
-  const artifactRepo = { id: 123, full_name: repo, owner: { id: 77, login: "ecryptoguru" } }
+  const artifactRepo = {
+    id: 1286618458,
+    full_name: repo,
+    owner: { id: 116722580, login: "ecryptoguru" },
+  }
   const identity = {
     source: actual,
     owner,
@@ -503,13 +545,15 @@ test("caller workflow identity threads through owner, witness and protected arti
     attempt: "1",
     path: x.path,
     event: "push",
-    repoId: "123",
-    ownerId: "77",
+    repoId: String(artifactRepo.id),
+    ownerId: String(artifactRepo.owner.id),
   }
   const nowSeconds = Math.floor(Date.now() / 1000)
   const makeClaims = (aud) => ({
     ...claims,
     aud,
+    repository_id: identity.repoId,
+    repository_owner_id: identity.ownerId,
     sha: actual,
     workflow_sha: actual,
     job_workflow_ref: caller,
@@ -565,8 +609,8 @@ test("caller workflow identity threads through owner, witness and protected arti
         id: 42,
         head_sha: actual,
         head_branch: "main",
-        repository_id: 123,
-        head_repository_id: 123,
+        repository_id: artifactRepo.id,
+        head_repository_id: artifactRepo.id,
       },
     }),
   }
@@ -721,6 +765,55 @@ process.stdout.write(fs.readFileSync(root+map[path]))`,
   await assert.rejects(verifiedArtifact(qualificationKind, qualificationDigest))
   replaceQualificationWitness(jwt(makeClaims(qualificationAudience)))
   await assert.rejects(verifiedArtifact(qualificationKind, qualificationDigest, callerPath))
+
+  // The fleet issuer reads evidence produced by its own protected run.
+  const evidenceAudience = "urn:lyrashield:paired:v1:evidence:" + bodyDigest
+  const issuerEvidenceClaims = {
+    ...makeClaims(evidenceAudience),
+    sub: `repo:${repo}:environment:release-qualification`,
+    environment: "release-qualification",
+    job_workflow_ref: repo + "/" + issuerPath + "@refs/heads/main",
+  }
+  const issuerEvidenceWitness = jwt(issuerEvidenceClaims)
+  const issuerArchive = execFileSync(
+    "python3",
+    [
+      "-I",
+      "-c",
+      'import io,sys,zipfile; b=io.BytesIO(); z=zipfile.ZipFile(b,"w"); z.writestr("paired-witness.json",sys.stdin.read()); z.close(); sys.stdout.buffer.write(b.getvalue())',
+    ],
+    {
+      input: JSON.stringify({
+        version: 1,
+        kind: "evidence",
+        digest: bodyDigest,
+        token: issuerEvidenceWitness,
+      }),
+    }
+  )
+  put("zip", issuerArchive)
+  put(
+    "artifact",
+    JSON.stringify({
+      ...JSON.parse(files.artifact),
+      size_in_bytes: issuerArchive.length,
+      digest: "sha256:" + hash(issuerArchive),
+    })
+  )
+  t.mock.method(globalThis, "fetch", async (value) => {
+    const url = new URL(value)
+    if (url.hostname === "token.actions.githubusercontent.com")
+      return new Response(JSON.stringify(keys))
+    const aud = url.searchParams.get("audience")
+    return new Response(JSON.stringify({ value: jwt({ ...issuerEvidenceClaims, aud }) }))
+  })
+  const issuerWitness = JSON.parse(await issueRecordWitness("evidence", body, issuerPath))
+  assert.equal(issuerWitness.digest, bodyDigest)
+  assert.equal((await verifiedArtifact("evidence", bodyDigest, issuerPath)).raw, body)
+  await assert.rejects(verifiedArtifact("evidence", bodyDigest, callerPath))
+  await assert.rejects(verifiedArtifact("evidence", bodyDigest))
+  replaceQualificationWitness(jwt(issuerClaims))
+  await assert.rejects(verifiedArtifact(qualificationKind, qualificationDigest, issuerPath))
 
   // A completed historical run uses the same issuer policy, without
   // confusing the later consumer's run identity with the issuing run.

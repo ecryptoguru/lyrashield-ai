@@ -10,6 +10,7 @@ import {
 } from "./sandbox-tool-response"
 import {
   observeSandboxToolTerminal,
+  validateSandboxToolOutput,
   type SandboxToolTerminalObserver,
 } from "./sandbox-tool-terminal"
 
@@ -48,6 +49,8 @@ export class SandboxToolAcknowledgements {
         createHash("sha256").update(canonicalJson(binding.sandboxHandle)).digest("hex")
     )
       throw new Error("sandbox tool response is unavailable")
+    if (first.tool.maxOutputBytes === undefined)
+      throw new Error("sandbox tool output limit is unavailable")
     return entries!
   }
 
@@ -71,10 +74,11 @@ export class SandboxToolAcknowledgements {
       const latest = entries.at(-1)!
       if (latest.type === "tool_response" || latest.type === "tool_ack") {
         const proof = this.proof(latest)
-        await this.responses.load(binding, requestId, proof)
+        validateSandboxToolOutput(await this.responses.load(binding, requestId, proof), latest)
         return proof
       }
-      if (latest.type !== "tool_started") throw new Error("sandbox tool outcome unresolved")
+      if (latest.type !== "tool_started" && latest.type !== "tool_mutated")
+        throw new Error("sandbox tool outcome unresolved")
       if (!this.observer) throw new Error("sandbox terminal observer unavailable")
       const response = await observeSandboxToolTerminal(this.observer, binding, latest)
       const proof = await this.responses.retain(binding, requestId, response)
@@ -87,10 +91,12 @@ export class SandboxToolAcknowledgements {
     binding = sandboxToolResponseBindingSchema.parse(binding)
     return this.exclusive(requestId, async () => {
       const latest = (await this.state(binding, requestId)).at(-1)!
-      if (latest.type !== "tool_started") throw new Error("sandbox tool outcome unresolved")
+      if (latest.type !== "tool_started" && latest.type !== "tool_mutated")
+        throw new Error("sandbox tool outcome unresolved")
       if (!this.observer) throw new Error("sandbox terminal observer unavailable")
       const observed = await observeSandboxToolTerminal(this.observer, binding, latest)
       const { response, proof } = await this.responses.recover(binding, requestId)
+      validateSandboxToolOutput(response, latest)
       if (canonicalJson(observed) !== canonicalJson(response))
         throw new Error("recovered sandbox terminal observation differs")
       await this.append(latest, "tool_response", proof)
@@ -115,8 +121,8 @@ export class SandboxToolAcknowledgements {
           binding,
           requestId,
           responseChecksum,
-          async (proof) => {
-            await this.responses.load(binding, requestId, proof)
+          async (proof, event) => {
+            validateSandboxToolOutput(await this.responses.load(binding, requestId, proof), event)
           }
         )
         entries = await this.state(binding, requestId)
@@ -127,7 +133,7 @@ export class SandboxToolAcknowledgements {
       const proof = this.proof(latest)
       if (proof.responseChecksum !== responseChecksum)
         throw new Error("sandbox response receipt differs")
-      await this.responses.load(binding, requestId, proof)
+      validateSandboxToolOutput(await this.responses.load(binding, requestId, proof), latest)
       if (latest.type === "tool_response") await this.append(latest, "tool_ack", proof)
       return { binding, requestId, status: "ACKNOWLEDGED" as const, responseChecksum }
     })
@@ -142,7 +148,10 @@ export class SandboxToolAcknowledgements {
         latest.tool.actionChecksum !== actionChecksum
       )
         throw new Error("sandbox tool response is unavailable")
-      return this.responses.load(binding, requestId, this.proof(latest))
+      return validateSandboxToolOutput(
+        await this.responses.load(binding, requestId, this.proof(latest)),
+        latest
+      )
     })
   }
 

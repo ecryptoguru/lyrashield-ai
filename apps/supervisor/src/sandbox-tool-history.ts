@@ -11,14 +11,19 @@ export function projectSandboxToolHistory(
   for (const event of events) {
     const existing = states.get(event.tool.requestId) ?? []
     const first = existing[0]
-    const expected = [
-      "tool_intent",
-      "tool_created",
-      "tool_starting",
-      "tool_started",
-      "tool_response",
-      "tool_ack",
-    ][existing.length]
+    const mutation = event.tool.kind === "pty/stdin" || event.tool.kind === "pty/terminate"
+    const expected = (
+      mutation
+        ? ["tool_intent", "tool_mutated", "tool_response", "tool_ack"]
+        : [
+            "tool_intent",
+            "tool_created",
+            "tool_starting",
+            "tool_started",
+            "tool_response",
+            "tool_ack",
+          ]
+    )[existing.length]
     if (
       event.type !== expected ||
       (first &&
@@ -30,10 +35,18 @@ export function projectSandboxToolHistory(
           first.tool.actionChecksum !== event.tool.actionChecksum ||
           first.tool.handleChecksum !== event.tool.handleChecksum ||
           first.tool.containerId !== event.tool.containerId ||
-          (existing[1] && existing[1].tool.execId !== event.tool.execId) ||
+          first.tool.maxOutputBytes !== event.tool.maxOutputBytes ||
+          first.tool.timeoutSeconds !== event.tool.timeoutSeconds ||
+          first.tool.bindingInputJson !== event.tool.bindingInputJson ||
+          (existing[1] &&
+            (existing[1].tool.execId !== event.tool.execId ||
+              existing[1].tool.nativeMutationId !== event.tool.nativeMutationId ||
+              existing[1].tool.nativeReceiptSha256 !== event.tool.nativeReceiptSha256 ||
+              canonicalJson(existing[1].tool.nativeTargets ?? null) !==
+                canonicalJson(event.tool.nativeTargets ?? null))) ||
           (event.type === "tool_ack" &&
-            (existing[4]?.tool.responseChecksum !== event.tool.responseChecksum ||
-              existing[4]?.tool.objectDigest !== event.tool.objectDigest))))
+            (existing[mutation ? 2 : 4]?.tool.responseChecksum !== event.tool.responseChecksum ||
+              existing[mutation ? 2 : 4]?.tool.objectDigest !== event.tool.objectDigest))))
     )
       throw new Error("sandbox tool history conflicts")
     if (event.type === "tool_created") {

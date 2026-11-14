@@ -24,7 +24,11 @@ export const externalEnvOwners = {
     "packages/db/scripts/tests/scan-preparation-fixture.ts",
     "packages/db/scripts/tests/supervisor-native-fixture.ts",
     "packages/db/scripts/tests/supervisor-receipt-fixture.ts",
+    "packages/db/scripts/tests/native-origin-fixture.ts",
+    "packages/db/scripts/tests/scan-lifecycle-fixture.ts",
   ],
+  NATIVE_ORIGIN_READER_DATABASE_URL: ["packages/db/scripts/tests/native-origin-fixture.ts"],
+  WORKER_OBSERVER_DATABASE_URL: ["apps/worker/src/worker-host-query.ts"],
   GITHUB_ACTIONS: [
     "packages/db/src/disposable-preparation-execution-capability.ts",
     "packages/db/src/managed-disposable-preparation-issuer.ts",

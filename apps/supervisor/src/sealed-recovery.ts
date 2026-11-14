@@ -27,6 +27,7 @@ export function encodeSealedAttempts(attempts: Map<string, AttemptState>) {
       startAcknowledged: items(state.startAcknowledged),
       nativeAckGuards: items(state.nativeAckGuards ?? new Set<string>()),
       nativeCreateProofs: pairs(state.nativeCreateProofs ?? new Map()),
+      nativeRetirements: pairs(state.nativeRetirements ?? new Map()),
       nativeStartIntents: pairs(state.nativeStartIntents ?? new Map()),
       receipt: state.receipt,
       status: state.status,
@@ -61,6 +62,7 @@ export function validateSealedRecoverySnapshot(snapshot: SealedRecoverySnapshot)
       state.planned,
       state.resources,
       state.nativeCreateProofs,
+      state.nativeRetirements ?? [],
       state.nativeStartIntents,
     ])
       assertUniqueSorted(entries.map(([key]) => key))
@@ -74,10 +76,23 @@ export function validateSealedRecoverySnapshot(snapshot: SealedRecoverySnapshot)
       assertUniqueSorted(values)
     if (
       state.plans.some(([key, plan]) => key !== plan.key) ||
-      state.grants.some(([key, grant]) => key !== grant.providerId) ||
+      state.grants.some(
+        ([key, grant]) =>
+          key !== grant.providerId ||
+          (grant.grantRequestId !== undefined &&
+            !snapshot.commands.some(
+              (command) =>
+                command.id === grant.grantRequestId &&
+                command.state.request?.type === "START_PAID" &&
+                command.state.request.attemptId === id
+            ))
+      ) ||
       state.planned.some(([key, ownership]) => key !== ownership.executorKey) ||
       state.resources.some(([key, ownership]) => key !== ownership.executorKey) ||
       state.nativeCreateProofs.some(([key, ownership]) => key !== ownership.executorKey) ||
+      (state.nativeRetirements ?? []).some(
+        ([key, ownership]) => key !== ownership.executorKey || !ownership.containerId
+      ) ||
       state.nativeStartIntents.some(
         ([key, intent]) =>
           key !== intent.executorKey ||
@@ -88,7 +103,9 @@ export function validateSealedRecoverySnapshot(snapshot: SealedRecoverySnapshot)
           intent.supervisorInstanceId !== snapshot.supervisorInstanceId ||
           intent.nativeRequestId !== intent.guardId ||
           state.nativeAckGuards.includes(intent.guardId) ||
-          !state.startPlanned.includes(key) ||
+          (intent.phase === "EXECUTOR_CREATE"
+            ? !state.planned.some(([plannedKey]) => plannedKey === key)
+            : !state.startPlanned.includes(key)) ||
           !snapshot.commands.some(
             (command) =>
               command.id === intent.commandId &&

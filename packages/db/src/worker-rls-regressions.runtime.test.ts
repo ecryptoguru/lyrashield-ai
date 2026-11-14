@@ -39,6 +39,15 @@ import { processBillingDowngradeJob } from "../../../apps/worker/src/jobs/billin
 import { prisma as runtime } from "./client"
 import { runWithWorkspaceContext } from "./scoping"
 
+// Hoisting runs this guard before imports can construct the runtime client.
+await vi.hoisted(async () => {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1" && process.env.RLS_RUNTIME_DATABASE_URL) {
+    const { assertDisposableDatabasePair } =
+      await import("../../../.github/scripts/vitest-database-env.mjs")
+    assertDisposableDatabasePair(process.env)
+  }
+})
+
 const owner = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 })

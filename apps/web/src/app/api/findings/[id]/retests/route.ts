@@ -18,6 +18,7 @@ import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
 import { z } from "zod"
+import { resolveRepositoryScanSource } from "@lyrashield/integrations"
 import {
   assertScanWorkerAvailable,
   enqueueScanJob,
@@ -187,6 +188,7 @@ async function createRetestRecords(params: {
   }
   retestTargetId: string
   retestProfile: ReturnType<typeof resolveRetestProfile>
+  source: Parameters<typeof createScan>[0]["source"]
   session: Awaited<ReturnType<typeof requirePermission>>["session"]
   admission?: { operationId: string; admissionProof: string }
   client?: Parameters<typeof createScan>[1]
@@ -230,6 +232,7 @@ async function createRetestRecords(params: {
     createdById: params.session.userId,
     triggerType: "retest",
     determinismMode: params.retestProfile.determinismMode,
+    ...(params.source ? { source: params.source } : {}),
     ...(params.session.oauth?.connectionId && params.session.oauth.authorizationVersion
       ? {
           delegatedConnection: {
@@ -374,6 +377,30 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
         )
         if (availabilityError) return availabilityError
 
+        let source: Parameters<typeof createScan>[0]["source"]
+        try {
+          source = await resolveRepositoryScanSource(target, {
+            signal: request.signal,
+            readActiveConnection: () =>
+              prisma.integration.findFirst({
+                where: {
+                  workspaceId,
+                  type: "GITHUB",
+                  externalId: String(target.installationId),
+                  status: "active",
+                  deletedAt: null,
+                },
+              }),
+          })
+        } catch {
+          confirmNotSubmitted()
+          return apiError(
+            "SCAN_REF_UNRESOLVED",
+            "The current repository revision is unavailable. Please retry.",
+            409
+          )
+        }
+
         let prepared: Awaited<ReturnType<typeof createRetestRecords>>
         try {
           prepared = principal
@@ -393,6 +420,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
                     sourceScan,
                     retestTargetId,
                     retestProfile,
+                    source,
                     session,
                     admission,
                     client: tx,
@@ -406,6 +434,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
                 sourceScan,
                 retestTargetId,
                 retestProfile,
+                source,
                 session,
                 admission,
               })

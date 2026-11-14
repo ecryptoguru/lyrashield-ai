@@ -313,6 +313,8 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       "ScanDispatchOperation",
       "ScanQueueOutbox",
       "ScanDispatchAttempt",
+      "ScanDispatchWorkerAssignment",
+      "ScanDispatchLifecycleProof",
       "ScanDispatchOutbox",
       "ScanDispatchStart",
       "ScanSupervisorReceipt",
@@ -371,6 +373,17 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         table
       ).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true })
     }
+    const privateControlPrivileges = await restricted.$queryRaw<
+      Array<{ relname: string; allowed: boolean }>
+    >`
+      SELECT c.relname,
+        has_table_privilege(current_user, c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') OR
+        has_any_column_privilege(current_user, c.oid, 'SELECT,INSERT,UPDATE,REFERENCES') AS allowed
+      FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='public' AND c.relname IN ('ScanDispatchWorkerAssignment','ScanDispatchLifecycleProof')`
+    expect(privateControlPrivileges).toHaveLength(2)
+    for (const privilege of privateControlPrivileges)
+      expect(privilege.allowed, privilege.relname).toBe(false)
     for (const table of accountTables) {
       expect(
         rows.find((row) => row.relname === table),

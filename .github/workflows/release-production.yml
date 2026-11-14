@@ -49,18 +49,41 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
         run: bash .github/scripts/classify-main-change-gap.sh
 
+  # Preparation is opt-in through the existing evidence selector and publishes
+  # candidate tags only. It grants no qualification or production authority.
+  prepare-runtime-images:
+    needs: routing
+    if: >-
+      needs.routing.outputs.current-main == 'true' &&
+      needs.routing.outputs.azure-deploy == 'true' &&
+      vars.LYRASHIELD_RUNTIME_FLEET_EVIDENCE != ''
+    uses: ./.github/workflows/prepare-worker-recovery-candidate.yml
+    with:
+      source_sha: ${{ github.sha }}
+      runtime_qualification: true
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      packages: write
+      pull-requests: read
+
   # A normal main push reaches the protected issuer, which managed-signs one
   # exact-artifact record from authenticated evidence. Deployment consumes only
-  # that record. The selectors come from repository variable
-  # LYRASHIELD_RUNTIME_FLEET_EVIDENCE; without authenticated evidence the issuer
-  # issues nothing and this job produces no digest, so deployment stays held.
+  # that record. LYRASHIELD_RUNTIME_FLEET_EVIDENCE carries independent rollback
+  # and inventory selectors; current-run evidence hashes come from immutable
+  # native observations. Missing observations produce no release digest.
   qualify-runtime:
     name: Issue the exact-artifact release qualification
-    needs: routing
-    if: needs.routing.outputs.current-main == 'true'
+    needs: [routing, prepare-runtime-images]
+    if: >-
+      !cancelled() && needs.routing.result == 'success' &&
+      needs.routing.outputs.current-main == 'true' &&
+      (vars.LYRASHIELD_RUNTIME_FLEET_EVIDENCE == '' || needs.prepare-runtime-images.result == 'success')
     uses: ./.github/workflows/issue-runtime-qualification.yml
     with:
-      runtime_fleet_evidence: ${{ vars.LYRASHIELD_RUNTIME_FLEET_EVIDENCE }}
+      runtime_fleet_configuration: ${{ vars.LYRASHIELD_RUNTIME_FLEET_EVIDENCE }}
+      prepared_fleet: ${{ needs.prepare-runtime-images.outputs.prepared_fleet }}
     secrets: inherit
     permissions:
       actions: read

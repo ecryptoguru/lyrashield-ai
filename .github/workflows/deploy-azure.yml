@@ -81,7 +81,7 @@ env:
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
   EGRESS_PROXY_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-egress-proxy
-  ENGINE_REVISION: 0793bcb9644a1985165963375586124c993c020a
+  ENGINE_REVISION: 7fa1c5afeda2b0d8521876cee9e89168665d77a3
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
@@ -145,6 +145,8 @@ jobs:
           ref: ${{ env.DEPLOY_SHA }}
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: "24" }
 
       - name: Authenticate the automated cold release caller
         if: inputs.cold_release == true
@@ -328,6 +330,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     if: ${{ !cancelled() &&
+      inputs.cold_release != true &&
       inputs.held_recovery_original_run_id == '' &&
       inputs.prepared_candidate_run_id == '' &&
       inputs.qualified_release_digest == '' &&
@@ -609,11 +612,15 @@ jobs:
 
   resolve-images:
     name: Select verified release image digests
-    needs: [build, resolve-prepared-images]
+    needs: [build, resolve-prepared-images, preflight-compatible-baseline]
     if: ${{ !cancelled() &&
-      (needs.build.result == 'success' || needs.resolve-prepared-images.result == 'success') }}
+      (needs.build.result == 'success' || needs.resolve-prepared-images.result == 'success' ||
+      (inputs.cold_release == true && needs.preflight-compatible-baseline.result == 'success')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
     outputs:
       web_image: ${{ steps.select.outputs.web_image }}
       web_digest: ${{ steps.select.outputs.web_digest }}
@@ -622,16 +629,25 @@ jobs:
       egress_proxy_image: ${{ steps.select.outputs.egress_proxy_image }}
       egress_proxy_digest: ${{ steps.select.outputs.egress_proxy_digest }}
       engine_revision: ${{ steps.select.outputs.engine_revision }}
+      sandbox_digest: ${{ steps.select.outputs.sandbox_digest }}
     steps:
       - name: Checkout exact deployment source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.DEPLOY_SHA }}
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: "24" }
 
       - name: Select only the image source authorized for this release mode
         id: select
         env:
+          COLD_RELEASE: ${{ inputs.cold_release }}
+          GH_TOKEN: ${{ github.token }}
+          RUNTIME_FLEET_QUALIFICATION: ${{ inputs.runtime_fleet_qualification }}
+          RUNTIME_FLEET_RECORD_SHA256: ${{ inputs.runtime_fleet_record_sha256 }}
+          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+          ENGINE_REVISION: ${{ env.ENGINE_REVISION }}
           HELD_RECOVERY: ${{ inputs.held_recovery_original_run_id != '' }}
           PAIRED_PREPARED: ${{ inputs.prepared_candidate_run_id != '' }}
           BUILD_RESULT: ${{ needs.build.result }}
@@ -652,6 +668,15 @@ jobs:
           PREPARED_ENGINE_REVISION: ${{ needs.resolve-prepared-images.outputs.engine_revision }}
         run: |
           set -euo pipefail
+          if [ "$COLD_RELEASE" = true ]; then
+            [ "$HELD_RECOVERY" = false ] && [ "$PAIRED_PREPARED" = false ] &&
+              [ "$BUILD_RESULT" = skipped ] && [ "$PREPARED_RESULT" = skipped ] || exit 1
+            node .github/scripts/assert-cold-release-caller.mjs
+            export SOURCE_TREE
+            SOURCE_TREE=$(git --no-replace-objects rev-parse 'HEAD^{tree}')
+            node .github/scripts/select-qualified-release-images.mjs
+            exit 0
+          fi
           if [ "$HELD_RECOVERY" = true ] || [ "$PAIRED_PREPARED" = true ]; then
             [ "$PREPARED_RESULT" = success ] && [ "$BUILD_RESULT" = skipped ] || exit 1
             prefix=PREPARED
@@ -668,6 +693,23 @@ jobs:
             [ "$key" != egress_digest ] || key=egress_proxy_digest
             echo "$key=$value" >> "$GITHUB_OUTPUT"
           done
+
+      - name: Authenticate qualified image reads
+        if: inputs.cold_release == true
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Verify the qualified web and worker images
+        if: inputs.cold_release == true
+        env:
+          WEB_REF: ${{ steps.select.outputs.web_image }}@${{ steps.select.outputs.web_digest }}
+          WORKER_REF: ${{ steps.select.outputs.worker_image }}@${{ steps.select.outputs.worker_digest }}
+          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+          ENGINE_REVISION: ${{ steps.select.outputs.engine_revision }}
+        run: bash .github/scripts/verify-v26-images.sh "$WEB_REF" "$WORKER_REF" "$SOURCE_SHA" "$ENGINE_REVISION"
 
       - name: Require the built images to be the qualified images
         if: inputs.runtime_fleet_record_sha256 != ''
@@ -793,6 +835,8 @@ jobs:
       needs.resolve-images.result == 'success' &&
       needs.validate-manual-production-dispatch.result == 'success' &&
       needs.preflight-compatible-baseline.result == 'success' &&
+      (inputs.cold_release != true ||
+        needs.verify-built-worker-image.outputs.cold_sandbox_image == format('ghcr.io/ecryptoguru/lyrashield-sandbox@{0}', needs.resolve-images.outputs.sandbox_digest)) &&
       (
         needs.verify-built-worker-image.result == 'success' ||
         (

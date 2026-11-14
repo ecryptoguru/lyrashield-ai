@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto"
 import pg from "pg"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { canonicalizeJson, sha256Sync } from "@lyrashield/security/webmcp"
-import { createScanDispatchAuthorityBroker } from "./scan-dispatch-authority-broker"
+import { createBrokerService } from "../../../apps/broker/src/service"
+import {
+  createScanDispatchAuthorityBroker,
+  type PrepareDispatchResult,
+} from "./scan-dispatch-authority-broker"
 import {
   compilePreparationCommand,
   readStoredDispatchCommand,
@@ -10,11 +14,24 @@ import {
 } from "./scan-dispatch-command-descriptor"
 import {
   applyPreparationFixtureMigration,
+  historicalPreparation,
   installPreparationFixtureRole,
+  legacyPreparationFixture,
   preparationFixture,
   preparationInput,
 } from "../scripts/tests/scan-preparation-fixture"
 import { queueFixtureWorker } from "../scripts/tests/queue-outbox-fixture"
+
+// Hoisting runs this guard before imports can construct a client from ambient
+// env. Bind the fixture's privileged DATABASE_URL role to its restricted
+// preparation broker role through the shared disposable-pair guard.
+await vi.hoisted(async () => {
+  const runtime = process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1" || !runtime) return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({ ...process.env, RLS_RUNTIME_DATABASE_URL: runtime })
+})
 
 const enabled =
   process.env.SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST === "1" &&
@@ -68,6 +85,69 @@ describe.skipIf(!enabled)("persisted canonical controller command descriptors", 
     await broker?.close()
     await owner?.end()
     await queueWorker.close()
+  })
+
+  it("prepares through the packaged broker only with a compiler and a live grant", async () => {
+    const config = {
+      connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
+      transport: { kind: "unix" as const, socketPath: "/run/lyrashield/broker.sock" },
+      controlToken: "fixture-control-token-at-least-32-characters",
+      admission: "open" as const,
+    }
+    const noCompiler = createBrokerService(config)
+    const closed = createBrokerService({
+      ...config,
+      admission: "closed",
+      preparationAuthority: compile,
+    })
+    const installed = createBrokerService({ ...config, preparationAuthority: compile })
+    try {
+      const denied = await preparationFixture(owner)
+      for (const service of [noCompiler, closed]) {
+        await expect(service.prepare(preparationInput(denied))).rejects.toMatchObject({
+          code: "ADMISSION_CLOSED",
+        })
+      }
+      expect(
+        (
+          await owner.query(
+            'SELECT count(*)::int n FROM "ScanDispatchAttempt" WHERE "operationId"=$1',
+            [denied.operationId]
+          )
+        ).rows[0].n
+      ).toBe(0)
+
+      const f = await preparationFixture(owner)
+      const prepared = (await installed.prepare(preparationInput(f))) as PrepareDispatchResult
+      expect(prepared.kind).toBe("committed")
+      if (prepared.kind !== "committed") throw new Error("fixture did not prepare")
+      const row = await stored(prepared.commandId)
+      expect(
+        readStoredDispatchCommand(row.commandInputJson, row.commandInputChecksum)
+      ).toMatchObject({
+        type: "PREPARE",
+        attempt: { operationId: f.operationId, scanId: f.scanId, workspaceId: f.workspaceId },
+      })
+
+      const revoked = await preparationFixture(owner)
+      await owner.query(
+        'UPDATE "ScanWorkerInstanceGrant" SET "revokedAt"=CURRENT_TIMESTAMP, "updatedAt"=CURRENT_TIMESTAMP WHERE id=$1',
+        [revoked.grantId]
+      )
+      await expect(installed.prepare(preparationInput(revoked))).rejects.toMatchObject({
+        code: "WORKER_GRANT_INVALID",
+      })
+      expect(
+        (
+          await owner.query(
+            'SELECT count(*)::int n FROM "ScanDispatchAttempt" WHERE "operationId"=$1',
+            [revoked.operationId]
+          )
+        ).rows[0].n
+      ).toBe(0)
+    } finally {
+      await Promise.all([noCompiler.close(), closed.close(), installed.close()])
+    }
   })
 
   it("builds identity from locked persistence and ignores worker execution choices", async () => {
@@ -127,26 +207,39 @@ describe.skipIf(!enabled)("persisted canonical controller command descriptors", 
     }
   })
 
-  it("never backfills unavailable commands, or edits a persisted descriptor", async () => {
+  it("refuses checked preparation without its compiler before writing authority", async () => {
     const f = await preparationFixture(owner)
     const noCompiler = createScanDispatchAuthorityBroker({
       connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
       preparationAuthority: "checked-intent-v1",
     })
     try {
-      const old = await noCompiler.prepare(preparationInput(f))
-      if (old.kind !== "committed") throw new Error("fixture did not prepare")
-      const row = await stored(old.commandId)
-      expect(readStoredDispatchCommand(row.commandInputJson, row.commandInputChecksum)).toBeNull()
-      await expect(
-        owner.query(
-          'UPDATE "ScanDispatchOutbox" SET "commandInputJson"=\'{}\',"commandInputChecksum"=$2 WHERE id=$1',
-          [row.id, sha256Sync("{}")]
-        )
-      ).rejects.toMatchObject({ code: "23514" })
+      await expect(noCompiler.prepare(preparationInput(f))).rejects.toMatchObject({
+        code: "PREPARATION_AUTHORITY_CLOSED",
+      })
+      const rows = await owner.query(
+        `SELECT (SELECT count(*)::int FROM "ScanDispatchAttempt" WHERE "operationId"=$1) attempts,
+                (SELECT count(*)::int FROM "ScanDispatchOutbox" WHERE "operationId"=$1) commands,
+                (SELECT count(*)::int FROM "ScanPhysicalExecution" WHERE "operationId"=$1) physical`,
+        [f.operationId]
+      )
+      expect(rows.rows[0]).toEqual({ attempts: 0, commands: 0, physical: 0 })
     } finally {
       await noCompiler.close()
     }
+  })
+
+  it("never backfills historical unavailable commands, or edits a persisted descriptor", async () => {
+    const legacy = await legacyPreparationFixture(owner)
+    const old = await historicalPreparation(owner, legacy)
+    const row = await stored(old.commandId)
+    expect(readStoredDispatchCommand(row.commandInputJson, row.commandInputChecksum)).toBeNull()
+    await expect(
+      owner.query(
+        'UPDATE "ScanDispatchOutbox" SET "commandInputJson"=\'{}\',"commandInputChecksum"=$2 WHERE id=$1',
+        [row.id, sha256Sync("{}")]
+      )
+    ).rejects.toMatchObject({ code: "23514" })
     const next = await preparationFixture(owner)
     const prepared = await broker.prepare(preparationInput(next))
     if (prepared.kind !== "committed") throw new Error("fixture did not prepare")

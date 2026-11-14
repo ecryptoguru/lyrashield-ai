@@ -6,6 +6,7 @@ const schedulerMocks = vi.hoisted(() => ({
   evaluateScanEntitlement: vi.fn(),
   notifyScheduleBlocked: vi.fn(),
   relayAvailable: vi.fn(),
+  resolveRepositoryScanSource: vi.fn(),
 }))
 
 vi.mock("@lyrashield/db", () => ({
@@ -34,6 +35,7 @@ vi.mock("@lyrashield/integrations", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/integrations")>()
   return {
     ...actual,
+    resolveRepositoryScanSource: schedulerMocks.resolveRepositoryScanSource,
     resolveAvailableUrlReview: async (
       input: Parameters<typeof actual.resolveAvailableUrlReview>[0]
     ) => actual.resolveAvailableUrlReview(input, await schedulerMocks.relayAvailable()),
@@ -111,6 +113,7 @@ describe("processDueSchedules", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     schedulerMocks.relayAvailable.mockResolvedValue(true)
+    schedulerMocks.resolveRepositoryScanSource.mockResolvedValue(undefined)
     vi.mocked(getDueSchedules).mockResolvedValue([schedule] as never)
     vi.mocked(getNextRunAt).mockReturnValue(new Date("2026-01-04T00:00:00Z"))
     vi.mocked(createScheduledScan).mockResolvedValue({ id: "scan-1" } as never)
@@ -438,6 +441,43 @@ describe("processDueSchedules", () => {
       expect.any(Date)
     )
     expect(enqueueScan).toHaveBeenCalledTimes(1)
+  })
+
+  it("pins a repository source before claiming its scheduled occurrence", async () => {
+    vi.mocked(getDueSchedules).mockResolvedValue([
+      {
+        ...schedule,
+        target: {
+          ...schedule.target,
+          type: "REPO",
+          installationId: "123",
+          repoFullName: "owner/repo",
+          branch: "main",
+        },
+      },
+    ] as never)
+    const source = { revision: "b".repeat(40) }
+    schedulerMocks.resolveRepositoryScanSource.mockResolvedValue(source)
+    expect(await processDueSchedules(new Date("2026-01-01T12:00:00Z"))).toBe(1)
+    expect(createScheduledScan).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(Date),
+      expect.any(Date),
+      source
+    )
+    expect(schedulerMocks.resolveRepositoryScanSource.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(createScheduledScan).mock.invocationCallOrder[0]!
+    )
+  })
+
+  it("preserves due cadence when the repository source is unavailable", async () => {
+    schedulerMocks.resolveRepositoryScanSource.mockRejectedValue(
+      new Error("repository unavailable")
+    )
+    expect(await processDueSchedules(new Date("2026-01-01T12:00:00Z"))).toBe(0)
+    expect(createScheduledScan).not.toHaveBeenCalled()
+    expect(advanceBlockedSchedule).not.toHaveBeenCalled()
+    expect(enqueueScan).not.toHaveBeenCalled()
   })
 
   it("enqueues when the workspace is below the cap", async () => {

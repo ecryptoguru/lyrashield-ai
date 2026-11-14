@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { createHash, createHmac } from "node:crypto"
+import { createHash, createHmac, generateKeyPairSync } from "node:crypto"
 import { Readable } from "node:stream"
 import { afterEach, describe, expect, it } from "vitest"
 import {
@@ -17,6 +17,8 @@ import {
   type JournalRecord,
   type StoredObject,
   type JournalSealControlGate,
+  sha256Hex,
+  verifySupervisorAttemptProof,
 } from "@lyrashield/runtime-control"
 import { SupervisorAuthorityJournal } from "./authority-journal"
 import {
@@ -24,10 +26,16 @@ import {
   supervisorJournalRecordSchema,
   type SupervisorJournalEvent,
 } from "./journal-events"
-import { createSealedRecoveryCandidate } from "./sealed-recovery"
+import { createSealedRecoveryCandidate, validateSealedRecoverySnapshot } from "./sealed-recovery"
+import { sealedRecoverySchema } from "./sealed-recovery-schema"
 import { loadSealedRecoveryBase } from "./sealed-recovery-load"
 import { commandRequestHash } from "./service-common"
+import { createSupervisorAttemptProofIssuer } from "./attempt-proof"
 
+const { privateKey, publicKey } = generateKeyPairSync("ed25519", {
+  privateKeyEncoding: { format: "pem", type: "pkcs8" },
+  publicKeyEncoding: { format: "pem", type: "spki" },
+})
 const roots: string[] = []
 const epochId = "epoch-test-1",
   supervisorInstanceId = "supervisor-test-1"
@@ -67,7 +75,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
-async function fixture() {
+async function fixture(paid = false, pendingStart = true) {
   const root = await mkdtemp(join(tmpdir(), "sealed-recovery-"))
   roots.push(root)
   const original = new SignedJournal(join(root, "original"), sourceKey, (value) =>
@@ -142,34 +150,46 @@ async function fixture() {
     authorizeRecovery: async () => true,
   })
   const base = { supervisorInstanceId, observedAt: "2026-11-12T00:00:00.000Z" }
+  const attemptBinding = { ...binding, billingMode: paid ? ("PAID" as const) : binding.billingMode }
+  const provider = paid
+    ? {
+        providerId: "azure-ai",
+        maxRequests: 4,
+        costReservationMicros: 100,
+        maxReservedCostMicros: 1000,
+      }
+    : undefined
   await journal.append({
     ...base,
     type: "command_intent",
     command: {
       type: "PREPARE",
       commandId: "command-prepare-1",
-      attempt: binding,
+      attempt: attemptBinding,
       executors,
+      ...(provider ? { provider } : {}),
     },
   })
   await journal.append({
     ...base,
     type: "attempt_prepared",
     commandId: "command-prepare-1",
-    binding,
+    binding: attemptBinding,
     executors,
+    ...(provider ? { provider } : {}),
   })
-  await journal.append({
-    ...base,
-    type: "command_intent",
-    command: {
-      type: "START_UNMETERED",
-      commandId: "command-start-1",
-      attemptId: binding.attemptId,
-      executorKey: "sandbox",
-      expectedReceiptHash: "0".repeat(64),
-    },
-  })
+  if (pendingStart)
+    await journal.append({
+      ...base,
+      type: "command_intent",
+      command: {
+        type: paid ? "START_PAID" : "START_UNMETERED",
+        commandId: "command-start-1",
+        attemptId: binding.attemptId,
+        executorKey: "sandbox",
+        expectedReceiptHash: "0".repeat(64),
+      },
+    })
   return {
     journal,
     original,
@@ -348,6 +368,211 @@ async function pinnedFixture() {
 }
 
 describe("sealed supervisor recovery candidate", () => {
+  it.each(["completed", "missing", "pending", "reconcile-only"] as const)(
+    "requires the original completed STOP for a stopped-source reconciliation (%s)",
+    async (stopState) => {
+      const f = await fixture(false, false)
+      try {
+        const expiredNow = new Date("2026-12-02T00:00:00.000Z")
+        const base = { supervisorInstanceId, observedAt: expiredNow.toISOString() }
+        const stopAttemptId = binding.attemptId
+        if (stopState !== "missing") {
+          await f.journal.append({
+            ...base,
+            type: "command_intent",
+            command: {
+              type: stopState === "reconcile-only" ? "RECONCILE" : "STOP",
+              commandId: "command-stop-1",
+              attemptId: stopAttemptId,
+              expectedReceiptHash: (await f.original.load()).at(-1)!.hash,
+            },
+          })
+        }
+        await f.journal.append({
+          ...base,
+          type: "attempt_status",
+          commandId: "command-stop-1",
+          attemptId: binding.attemptId,
+          status: "STOPPED",
+        })
+        if (stopState !== "missing" && stopState !== "pending")
+          await f.journal.append({
+            ...base,
+            type: "command_terminal",
+            commandId: "command-stop-1",
+            attemptId: stopAttemptId,
+            status: "STOPPED",
+          })
+        const issue = createSupervisorAttemptProofIssuer({
+          journal: f.journal,
+          privateKey,
+          epochId,
+          supervisorInstanceId,
+          now: () => expiredNow,
+        })
+        const input = {
+          operationId: binding.operationId,
+          attemptId: binding.attemptId,
+          workspaceId: binding.workspaceId,
+          scanId: binding.scanId,
+          authorityEpochId: epochId,
+          commandId: "command-reconcile-1",
+          type: "RECONCILE" as const,
+          challenge: "a".repeat(64),
+        }
+        if (stopState === "reconcile-only") {
+          await expect(issue(input)).rejects.toThrow("Attempt proof is unavailable")
+          return
+        }
+        if (stopState !== "completed") {
+          // Recovery treats a terminal label without the completed original
+          // command as UNKNOWN; it cannot issue a stopped-source proof.
+          expect((await issue(input)).status).toBe("UNKNOWN")
+          return
+        }
+        const proof = verifySupervisorAttemptProof(
+          await issue(input),
+          input,
+          { publicKey, supervisorInstanceId },
+          expiredNow
+        )
+        expect(proof.status).toBe("STOPPED")
+        expect(proof.binding.expiresAt).toBe(binding.expiresAt)
+        expect(proof.command).toEqual({
+          type: "RECONCILE",
+          commandId: input.commandId,
+          attemptId: binding.attemptId,
+          expectedReceiptHash: (await f.original.load()).at(-1)!.hash,
+        })
+        await expect(issue({ ...input, workspaceId: "foreign-workspace" })).rejects.toThrow(
+          "Attempt proof is unavailable"
+        )
+        await expect(
+          issue({ ...input, type: "START_UNMETERED", executorKey: "sandbox" })
+        ).rejects.toThrow("Attempt proof is unavailable")
+      } finally {
+        await f.original.close()
+        await f.local.close()
+      }
+    }
+  )
+
+  it("issues only a scoped fixed-head lifecycle proof after real preparation completion", async () => {
+    const f = await fixture(false, false)
+    try {
+      const issue = createSupervisorAttemptProofIssuer({
+        journal: f.journal,
+        privateKey,
+        epochId,
+        supervisorInstanceId,
+        now: () => new Date("2026-11-12T00:00:00.000Z"),
+      })
+      const input = {
+        operationId: binding.operationId,
+        attemptId: binding.attemptId,
+        workspaceId: binding.workspaceId,
+        scanId: binding.scanId,
+        authorityEpochId: epochId,
+        commandId: "command-new-1",
+        type: "START_UNMETERED" as const,
+        executorKey: "sandbox" as const,
+        challenge: "a".repeat(64),
+      }
+      await expect(issue(input)).rejects.toThrow("Attempt proof is unavailable")
+      const original = (await f.original.load())[0]!.payload
+      if (original.type !== "command_intent" || original.command.type !== "PREPARE")
+        throw new Error("fixture PREPARE missing")
+      const command = original.command
+      const action = {
+        phase: "PREPARE",
+        operationId: binding.operationId,
+        attemptId: binding.attemptId,
+        scanId: binding.scanId,
+        workspaceId: binding.workspaceId,
+        authorityEpochId: epochId,
+        authorityRevision: binding.authorityRevision,
+        authorityChecksum: sha256Hex(
+          canonicalJson({
+            attempt: command.attempt,
+            executors: command.executors,
+            provider: command.provider ?? null,
+          })
+        ),
+        actionChecksum: commandRequestHash(command),
+        commandId: command.commandId,
+      }
+      await f.journal.append({
+        type: "prepare_invocation_completed",
+        supervisorInstanceId,
+        observedAt: "2026-11-12T00:00:00.000Z",
+        commandId: command.commandId,
+        attemptId: binding.attemptId,
+        operationId: binding.operationId,
+        authorityEpochId: epochId,
+        guardId: "guard-prepare-1",
+        nativeRequestId: "guard-prepare-1",
+        bindingInputChecksum: sha256Hex(canonicalJson(action)),
+        actionChecksum: action.actionChecksum,
+        commandInputChecksum: action.actionChecksum,
+      })
+      const proof = await issue(input)
+      expect(
+        verifySupervisorAttemptProof(
+          proof,
+          input,
+          { publicKey, supervisorInstanceId },
+          new Date("2026-11-12T00:00:00.000Z")
+        ).preparedCompleted
+      ).toBe(true)
+      expect(proof.command).toEqual({
+        type: input.type,
+        commandId: input.commandId,
+        attemptId: binding.attemptId,
+        executorKey: "sandbox",
+        expectedReceiptHash: (await f.original.load())[1]!.hash,
+      })
+      expect(Object.keys(proof)).not.toContain("records")
+      await expect(issue({ ...input, workspaceId: "foreign-workspace" })).rejects.toThrow(
+        "Attempt proof is unavailable"
+      )
+    } finally {
+      await f.original.close()
+      await f.local.close()
+    }
+  })
+
+  it("retains the signed provider request through sorted recovery and rejects a foreign origin", async () => {
+    const f = await fixture(true)
+    try {
+      await f.journal.append({
+        type: "provider_grants_bound",
+        supervisorInstanceId,
+        observedAt: "2026-11-12T00:00:00.000Z",
+        commandId: "command-start-1",
+        attemptId: binding.attemptId,
+        grants: [{ providerId: "azure-ai", grantId: "provider-grant-1", revoked: false }],
+      })
+      const candidate = await createSealedRecoveryCandidate(f.journal, {
+        epochId,
+        supervisorInstanceId,
+        lastSequence: 4,
+      })
+      const snapshot = sealedRecoverySchema.parse(
+        JSON.parse(Buffer.from(candidate.bytes).toString())
+      )
+      const grant = snapshot.attempts[0]!.state.grants[0]![1]
+      expect(grant.grantRequestId).toBe("command-start-1")
+      validateSealedRecoverySnapshot(snapshot)
+      grant.grantRequestId = "command-prepare-1"
+      expect(() => validateSealedRecoverySnapshot(snapshot)).toThrow("resource binding differs")
+      delete grant.grantRequestId
+      expect(() => validateSealedRecoverySnapshot(snapshot)).not.toThrow()
+    } finally {
+      await f.original.close()
+      await f.local.close()
+    }
+  })
+
   it("folds verified history without discarding historical keys or unresolved states", async () => {
     const f = await fixture()
     try {

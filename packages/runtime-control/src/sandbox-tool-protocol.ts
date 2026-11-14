@@ -8,7 +8,7 @@ const id = z
   .min(3)
   .max(192)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
-export const sandboxToolRequestSchema = z
+const requestObject = z
   .object({
     binding: z
       .object({ attemptId: id, operationId: id, authorityEpochId: id, sandboxHandle: id })
@@ -35,16 +35,60 @@ export const sandboxToolRequestSchema = z
       .max(1024 * 1024),
   })
   .strict()
-  .refine((request) => Buffer.byteLength(canonicalJson(request)) <= 1024 * 1024)
+export const sandboxToolRequestSchema = requestObject.refine(
+  (request) => Buffer.byteLength(canonicalJson(request)) <= 1024 * 1024
+)
+const descriptorRequest = requestObject.extend({ argv: requestObject.shape.argv.optional() })
+const ptyBase = {
+  yieldTimeSeconds: z.number().min(0).max(30),
+  maxOutputTokens: z.number().int().min(1).max(100000),
+}
+const ptyStart = z.object({ ...ptyBase, tty: z.boolean() }).strict()
+const ptyStdin = z
+  .object({
+    ...ptyBase,
+    sessionId: z.number().int().positive().safe(),
+    outputCursor: z.number().int().nonnegative().safe(),
+    chars: z.string().refine((value) => Buffer.byteLength(value) <= 64 * 1024),
+  })
+  .strict()
+const ptyTerminate = z.object({ stopSandbox: z.literal(true).optional() }).strict()
 
 export const sandboxToolExecDescriptorSchema = z
   .object({
     schema: z.literal("lyrashield-sandbox-tool-exec/1"),
-    request: sandboxToolRequestSchema,
+    request: descriptorRequest,
     workspaceRoot: z.string().min(1).max(4096),
     ownership: resourceOwnershipSchema,
+    resultKind: z
+      .enum([
+        "files/read",
+        "files/write",
+        "workspace/persist",
+        "workspace/hydrate",
+        "state/renew",
+        "pty/start",
+        "pty/stdin",
+        "pty/terminate",
+      ])
+      .optional(),
+    pty: z.union([ptyStart, ptyStdin, ptyTerminate]).optional(),
   })
   .strict()
+  .refine((descriptor) => {
+    const kind = descriptor.resultKind
+    if (kind === "pty/stdin" || kind === "pty/terminate")
+      return (
+        descriptor.request.argv === undefined &&
+        (kind === "pty/stdin"
+          ? ptyStdin.safeParse(descriptor.pty).success
+          : ptyTerminate.safeParse(descriptor.pty).success)
+      )
+    if (!sandboxToolRequestSchema.safeParse(descriptor.request).success) return false
+    return kind === "pty/start"
+      ? ptyStart.safeParse(descriptor.pty).success
+      : descriptor.pty === undefined
+  })
   .refine(
     (descriptor) =>
       descriptor.workspaceRoot.startsWith("/") &&

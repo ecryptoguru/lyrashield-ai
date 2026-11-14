@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -58,6 +58,22 @@ describe("actual staged input observations", () => {
     symlinkSync("/etc/hosts", join(f.root, "fixture.txt"))
     expect(() => readDisposableSourceReceipt(f.root, f.revision)).toThrow()
   })
+  it.each(["ignored.sh", "generated/ignored.sh"])(
+    "rejects ignored executable input %s even when normal Git status is clean",
+    async (path) => {
+      const f = await source()
+      writeFileSync(join(f.root, ".git/info/exclude"), "*.sh\n", { mode: 0o600 })
+      expect(readDisposableSourceReceipt(f.root, f.revision).entries).toHaveLength(1)
+      mkdirSync(join(f.root, "generated"), { recursive: true, mode: 0o700 })
+      writeFileSync(join(f.root, path), "#!/bin/sh\nexit 0\n", { mode: 0o700 })
+      expect(
+        execFileSync("git", ["-C", f.root, "status", "--porcelain", "--untracked-files=all"])
+          .toString()
+          .trim()
+      ).toBe("")
+      expect(() => readDisposableSourceReceipt(f.root, f.revision)).toThrow()
+    }
+  )
   it("requires exact native image digest, entrypoint and OCI source revision", () => {
     const digest = "sha256:" + "a".repeat(64),
       revision = "b".repeat(40),

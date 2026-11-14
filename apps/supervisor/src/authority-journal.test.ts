@@ -23,7 +23,11 @@ import {
   createSupervisorAuthorityJournal,
   type SupervisorAuthorityJournalOptions,
 } from "./authority-journal"
-import { supervisorJournalEventSchema, type SupervisorJournalEvent } from "./journal-events"
+import {
+  supervisorJournalEventSchema,
+  supervisorJournalRecordSchema,
+  type SupervisorJournalEvent,
+} from "./journal-events"
 import { createSupervisorHandler } from "./http"
 import { SupervisorService, type SupervisorServiceOptions } from "./service"
 
@@ -159,7 +163,8 @@ function boundedPorts(fixture: Awaited<ReturnType<typeof setup>>) {
 
 async function setup(
   authorize: SupervisorAuthorityJournalOptions["authorize"] = async () => true,
-  authorizeStream: SupervisorAuthorityJournalOptions["authorizeStream"] = async () => true
+  authorizeStream: SupervisorAuthorityJournalOptions["authorizeStream"] = async () => true,
+  authorizeConfirmed?: SupervisorAuthorityJournalOptions["authorizeConfirmed"]
 ) {
   const root = await mkdtemp(join(tmpdir(), "supervisor-authority-test-"))
   roots.push(root)
@@ -184,6 +189,7 @@ async function setup(
     supervisorInstanceId,
     signingSecret,
     authorize,
+    ...(authorizeConfirmed ? { authorizeConfirmed } : {}),
     authorizeStream,
     authorizeRecovery: async () => true,
   }
@@ -201,6 +207,73 @@ async function setup(
 }
 
 describe("supervisor independent journal adapter", () => {
+  it("keeps installed historical authorization separate from expired live grants", async () => {
+    let live = true
+    const confirmed = vi.fn(async () => true)
+    const f = await setup(
+      async () => live,
+      async () => true,
+      confirmed
+    )
+    const original = await f.journal.append(intent)
+    live = false
+    expect(await f.journal.load()).toEqual([original])
+    expect(confirmed).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.objectContaining({ payload: original }) }),
+      binding
+    )
+    await expect(
+      f.journal.append({ ...intent, observedAt: "2026-11-11T10:00:01.000Z" })
+    ).rejects.toThrow()
+  })
+
+  it("provides publication ports only while an independently authenticated snapshot is serialized", async () => {
+    const f = await setup()
+    await f.journal.append(intent)
+    let outside!: () => Promise<unknown>
+    const hashes = await f.journal.withPublication(async (ports) => {
+      const confirmed = await ports.independent.loadConfirmed()
+      const originals = await ports.original.load()
+      outside = () => ports.independent.loadConfirmed()
+      expect(ports.validateOriginal(originals[0]!.payload)).toEqual(intent)
+      return { original: originals[0]!.hash, wrapper: confirmed[0]!.hash }
+    })
+    expect(hashes.original).toMatch(/^[a-f0-9]{64}$/)
+    expect(hashes.wrapper).toMatch(/^[a-f0-9]{64}$/)
+    await expect(outside()).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+  })
+
+  it("does not return publication results when original history changes during the callback", async () => {
+    const f = await setup()
+    await f.journal.append(intent)
+    await expect(
+      f.journal.withPublication(async (ports) => {
+        await ports.original.append({ ...intent, observedAt: "2026-11-11T10:00:01.000Z" })
+        return "stale-publication"
+      })
+    ).rejects.toMatchObject({ code: "AUTHORITY_CONFLICT" })
+  })
+
+  it("uses exact persisted recovery authority to seal an expired pending original only with its UNKNOWN hold", async () => {
+    let live = true
+    const f = await setup(
+      async () => live,
+      async () => true,
+      async () => true
+    )
+    f.mirror.loseAcknowledgement = true
+    await expect(f.journal.append(intent)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    const original = (await f.original.load())[0]!
+    live = false
+    const recovered = await f.journal.recoverPending()
+    expect(recovered.recoveredRecord).toEqual(original)
+    expect(recovered.holdRecord.payload.type).toBe("command_recovery_hold")
+    expect(recovered.holdRecord.payload).toMatchObject({
+      recoveredHash: original.hash,
+      commandId: "command-journal-1",
+    })
+    expect((await f.journal.load()).at(-1)!.payload.type).toBe("command_recovery_hold")
+  })
   it("uses native bounded ranges beyond64 without checkpoint services or whole-history page reads", async () => {
     const f = await setup()
     const { store, mirror } = boundedPorts(f)
@@ -987,6 +1060,70 @@ describe("supervisor independent journal adapter", () => {
       expect(await readFile(originalPath, "utf8")).toBe("retained bytes")
     }
   )
+
+  it("denies publication-mode append and recovery before changing either signed file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "supervisor-publication-read-only-"))
+    roots.push(root)
+    const originalPath = join(root, "original.jsonl"),
+      independentPath = join(root, "wrapped.jsonl")
+    const original = new SignedJournal(
+      originalPath,
+      "o".repeat(48),
+      supervisorJournalEventSchema.parse
+    )
+    const local = new SignedJournal(
+      independentPath,
+      signingSecret,
+      authorityEventSchema(supervisorJournalRecordSchema).parse
+    )
+    const journal = new SupervisorAuthorityJournal({
+      original,
+      local,
+      signingSecret,
+      epochId,
+      supervisorInstanceId,
+      store: new Store(),
+      mirror: new Mirror(),
+      authorize: async () => true,
+      authorizeStream: async () => true,
+      authorizeRecovery: async () => true,
+      readOnly: true,
+    })
+    await expect(journal.append(intent)).rejects.toThrow("Publication journal is read-only")
+    await expect(journal.recoverPending()).rejects.toThrow("Publication journal is read-only")
+    expect(await readdir(root)).toEqual([])
+    await Promise.all([original.close(), local.close()])
+  })
+
+  it("runs confirmed private projection after releasing the journal serialization queue", async () => {
+    const root = await mkdtemp(join(tmpdir(), "supervisor-private-projection-"))
+    roots.push(root)
+    let projected = false
+    const built = createSupervisorAuthorityJournal({
+      originalPath: join(root, "original.jsonl"),
+      independentPath: join(root, "wrapped.jsonl"),
+      originalSigningSecret: "o".repeat(48),
+      signingSecret,
+      epochId,
+      supervisorInstanceId,
+      store: new Store(),
+      mirror: new Mirror(),
+      authorize: async () => true,
+      authorizeStream: async () => true,
+      authorizeRecovery: async () => true,
+      onConfirmed: async (record) => {
+        const page = await built.journal.readCursor(cursor)
+        expect(page.records[0]?.payload.payload).toEqual(record)
+        projected = true
+      },
+    })
+    try {
+      await built.journal.append(intent)
+      expect(projected).toBe(true)
+    } finally {
+      await built.close()
+    }
+  })
 
   it("reopens the factory's original and wrapper files without changing signed bytes", async () => {
     const root = await mkdtemp(join(tmpdir(), "supervisor-factory-test-"))

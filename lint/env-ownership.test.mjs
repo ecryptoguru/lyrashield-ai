@@ -35,3 +35,14 @@ it("binds cold worker launcher values to the database epoch guard only", () => {
   expect(findUnownedEnvReads(source, "apps/worker/src/other.ts", new Set())).toEqual(keys)
   expect(findUnownedEnvReads(source, "apps/web/src/other.ts", new Set())).toEqual(keys)
 })
+
+it("keeps the private worker observer connection confined to its host query helper", () => {
+  const source = "process.env.WORKER_OBSERVER_DATABASE_URL"
+  expect(findUnownedEnvReads(source, "apps/worker/src/worker-host-query.ts", new Set())).toEqual([])
+  expect(findUnownedEnvReads(source, "apps/worker/src/index.ts", new Set())).toEqual([
+    "WORKER_OBSERVER_DATABASE_URL",
+  ])
+  expect(findUnownedEnvReads(source, "apps/web/src/other.ts", new Set())).toEqual([
+    "WORKER_OBSERVER_DATABASE_URL",
+  ])
+})

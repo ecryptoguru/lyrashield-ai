@@ -7,6 +7,7 @@ import {
   SignedJournal,
   authorityEventSchema,
   canonicalJson,
+  sha256Hex,
   bindSupervisorJournalSnapshot,
   supervisorJournalCursorSchema,
   supervisorRecoveryRequestSchema,
@@ -22,6 +23,8 @@ import {
   type SupervisorJournalReader,
   type SupervisorJournalRecovery,
   type SupervisorJournalRecoveryPort,
+  type SupervisorCommand,
+  type SupervisorRecoveryRequest,
 } from "@lyrashield/runtime-control"
 import {
   supervisorJournalEventSchema,
@@ -35,6 +38,7 @@ import {
   RecoverySelectionError,
   validRecoveryHold,
   validRecoverySuffix,
+  eventCommandId,
   type RecoveryAuthorizer,
 } from "./authority-recovery"
 
@@ -54,18 +58,21 @@ type LocalSnapshot = { originals: OriginalRecord[]; wrapped: WrappedRecord[] }
 
 type DurabilityOptions = Omit<
   IndependentAuthorityJournalOptions<OriginalRecord>,
-  "local" | "payloadSchema" | "authorize"
+  "local" | "payloadSchema" | "authorize" | "authorizeConfirmed"
 > & {
   // Must atomically validate current persisted epoch, operation, attempt,
   // workspace, scan and authority revision. Journal evidence is not permission
   // to perform an executor or provider action.
   authorize: (event: WrappedEvent, binding: AttemptBinding) => Promise<boolean>
+  authorizeConfirmed?: (record: WrappedRecord, binding: AttemptBinding) => Promise<boolean>
   // Mandatory even for genesis: authenticate the persisted active stream/epoch
   // independently of whether there are any events to authorize.
   authorizeStream: (stream: { epochId: string; supervisorInstanceId: string }) => Promise<boolean>
   // Independently compare current persisted command/attempt/epoch/grant authority;
   // request IDs/digest only select the original record and never grant permission.
   authorizeRecovery: RecoveryAuthorizer
+  onConfirmed?: (record: OriginalRecord) => Promise<void>
+  readOnly?: boolean
 }
 
 export interface SupervisorAuthorityJournalOptions extends DurabilityOptions {
@@ -92,10 +99,17 @@ export class SupervisorAuthorityJournal
   private readonly cursorBindings = new Map<string, { binding: AttemptBinding; sequence: number }>()
   private rangeRead = false
   private boundedRead = false
+  private recoveryAuthority: {
+    request: SupervisorRecoveryRequest
+    original: OriginalRecord
+    command: SupervisorCommand
+    binding: AttemptBinding
+  } | null = null
 
   constructor(private readonly options: SupervisorAuthorityJournalOptions) {
+    const { authorizeConfirmed, ...independentOptions } = options
     this.independent = new IndependentAuthorityJournal({
-      ...options,
+      ...independentOptions,
       local: {
         load: () => this.loadLocal(),
         append: (event) => options.local.append(event),
@@ -127,8 +141,42 @@ export class SupervisorAuthorityJournal
           : bindingFor(original, originals)
         const expected = this.eventFor(original, originals, binding)
         if (!same(event, expected)) conflict("independent event has a foreign authority binding")
+        const recovery = this.recoveryAuthority
+        if (
+          recovery &&
+          (same(original, recovery.original) ||
+            validRecoveryHold(original.payload, recovery.original, originals))
+        ) {
+          return options.authorizeRecovery(
+            recovery.request,
+            recovery.original,
+            recovery.command,
+            recovery.binding
+          )
+        }
         return options.authorize(event, binding)
       },
+      ...(authorizeConfirmed
+        ? {
+            authorizeConfirmed: async (record: WrappedRecord) => {
+              const originals = this.originals
+              if (!originals)
+                throw new IndependentAuthorityError(
+                  "AUTHORITY_UNKNOWN",
+                  "no authenticated local snapshot"
+                )
+              const original = originals[record.payload.payload.sequence - 1]
+              if (!original || !same(original, record.payload.payload))
+                conflict("confirmed event differs from its original signed envelope")
+              const binding = this.rangeRead
+                ? this.cursorBindingFor(original)
+                : bindingFor(original, originals)
+              if (!same(record.payload, this.eventFor(original, originals, binding)))
+                conflict("confirmed event has a foreign authority binding")
+              return authorizeConfirmed(record, binding)
+            },
+          }
+        : {}),
     })
   }
 
@@ -149,6 +197,7 @@ export class SupervisorAuthorityJournal
         this.originals = null
         this.boundedRead = false
         this.rangeRead = false
+        this.recoveryAuthority = null
       }
     })
     this.serial = run.then(
@@ -336,7 +385,12 @@ export class SupervisorAuthorityJournal
   }
 
   async append(input: SupervisorJournalEvent): Promise<OriginalRecord> {
-    return this.serialized(() => this.appendCurrent(input))
+    if (this.options.readOnly) conflict("Publication journal is read-only")
+    const record = await this.serialized(() => this.appendCurrent(input))
+    // Installed receipt projection reads this journal; run after releasing its
+    // serialization queue so private readback cannot deadlock the append.
+    await this.options.onConfirmed?.(record)
+    return record
   }
 
   private async stageRecoveryHold(
@@ -412,6 +466,7 @@ export class SupervisorAuthorityJournal
   }
 
   async recoverStored(input: unknown): Promise<SupervisorJournalRecovery<SupervisorJournalEvent>> {
+    if (this.options.readOnly) conflict("Publication journal is read-only")
     const parsed =
       input === undefined ? undefined : supervisorRecoveryRequestSchema.safeParse(input)
     if (parsed && !parsed.success)
@@ -436,8 +491,33 @@ export class SupervisorAuthorityJournal
           },
           stageHold: (event, originals) => this.stageRecoveryHold(event, originals),
           assertStreamAuthorized: () => this.assertStreamAuthorized(),
-          authorizeRecord: (record, originals) =>
-            this.options.authorize(this.eventFor(record, originals), bindingFor(record, originals)),
+          authorizeRecord: async (record, originals) => {
+            const binding = bindingFor(record, originals)
+            if (!this.options.authorizeConfirmed)
+              return this.options.authorize(this.eventFor(record, originals), binding)
+            const id = eventCommandId(record.payload)
+            const intent = originals.find(
+              (item) =>
+                item.payload.type === "command_intent" && item.payload.command.commandId === id
+            )
+            if (!intent || intent.payload.type !== "command_intent")
+              conflict("recovery has no original command")
+            const command = intent.payload.command
+            const request: SupervisorRecoveryRequest = {
+              epochId: binding.authorityEpochId,
+              supervisorInstanceId: record.payload.supervisorInstanceId,
+              workspaceId: binding.workspaceId,
+              scanId: binding.scanId,
+              operationId: binding.operationId,
+              attemptId: binding.attemptId,
+              commandId: command.commandId,
+              expectedCommandHash: sha256Hex(canonicalJson(command)),
+            }
+            if (!(await this.options.authorizeRecovery(request, record, command, binding)))
+              return false
+            this.recoveryAuthority = { request, original: record, command, binding }
+            return true
+          },
           authorizeRecovery: this.options.authorizeRecovery,
         },
         parsed?.data
@@ -447,6 +527,29 @@ export class SupervisorAuthorityJournal
 
   async recoverPending(): Promise<SupervisorJournalRecovery<SupervisorJournalEvent>> {
     return this.recoverStored(undefined)
+  }
+
+  /** Root sealing keeps the authenticated snapshot alive and excludes local appends. */
+  async withPublication<T>(
+    operation: (ports: {
+      original: JournalPort<SupervisorJournalEvent>
+      wrapper: JournalPort<WrappedEvent>
+      independent: IndependentAuthorityJournal<OriginalRecord>
+      validateOriginal: typeof supervisorJournalEventSchema.parse
+    }) => Promise<T>
+  ): Promise<T> {
+    return this.serialized(async () => {
+      const before = await this.confirmedHistory()
+      const result = await operation({
+        original: this.options.original,
+        wrapper: this.options.local,
+        independent: this.independent,
+        validateOriginal: supervisorJournalEventSchema.parse,
+      })
+      if (!same(before, await this.confirmedHistory()))
+        conflict("journal authority changed during seal publication")
+      return result
+    })
   }
 
   async readCursor(input: unknown): Promise<SupervisorJournalPage<SupervisorJournalEvent>> {

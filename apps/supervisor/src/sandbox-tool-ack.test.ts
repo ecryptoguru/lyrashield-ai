@@ -70,6 +70,7 @@ function fixture() {
       actionChecksum: "a".repeat(64),
       handleChecksum,
       containerId: "c".repeat(64),
+      maxOutputBytes: 1024,
     },
   }
   const events: SandboxToolEvent[] = [
@@ -137,6 +138,56 @@ function fixture() {
 }
 
 describe("sandbox terminal receipt acknowledgements", () => {
+  it("rejects output exceeding the limit retained with the invocation", async () => {
+    const f = fixture()
+    for (const event of f.events) Object.assign(event.tool, { maxOutputBytes: 3 })
+    f.response.stderrBase64 = "ZA=="
+    await expect(f.ledger.complete(binding, requestId)).rejects.toThrow(
+      "sandbox output is too large"
+    )
+    expect(f.store.objects.size).toBe(0)
+    expect(f.journal.append).not.toHaveBeenCalled()
+  })
+
+  it("rejects a changed or absent retained output limit", async () => {
+    const f = fixture()
+    for (const event of f.events) Object.assign(event.tool, { maxOutputBytes: 3 })
+    Object.assign(f.events.at(-1)!.tool, { maxOutputBytes: 4 })
+    await expect(f.ledger.complete(binding, requestId)).rejects.toThrow("history conflicts")
+    expect(f.observer.observe).not.toHaveBeenCalled()
+
+    const legacy = fixture()
+    for (const event of legacy.events) delete event.tool.maxOutputBytes
+    await expect(legacy.ledger.complete(binding, requestId)).rejects.toThrow("output limit")
+    expect(legacy.observer.observe).not.toHaveBeenCalled()
+  })
+
+  it.each(["complete", "replay", "acknowledge"] as const)(
+    "rejects an authenticated oversized retained response during %s",
+    async (method) => {
+      const f = fixture()
+      for (const event of f.events) Object.assign(event.tool, { maxOutputBytes: 3 })
+      f.response.stderrBase64 = "ZA=="
+      const proof = await f.responses.retain(binding, requestId, f.response)
+      f.events.push(
+        sandboxToolEventSchema.parse({
+          ...f.events.at(-1),
+          type: "tool_response",
+          tool: { ...f.events.at(-1)!.tool, ...proof },
+        })
+      )
+      const result =
+        method === "complete"
+          ? f.ledger.complete(binding, requestId)
+          : method === "replay"
+            ? f.ledger.replay(binding, requestId, "a".repeat(64))
+            : f.ledger.acknowledge(binding, requestId, proof.responseChecksum)
+      await expect(result).rejects.toThrow("sandbox output is too large")
+      expect(f.journal.append).not.toHaveBeenCalled()
+      expect(f.observer.observe).not.toHaveBeenCalled()
+    }
+  )
+
   it("fails closed without an installed terminal observer", async () => {
     const f = fixture()
     const closed = new SandboxToolAcknowledgements(

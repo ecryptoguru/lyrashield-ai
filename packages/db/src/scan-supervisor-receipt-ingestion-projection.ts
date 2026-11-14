@@ -11,7 +11,10 @@ import { bindScanPreparationContext } from "./scan-preparation-authority"
 import { readStoredDispatchCommand } from "./scan-dispatch-command-descriptor"
 import type { DispatchBrokerContext } from "./scan-dispatch-authority-broker-methods"
 import { applyAuthenticatedPreparation } from "./scan-supervisor-preparation-projection"
+import { applyAuthenticatedStart } from "./scan-supervisor-start-projection"
+import { applyAuthenticatedCleanup } from "./scan-supervisor-cleanup-projection"
 import { resolveNativeInvocationReceipt } from "./scan-supervisor-native-invocation-resolution"
+import { resolveNativeRetirementReceipt } from "./scan-native-retirement"
 import { sha256Hex, verifySupervisorReceiptHmac } from "./scan-supervisor-receipt-verifier"
 import {
   receiptFailure,
@@ -32,6 +35,7 @@ type Command = {
   commandInputJson: string | null
   commandInputChecksum: string | null
 }
+export type SupervisorReceiptCleanupScope = { attemptId: string; commandIds: readonly string[] }
 const operationSchema = z
   .string()
   .min(3)
@@ -201,7 +205,7 @@ async function* scopedSources(
     const rows = await client.query<Source>(
       `SELECT id,sequence::text,"originalInputJson","wrapperInputJson"
       FROM "ScanSupervisorJournalRecord" WHERE "streamId"=$1 AND "operationId"=$2 AND "workspaceId"=$3
-        AND sequence>$4 AND sequence<=$5 ORDER BY sequence LIMIT 100`,
+        AND sequence>$4 AND sequence<=$5 ORDER BY "ScanSupervisorJournalRecord".sequence LIMIT 100`,
       [
         authority.streamId,
         operation.operationId,
@@ -253,7 +257,8 @@ export async function projectSupervisorSnapshot(
   authority: SupervisorReceiptAuthority,
   input: unknown,
   confirmedSequence: number,
-  lockOperation: DispatchBrokerContext["lockOperation"]
+  lockOperation: DispatchBrokerContext["lockOperation"],
+  retainedCleanup?: SupervisorReceiptCleanupScope
 ) {
   const operationId = operationSchema.parse(input)
   await bindScanPreparationContext(client, operationId)
@@ -308,6 +313,28 @@ export async function projectSupervisorSnapshot(
         receiptFailure("SUPERVISOR_COMMAND_IDENTITY_MISMATCH")
       seen.add(command.id)
     } else if (!seen.has(command.id)) receiptFailure("SUPERVISOR_COMMAND_INTENT_UNAVAILABLE")
+    if (retainedCleanup) {
+      if (command.attemptId !== retainedCleanup.attemptId) continue
+      const cleanupCommand =
+        ["STOP", "RECONCILE"].includes(approved.type) &&
+        retainedCleanup.commandIds.includes(command.id)
+      const retirement =
+        event.type === "native_invocation_retired" &&
+        typeof event.stopCommandId === "string" &&
+        retainedCleanup.commandIds.includes(event.stopCommandId) &&
+        current.get(event.stopCommandId)?.commandType === "STOP" &&
+        current.get(event.stopCommandId)?.attemptId === retainedCleanup.attemptId
+      // Signed acceptance is inert observation. Retained credentials cannot project
+      // PREPARE completion, native CREATE/START acknowledgements or START success.
+      if (!cleanupCommand && !retirement && event.type !== "command_intent") continue
+      if (
+        cleanupCommand &&
+        !["command_intent", "command_terminal", "command_recovery_hold"].includes(
+          String(event.type)
+        )
+      )
+        continue
+    }
     if (event.type === "command_recovery_hold")
       await verifyRecoveryHold(client, authority, operation, command, source, event)
     if (
@@ -342,6 +369,8 @@ export async function projectSupervisorSnapshot(
         "resource_start_planned",
         "prepare_invocation_completed",
         "native_invocation_ack",
+        "native_invocation_planned",
+        "native_invocation_retired",
         "resource_bound",
         "resource_started",
       ].includes(String(event.type))
@@ -365,6 +394,8 @@ export async function projectSupervisorSnapshot(
     )
     if (["native_invocation_ack", "prepare_invocation_completed"].includes(String(event.type)))
       await resolveNativeInvocationReceipt(client, event, receiptId, command.commandInputChecksum!)
+    if (event.type === "native_invocation_retired")
+      await resolveNativeRetirementReceipt(client, event, receiptId, command.commandInputChecksum!)
     // Uncertainty remains held until a separate authenticated reconciliation
     // path proves it resolved. A later positive command terminal is history,
     // not permission to erase the command's previously observed hold.
@@ -382,15 +413,41 @@ export async function projectSupervisorSnapshot(
       (await applyAuthenticatedPreparation(client, operationId, outcome.command, outcome.receiptId))
     )
       preparations.add(outcome.command.id)
-  // Positive execution consumption stays closed until the installed controller
-  // holds current authorization through the actual executor/provider action.
+  const starts = new Set<string>()
+  for (const outcome of final.values())
+    if (
+      outcome.status === "STARTED" &&
+      (await applyAuthenticatedStart(client, operationId, outcome.command, outcome.receiptId))
+    )
+      starts.add(outcome.command.id)
+  const cleanups = new Set<string>()
+  for (const outcome of final.values())
+    if (
+      await applyAuthenticatedCleanup(
+        client,
+        operationId,
+        outcome.command,
+        outcome.receiptId,
+        outcome.status
+      )
+    )
+      cleanups.add(outcome.command.id)
   return {
     operationId,
     confirmedSequence,
     receipts: sourceCount,
     dispositions: [...final.values()].map(({ command, status }) => ({
       commandId: command.id,
-      status: status === "UNKNOWN" ? "UNKNOWN" : preparations.has(command.id) ? "PREPARED" : "HELD",
+      status:
+        status === "UNKNOWN"
+          ? "UNKNOWN"
+          : preparations.has(command.id)
+            ? "PREPARED"
+            : starts.has(command.id)
+              ? "STARTED"
+              : cleanups.has(command.id)
+                ? status
+                : "HELD",
       observedStatus: status,
     })),
   }

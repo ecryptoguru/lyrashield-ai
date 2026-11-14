@@ -40,6 +40,7 @@ export function loadDatabaseProviderAuthority(
   const supervisorAuthority = createProtectedSupervisorReceiptAuthority({
     ...identity,
     connectionString,
+    attemptProofPublicKey: env.LYRASHIELD_SUPERVISOR_ATTEMPT_PROOF_PUBLIC_KEY,
     originalSigningSecret: required(env, "LYRASHIELD_SUPERVISOR_SIGNING_SECRET"),
     wrapperSigningSecret: required(env, "LYRASHIELD_SUPERVISOR_MIRROR_SIGNING_SECRET"),
     controlToken: required(env, "LYRASHIELD_SUPERVISOR_CONTROL_TOKEN"),

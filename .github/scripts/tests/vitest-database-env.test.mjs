@@ -223,6 +223,20 @@ describe("Vitest database environment", () => {
     )
   })
 
+  it("rejects a direct URL that redirects Prisma away from the asserted database", () => {
+    fixtureGuards.assertDisposableDatabasePair(fixtureEnv({ DATABASE_DIRECT_URL: ownerUrl }))
+    for (const DATABASE_DIRECT_URL of [
+      "postgresql://owner:fixture@127.0.0.1:5432/other_test",
+      "postgresql://owner:fixture@127.0.0.1:5433/task4_disposable",
+      "postgresql://owner:fixture@localhost:5432/task4_disposable",
+    ]) {
+      assert.throws(
+        () => fixtureGuards.assertDisposableDatabasePair(fixtureEnv({ DATABASE_DIRECT_URL })),
+        /DATABASE_DIRECT_URL must name the same local test database/
+      )
+    }
+  })
+
   it("accepts the same effective local database with distinct owner and runtime credentials", () => {
     fixtureGuards.assertDisposableDatabasePair(fixtureEnv())
     fixtureGuards.assertDisposableDatabasePair(

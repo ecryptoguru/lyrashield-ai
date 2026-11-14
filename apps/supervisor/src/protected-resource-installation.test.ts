@@ -9,7 +9,11 @@ import {
 import { loadProtectedResourceInstallation } from "./protected-resource-installation"
 import { verifyProtectedContainer } from "./protected-container-verification"
 
-const io = vi.hoisted(() => ({ lstat: vi.fn(), readFile: vi.fn(), exec: vi.fn() }))
+const io = vi.hoisted(() => ({ lstat: vi.fn(), readFile: vi.fn(), exec: vi.fn(), source: vi.fn() }))
+vi.mock("@lyrashield/runtime-control", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@lyrashield/runtime-control")>()),
+  readSourceTree: io.source,
+}))
 vi.mock("node:fs/promises", async (importOriginal) => ({
   ...(await importOriginal<typeof import("node:fs/promises")>()),
   lstat: io.lstat,
@@ -60,6 +64,7 @@ const descriptor = executorResourceDescriptorSchema.parse({
 let catalog: Record<string, unknown>
 beforeEach(() => {
   vi.clearAllMocks()
+  io.source.mockReturnValue({ stagedTreeDigest: hash, entries: [] })
   catalog = {
     schema: "lyrashield-protected-resource-installation/1",
     attemptId: "attempt-1",
@@ -89,6 +94,36 @@ beforeEach(() => {
   )
 })
 
+it.each([true, false])(
+  "rehashes immutable source bytes before granting a mount (match=%s)",
+  async (match) => {
+    const sourceDescriptor = executorResourceDescriptorSchema.parse({
+      ...descriptor,
+      source: {
+        grantId: "source-1",
+        root: "/workspace/source",
+        revision: "c".repeat(40),
+        stagedTreeDigest: hash,
+        readOnly: true,
+      },
+    })
+    catalog.descriptorChecksums = [sha256Hex(canonicalJson(sourceDescriptor))]
+    catalog.inputs = [
+      { kind: "source", grantId: "source-1", checksum: hash },
+      { kind: "egress", grantId: "egress-1", checksum: bytesHash(egress) },
+    ]
+    io.source.mockReturnValue({ stagedTreeDigest: match ? hash : "d".repeat(64), entries: [] })
+    const installed = loadProtectedResourceInstallation(sourceDescriptor, "attempt-1", "none")
+    if (match)
+      await expect(installed).resolves.toHaveProperty("mounts.0.target", "/workspace/source")
+    else await expect(installed).rejects.toThrow("Protected source tree checksum is invalid")
+    expect(io.source).toHaveBeenCalledWith("/var/lib/lyrashield/control/inputs/source-1", {
+      ownerUid: 0,
+      immutable: true,
+    })
+  }
+)
+
 it("builds only protected read-only grants and the approved identity/isolation arguments", async () => {
   const installed = await loadProtectedResourceInstallation(descriptor, "attempt-1", "none")
   expect(installed.mounts).toEqual([
@@ -111,6 +146,54 @@ it("builds only protected read-only grants and the approved identity/isolation a
     ])
   )
 })
+
+it.each(["match", "bytes", "extra", "manifest"])(
+  "rehashes approved attachment bytes before mounting (%s)",
+  async (kind) => {
+    const entries = [
+      {
+        id: "attachment-one",
+        checksum: hash,
+        byteLength: 3,
+        contentType: "text/plain",
+        filename: "proof.txt",
+        containerPath: "/input/attachments/attachment-one-proof.txt",
+      },
+    ]
+    const manifestChecksum =
+      kind === "manifest" ? "f".repeat(64) : sha256Hex(canonicalJson(entries))
+    const attachmentDescriptor = executorResourceDescriptorSchema.parse({
+      ...descriptor,
+      attachments: {
+        grantId: "attachments-one",
+        root: "/input/attachments",
+        manifestChecksum,
+        entries,
+        readOnly: true,
+      },
+    })
+    catalog.descriptorChecksums = [sha256Hex(canonicalJson(attachmentDescriptor))]
+    catalog.inputs = [
+      { kind: "attachments", grantId: "attachments-one", checksum: manifestChecksum },
+      { kind: "egress", grantId: "egress-1", checksum: bytesHash(egress) },
+    ]
+    io.source.mockReturnValue({
+      stagedTreeDigest: hash,
+      entries: [
+        {
+          path: "attachment-one-proof.txt",
+          bytes: 3,
+          checksum: kind === "bytes" ? "d".repeat(64) : hash,
+        },
+        ...(kind === "extra" ? [{ path: ".ignored", bytes: 0, checksum: hash }] : []),
+      ],
+    })
+    const result = loadProtectedResourceInstallation(attachmentDescriptor, "attempt-1", "none")
+    if (kind === "match")
+      await expect(result).resolves.toHaveProperty("mounts.0.target", "/input/attachments")
+    else await expect(result).rejects.toThrow("Protected attachment bytes")
+  }
+)
 
 it.each(["attempt", "descriptor", "expiry", "extra-input"])(
   "rejects a mismatched %s catalog before exposing host resources",

@@ -21,17 +21,20 @@ export async function installReceiptRole(owner: pg.Pool) {
   await owner.query(`CREATE ROLE dispatch_receipt_consumer LOGIN PASSWORD '${password}' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;
 GRANT USAGE ON SCHEMA public,app TO dispatch_receipt_consumer;
 GRANT SELECT ON "ScanSupervisorJournalStream","ScanSupervisorJournalRecord","ScanDispatchOperation","ScanDispatchAttempt","ScanDispatchOutbox","ScanPhysicalExecution","ScanSupervisorReceipt","ScanPhysicalExecutionTransition","ScanAuthorityEpoch","Scan","Workspace","WorkspaceMember",users,"BillingAccount","Target","Policy" TO dispatch_receipt_consumer;
-GRANT SELECT ON "ScanExecutionInvocationGuard","ScanExecutionInvocationResolution" TO dispatch_receipt_consumer;
+GRANT SELECT ON "ScanExecutionActionIntent","ScanExecutionInvocationGuard","ScanExecutionInvocationResolution" TO dispatch_receipt_consumer;
 GRANT INSERT ON "ScanExecutionInvocationResolution" TO dispatch_receipt_consumer;
+GRANT SELECT,INSERT ON "ScanDispatchReleaseReceipt" TO dispatch_receipt_consumer;
 GRANT INSERT ON "ScanSupervisorJournalRecord","ScanSupervisorReceipt","ScanPhysicalExecutionTransition" TO dispatch_receipt_consumer;
 GRANT UPDATE("confirmedSequence","originalHash","wrapperHash","headInputJson","projectionSequence","projectionHash","updatedAt") ON "ScanSupervisorJournalStream" TO dispatch_receipt_consumer;
 GRANT UPDATE("updatedAt") ON "Scan","ScanAuthorityEpoch" TO dispatch_receipt_consumer;
+GRANT UPDATE("terminalReason") ON "ScanDispatchOperation" TO dispatch_receipt_consumer;
 GRANT UPDATE(state,"updatedAt") ON "ScanDispatchOperation" TO dispatch_receipt_consumer;
 GRANT UPDATE(status,"deliveredAt","updatedAt") ON "ScanDispatchOutbox" TO dispatch_receipt_consumer;
 GRANT UPDATE(state,revision,"unresolvedKey","lastReceiptId","updatedAt") ON "ScanPhysicalExecution" TO dispatch_receipt_consumer;
-GRANT EXECUTE ON FUNCTION app.scan_preparation_context(text),app.scan_preparation_gate_held(),app.scan_preparation_plan_json(jsonb),app.scan_supervisor_preparation_completed(text),app.current_workspace_id(),public.digest(bytea,text) TO dispatch_receipt_consumer;
+GRANT EXECUTE ON FUNCTION app.require_scan_dispatch_worker(text,text),app.scan_preparation_context(text),app.scan_preparation_gate_held(),app.scan_preparation_plan_json(jsonb),app.scan_supervisor_preparation_completed(text),app.current_workspace_id(),public.digest(bytea,text) TO dispatch_receipt_consumer;
+DO $$ BEGIN IF to_regprocedure('app.require_scan_dispatch_worker_cleanup(text,text)') IS NOT NULL THEN GRANT EXECUTE ON FUNCTION app.require_scan_dispatch_worker_cleanup(TEXT,TEXT) TO dispatch_receipt_consumer; END IF; END $$;
 DO $$ DECLARE name TEXT; BEGIN
- FOREACH name IN ARRAY ARRAY['ScanDispatchOperation','ScanDispatchAttempt','ScanDispatchOutbox','ScanPhysicalExecution','ScanSupervisorReceipt','ScanPhysicalExecutionTransition'] LOOP
+ FOREACH name IN ARRAY ARRAY['ScanDispatchOperation','ScanDispatchAttempt','ScanDispatchOutbox','ScanPhysicalExecution','ScanSupervisorReceipt','ScanPhysicalExecutionTransition','ScanDispatchReleaseReceipt'] LOOP
   IF name IN ('ScanDispatchOperation','ScanDispatchAttempt','ScanPhysicalExecution') THEN
    EXECUTE format('CREATE POLICY fixture_receipt_scope ON public.%I FOR ALL TO dispatch_receipt_consumer USING ("workspaceId"=app.current_workspace_id()) WITH CHECK ("workspaceId"=app.current_workspace_id())',name);
   ELSE

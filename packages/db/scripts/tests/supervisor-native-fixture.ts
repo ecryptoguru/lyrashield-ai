@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto"
+import { generateKeyPairSync, randomBytes } from "node:crypto"
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -7,13 +7,20 @@ import {
   canonicalJson,
   PostgresAuthorityMirror,
   PostgresDurableScanAuthorityFence,
+  ScanAuthorityContext,
   type AuthoritySqlPool,
 } from "@lyrashield/runtime-control"
 import { createSupervisorAuthorityJournal } from "../../../../apps/supervisor/src/authority-journal"
 import { SupervisorService } from "../../../../apps/supervisor/src/service"
-import { DockerRuntimeExecutor } from "../../../../apps/supervisor/src/executor"
+import {
+  DockerRuntimeExecutor,
+  type RuntimeExecutor,
+} from "../../../../apps/supervisor/src/executor"
+import { createSupervisorAttemptProofIssuer } from "../../../../apps/supervisor/src/attempt-proof"
 import { createScanExecutionActionAuthorityVerifier } from "../../src/scan-execution-action-intent"
 import { createScanExecutionInvocationGuardWriter } from "../../src/scan-execution-invocation-guard"
+import { createScanDispatchAuthorityBroker } from "../../src/scan-dispatch-authority-broker"
+import { createScanDispatchLifecycleProofRegistrar } from "../../src/scan-dispatch-lifecycle-proof-registrar"
 import { sha256Hex } from "../../src/scan-supervisor-receipt-verifier"
 import type { SupervisorReceiptAuthority } from "../../src/scan-supervisor-receipt-ingestion-verifier"
 import type { PreparationFixture } from "./scan-preparation-fixture"
@@ -60,7 +67,8 @@ export async function nativePreparationJournal(
   owner: pg.Pool,
   f: PreparationFixture,
   receiptUrl: string,
-  mirrorUrl: string
+  mirrorUrl: string,
+  options: { executor?: RuntimeExecutor; nativeUrl?: string; proofUrl?: string } = {}
 ) {
   const root = await mkdtemp(join(tmpdir(), "native-receipt-")),
     storeRoot = join(root, "store")
@@ -80,9 +88,31 @@ export async function nativePreparationJournal(
   )
   const mirrorPool = new pg.Pool({ connectionString: mirrorUrl }),
     nativePool = new pg.Pool({
-      connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL,
+      connectionString: options.nativeUrl ?? process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL,
     })
+  const context = new ScanAuthorityContext()
+  let privateReceipts: ReturnType<typeof createScanDispatchAuthorityBroker> | undefined
   const { journal, close } = createSupervisorAuthorityJournal({
+    onConfirmed: async (_record) => {
+      if (options.executor && !context.current()) {
+        if (!privateReceipts) throw new Error("Private receipt service is unavailable")
+        try {
+          await privateReceipts.consumeSupervisorReceipts(f.operationId)
+        } catch (error) {
+          const rows = await owner.query(
+            `SELECT sequence, "originalInputJson"::jsonb#>>'{payload,type}' AS type,coalesce("originalInputJson"::jsonb#>>'{payload,command,commandId}',"originalInputJson"::jsonb#>>'{payload,commandId}') AS command FROM "ScanSupervisorJournalRecord" WHERE "operationId"=$1 ORDER BY sequence`,
+            [f.operationId]
+          )
+          throw new Error(
+            JSON.stringify({
+              code: (error as { code?: string }).code,
+              events: rows.rows,
+              failures: authorityFailures,
+            })
+          )
+        }
+      }
+    },
     originalPath: join(root, "original"),
     independentPath: join(root, "wrapped"),
     originalSigningSecret: originalSecret,
@@ -119,18 +149,78 @@ export async function nativePreparationJournal(
       throw new Error("fixture recovery requires a separate genuine source proof")
     },
   })
-  const verify = createScanExecutionActionAuthorityVerifier({ approvedProviderPolicies: new Map() })
+  const streamId = `native-stream-${f.operationId}`
+  let service: SupervisorService
+  const proofKeys = generateKeyPairSync("ed25519")
+  const attemptProofPublicKey = proofKeys.publicKey
+    .export({ type: "spki", format: "pem" })
+    .toString()
+  const registrar = options.proofUrl
+    ? await createScanDispatchLifecycleProofRegistrar(options.proofUrl)
+    : undefined
+  const issuer = createSupervisorAttemptProofIssuer({
+    journal,
+    privateKey: proofKeys.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    epochId: f.epochId,
+    supervisorInstanceId: f.instanceId,
+    registerProof: registrar ? (value) => registrar.register(value) : undefined,
+  })
+  const authority: SupervisorReceiptAuthority = {
+    connectionString: receiptUrl,
+    streamId,
+    authorityEpochId: f.epochId,
+    supervisorInstanceId: f.instanceId,
+    originalSigningSecret: originalSecret,
+    originalKeyHash: sha256Hex(originalSecret),
+    wrapperSigningSecret: wrapperSecret,
+    wrapperKeyHash: sha256Hex(wrapperSecret),
+    readJournal: (cursor) => service.readJournal(cursor),
+    attemptProofPublicKey,
+    readAttemptProof: (input) => issuer(input),
+  }
+  const validateAction = createScanExecutionActionAuthorityVerifier({
+    approvedProviderPolicies: new Map(),
+    supervisorAuthority: authority,
+  })
+  const authorityFailures: { message: string; code?: string; cause?: string }[] = []
+  const verify: typeof validateAction = async (client, binding) => {
+    try {
+      return await validateAction(client, binding)
+    } catch (error) {
+      const value = error as Error & { code?: string; cause?: Error }
+      authorityFailures.push({
+        message: value.message,
+        code: value.code,
+        cause: value.cause?.message,
+      })
+      throw error
+    }
+  }
+  const guard = createScanExecutionInvocationGuardWriter(verify)
+  const trackedGuard: typeof guard = {
+    begin: async (...args) => {
+      try {
+        return await guard.begin(...args)
+      } catch (error) {
+        const value = error as Error & { code?: string }
+        authorityFailures.push({ message: value.message, code: value.code })
+        throw error
+      }
+    },
+    verifyCommitted: guard.verifyCommitted,
+  }
   const fence = new PostgresDurableScanAuthorityFence(
     sqlPool(nativePool),
     verify,
-    createScanExecutionInvocationGuardWriter(verify)
+    trackedGuard,
+    context
   )
   const unavailable = async () => {
     throw new Error("no provider action authorized in metadata fixture")
   }
-  const service = new SupervisorService({
+  service = new SupervisorService({
     journal,
-    executor: new DockerRuntimeExecutor(),
+    executor: options.executor ?? new DockerRuntimeExecutor(),
     providerGateway: {
       issueGrant: unavailable,
       findGrantByRequest: unavailable,
@@ -154,29 +244,26 @@ export async function nativePreparationJournal(
     supervisorInstanceId: f.instanceId,
     authorityFence: fence,
   })
-  const streamId = `native-stream-${f.operationId}`
   await owner.query(
     'INSERT INTO "ScanSupervisorJournalStream"(id,"authorityEpochId","supervisorInstanceId","originalKeyHash","wrapperKeyHash","updatedAt") VALUES($1,$2,$3,$4,$5,CURRENT_TIMESTAMP)',
     [streamId, f.epochId, f.instanceId, sha256Hex(originalSecret), sha256Hex(wrapperSecret)]
   )
-  const authority: SupervisorReceiptAuthority = {
-    connectionString: receiptUrl,
-    streamId,
-    authorityEpochId: f.epochId,
-    supervisorInstanceId: f.instanceId,
-    originalSigningSecret: originalSecret,
-    originalKeyHash: sha256Hex(originalSecret),
-    wrapperSigningSecret: wrapperSecret,
-    wrapperKeyHash: sha256Hex(wrapperSecret),
-    readJournal: (cursor) => service.readJournal(cursor),
-  }
+  privateReceipts = createScanDispatchAuthorityBroker({
+    connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
+    receiptAuthority: authority,
+  })
   return {
     service,
     journal,
     command,
     authority,
+    authorityFailures,
+    fence,
+    context,
     cleanup: async () => {
       await close()
+      await privateReceipts?.close()
+      await registrar?.close()
       await nativePool.end()
       await mirrorPool.end()
       await rm(root, { recursive: true, force: true })

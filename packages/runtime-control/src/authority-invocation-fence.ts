@@ -7,6 +7,7 @@ import {
   type VerifyActionAuthority,
 } from "./authority-fence"
 import type { AuthoritySqlConnection, AuthoritySqlPool } from "./postgres-mirror"
+import { ScanAuthorityContext } from "./authority-context"
 
 export interface ScanInvocationGuardWriter {
   begin(connection: AuthoritySqlConnection, binding: AuthorityAction): Promise<{ guardId: string }>
@@ -25,7 +26,8 @@ export class PostgresDurableScanAuthorityFence implements ScanAuthorityFence {
   constructor(
     private readonly pool: AuthoritySqlPool,
     private readonly verify: VerifyActionAuthority,
-    private readonly guard: ScanInvocationGuardWriter
+    private readonly guard: ScanInvocationGuardWriter,
+    private readonly context = new ScanAuthorityContext()
   ) {}
 
   async run<T>(
@@ -127,7 +129,10 @@ export class PostgresDurableScanAuthorityFence implements ScanAuthorityFence {
       assertActive()
       armDeadline()
       await checked.query("COMMIT", [])
-      const result = await effect(assertActive, { guardId })
+      const result = await this.context.run(
+        { connection: checked, binding, guardId, assertActive },
+        () => effect(assertActive, { guardId })
+      )
       assertActive()
       const unlocked = await checked.query(
         "SELECT pg_catalog.pg_advisory_unlock(1819234670,1) AS unlocked",

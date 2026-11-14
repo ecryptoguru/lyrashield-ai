@@ -4,7 +4,36 @@ import type pg from "pg"
 import { buildScanExecutionPlan, ScanExecutionPlanSchema } from "@lyrashield/types"
 import { computeScanExecutionPlanHash } from "../../src/scan-execution-plan"
 import { commandDigest } from "../../src/scan-dispatch-authority-broker-methods"
+import type { ScanPreparationCompiler } from "../../src/scan-dispatch-command-descriptor"
 import { publishFixtureOutbox } from "./queue-outbox-fixture"
+
+/** Synthetic descriptor for PostgreSQL authority tests; never installed at runtime. */
+export const fixturePreparationCompiler: ScanPreparationCompiler = ({ attempt }) => ({
+  executors: [
+    {
+      key: "engine",
+      spec: {
+        kind: "process",
+        command: "/opt/fixture-only-engine",
+        args: [],
+        cwd: "/var/lib/fixture-only",
+        cgroupPath: "/sys/fs/cgroup/fixture-only",
+        env: {},
+        grantEnvName: "LLM_API_KEY",
+      },
+    },
+  ],
+  ...(attempt.billingMode === "PAID"
+    ? {
+        provider: {
+          providerId: "fixture",
+          maxRequests: 1,
+          costReservationMicros: 0,
+          maxReservedCostMicros: 0,
+        },
+      }
+    : {}),
+})
 
 export type PreparationFixture = {
   userId: string
@@ -332,6 +361,150 @@ export async function applyPreparationFixtureMigration(owner: pg.Pool) {
     )
     await owner.query(sql)
   }
+  const workerAssignment = await owner.query(
+    "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='ScanDispatchWorkerAssignment'"
+  )
+  if (!workerAssignment.rowCount) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const sql = await readFile(
+      new URL(
+        "../../prisma/migrations/20261114120000_scan_dispatch_worker_assignment/migration.sql",
+        import.meta.url
+      ),
+      "utf8"
+    )
+    await owner.query(sql)
+  }
+  await owner.query(
+    "GRANT EXECUTE ON FUNCTION app.assign_scan_dispatch_worker(TEXT) TO dispatch_queue_publisher"
+  )
+  const lifecycle = await owner.query(
+    "SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='ScanDispatchStart' AND column_name='authorityProofInputJson'"
+  )
+  if (!lifecycle.rowCount) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const sql = await readFile(
+      new URL(
+        "../../prisma/migrations/20261114133000_scan_dispatch_lifecycle_commands/migration.sql",
+        import.meta.url
+      ),
+      "utf8"
+    )
+    await owner.query(sql)
+  }
+  const acceptedProofs = await owner.query(
+    "SELECT to_regclass('public.\"ScanDispatchLifecycleProof\"') AS installed"
+  )
+  if (!acceptedProofs.rows[0]?.installed) {
+    await owner.query(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      await readFile(
+        new URL(
+          "../../prisma/migrations/20261114170000_scan_dispatch_lifecycle_proof_acceptance/migration.sql",
+          import.meta.url
+        ),
+        "utf8"
+      )
+    )
+  }
+  const sandboxTools = await owner.query(
+    "SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_execution_action_intent_guard' AND position('sandbox tool original ownership unavailable' in p.prosrc)>0"
+  )
+  if (!sandboxTools.rowCount) {
+    await owner.query(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      await readFile(
+        new URL(
+          "../../prisma/migrations/20261114150000_scan_sandbox_tool_authority/migration.sql",
+          import.meta.url
+        ),
+        "utf8"
+      )
+    )
+  }
+  const nativeRetirement = await owner.query(
+    "SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_native_retirement_guard'"
+  )
+  if (!nativeRetirement.rowCount) {
+    await owner.query(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      await readFile(
+        new URL(
+          "../../prisma/migrations/20261114183000_scan_native_retirement_proof/migration.sql",
+          import.meta.url
+        ),
+        "utf8"
+      )
+    )
+  }
+  const cleanupFence = await owner.query(
+    "SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_dispatch_cleanup_invocation_fence'"
+  )
+  if (!cleanupFence.rowCount) {
+    await owner.query(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      await readFile(
+        new URL(
+          "../../prisma/migrations/20261114185000_scan_dispatch_cleanup_invocation_fence/migration.sql",
+          import.meta.url
+        ),
+        "utf8"
+      )
+    )
+  }
+  const nativeBackend = await owner.query(
+    "SELECT 1 FROM information_schema.columns WHERE table_name='ScanExecutionInvocationGuard' AND column_name='nativeBackendPid'"
+  )
+  if (!nativeBackend.rowCount) {
+    await owner.query(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      await readFile(
+        new URL(
+          "../../prisma/migrations/20261114150000_scan_native_guard_backend/migration.sql",
+          import.meta.url
+        ),
+        "utf8"
+      )
+    )
+  }
+  for (const [migration, marker] of [
+    [
+      "20261114160000_scan_native_origin_authority_reader",
+      "app.scan_native_executor_origin_gate_held()",
+    ],
+    ["20261114170000_scan_preparation_source_reader", "app.require_scan_preparation_source_role()"],
+    [
+      "20261114184000_scan_native_retained_authority_reader",
+      "app.read_scan_native_retained_guard(text)",
+    ],
+    [
+      "20261114184500_scan_installed_worker_grant_reader",
+      "app.read_scan_installed_worker_grant(text,integer,text,text,text)",
+    ],
+    [
+      "20261114185500_scan_native_tool_retirement_reader",
+      "app.read_scan_native_pending_tool_guards(text)",
+    ],
+    [
+      "20261114200000_scan_worker_result_observation_reader",
+      "app.read_scan_installed_worker_operations(text,integer,text,text,text,text,text)",
+    ],
+    [
+      "20261114210000_scan_worker_retained_cleanup_reader",
+      "app.read_scan_installed_worker_cleanup_operations(text,integer,text,text,text,text,text)",
+    ],
+  ]) {
+    const installed = await owner.query("SELECT to_regprocedure($1) AS installed", [marker])
+    if (!installed.rows[0]?.installed) {
+      // Fixed reviewed dependency chain; no request or fixture path input.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const sql = await readFile(
+        new URL(`../../prisma/migrations/${migration}/migration.sql`, import.meta.url),
+        "utf8"
+      )
+      await owner.query(sql)
+    }
+  }
 }
 
 const usedLegacy = new Set<string>()
@@ -373,6 +546,13 @@ export async function installPreparationFixtureRole(owner: pg.Pool) {
     (await owner.query("SELECT 1 FROM pg_roles WHERE rolname='dispatch_prepare_broker'")).rowCount
   ) {
     await owner.query(revokeTemporary)
+    await owner.query('GRANT SELECT ON "ScanAttachment" TO dispatch_prepare_broker')
+    await owner.query(
+      "GRANT EXECUTE ON FUNCTION app.require_scan_dispatch_worker(TEXT,TEXT),app.scan_dispatch_lifecycle_proof_current(TEXT,BOOLEAN) TO dispatch_prepare_broker"
+    )
+    await owner.query(
+      "DO $$ BEGIN IF to_regprocedure('app.require_scan_dispatch_worker_cleanup(text,text)') IS NOT NULL THEN GRANT EXECUTE ON FUNCTION app.require_scan_dispatch_worker_cleanup(TEXT,TEXT) TO dispatch_prepare_broker; END IF; END $$;"
+    )
     return
   }
   const password = process.env.DISPATCH_PREPARATION_BROKER_PASSWORD
@@ -384,13 +564,15 @@ DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='dispatch_prepare
 END IF; END $$;
 ${revokeTemporary}
 GRANT USAGE ON SCHEMA public,app TO dispatch_prepare_broker;
-GRANT SELECT ON "Workspace","WorkspaceMember",users,"BillingAccount",agent_connections,agent_operations,delegated_scan_provenance,"Target","Policy","Scan","UserScanSlot","ScanCapacityReservation","ScanEvent","ScanAuthorityEpoch","ScanWorkerInstanceGrant","ScanDispatchOperation","ScanDispatchAttempt","ScanQueueOutbox","ScanDispatchOutbox","ScanPhysicalExecution","ScanDispatchStart","ScanSupervisorReceipt","ScanPhysicalExecutionTransition","ScanDispatchReleaseReceipt" TO dispatch_prepare_broker;
+GRANT SELECT ON "ScanAttachment","Workspace","WorkspaceMember",users,"BillingAccount",agent_connections,agent_operations,delegated_scan_provenance,"Target","Policy","Scan","UserScanSlot","ScanCapacityReservation","ScanEvent","ScanAuthorityEpoch","ScanWorkerInstanceGrant","ScanDispatchOperation","ScanDispatchAttempt","ScanQueueOutbox","ScanDispatchOutbox","ScanPhysicalExecution","ScanDispatchStart","ScanSupervisorReceipt","ScanPhysicalExecutionTransition","ScanDispatchReleaseReceipt" TO dispatch_prepare_broker;
 GRANT UPDATE("updatedAt") ON "Scan","ScanAuthorityEpoch","ScanWorkerInstanceGrant","ScanCapacityReservation","ScanQueueOutbox" TO dispatch_prepare_broker;
 GRANT UPDATE(state,"updatedAt") ON "ScanDispatchOperation" TO dispatch_prepare_broker;
 -- Immutable attempt identity allows row locks only; mutation trigger still rejects writes.
 GRANT UPDATE("attemptId") ON "ScanDispatchAttempt" TO dispatch_prepare_broker;
 GRANT INSERT ON "ScanDispatchAttempt","ScanDispatchOutbox","ScanPhysicalExecution" TO dispatch_prepare_broker;
 GRANT EXECUTE ON FUNCTION app.scan_dispatch_command_input_valid(text,text,text),app.scan_preparation_plan_json(jsonb),app.scan_preparation_context(text),app.require_scan_preparation_role(),app.require_scan_execution_action_role(),app.scan_preparation_gate_held(),app.scan_execution_gate_held(),app.check_scan_current_execution_authority(text,timestamp,text),app.acquire_scan_preparation_gate(),app.check_scan_preparation_authority(text,timestamp),app.scan_dispatch_scope_digest(text),app.scan_target_snapshot_digest(text),app.scan_policy_digest(text),public.digest(bytea,text) TO dispatch_prepare_broker;
+GRANT EXECUTE ON FUNCTION app.require_scan_dispatch_worker(TEXT,TEXT),app.scan_dispatch_lifecycle_proof_current(TEXT,BOOLEAN) TO dispatch_prepare_broker;
+DO $$ BEGIN IF to_regprocedure('app.require_scan_dispatch_worker_cleanup(text,text)') IS NOT NULL THEN GRANT EXECUTE ON FUNCTION app.require_scan_dispatch_worker_cleanup(TEXT,TEXT) TO dispatch_prepare_broker; END IF; END $$;
 DO $$ DECLARE name TEXT; BEGIN
  FOREACH name IN ARRAY ARRAY['ScanDispatchOperation','ScanDispatchAttempt','ScanDispatchOutbox','ScanPhysicalExecution','ScanDispatchStart','ScanSupervisorReceipt','ScanPhysicalExecutionTransition','ScanDispatchReleaseReceipt'] LOOP
   IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE tablename=name AND policyname='fixture_preparation_scope') THEN

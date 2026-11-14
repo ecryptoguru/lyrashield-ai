@@ -20,6 +20,7 @@ import {
 import {
   preparationFixture,
   preparationInput,
+  fixturePreparationCompiler,
   applyPreparationFixtureMigration,
   installPreparationFixtureRole,
   installPreparationRevokerRole,
@@ -34,6 +35,17 @@ import {
   type AuthorityAction,
 } from "../../runtime-control/src/authority-fence"
 import { DockerRuntimeExecutor } from "../../../apps/supervisor/src/executor"
+
+// Hoisting runs this guard before imports can construct a client from ambient
+// env. Bind the fixture's privileged DATABASE_URL role to its restricted
+// preparation broker role through the shared disposable-pair guard.
+await vi.hoisted(async () => {
+  const runtime = process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1" || !runtime) return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({ ...process.env, RLS_RUNTIME_DATABASE_URL: runtime })
+})
 
 const enabled =
   process.env.SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST === "1" &&
@@ -87,6 +99,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
     broker = createScanDispatchAuthorityBroker({
       connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
       preparationAuthority: "checked-intent-v1",
+      compilePreparation: fixturePreparationCompiler,
     })
   }, 30000)
   afterAll(async () => {
@@ -584,6 +597,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
     const mixed = createScanDispatchAuthorityBroker({
       connectionString: process.env.DATABASE_URL!,
       preparationAuthority: "checked-intent-v1",
+      compilePreparation: fixturePreparationCompiler,
     })
     try {
       await expect(mixed.prepare(preparationInput(f))).rejects.toMatchObject({
@@ -1080,7 +1094,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
       c.release()
     }
   })
-  it("retains the additive closed catalog: private definers, invoker guards and twenty-nine enabled triggers", async () => {
+  it("retains the additive closed catalog: private definers, invoker guards and thirty enabled triggers", async () => {
     const names = [
       "scan_preparation_context",
       "require_scan_preparation_role",
@@ -1124,7 +1138,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
         [names]
       )
     ).rows
-    expect(triggers).toHaveLength(29)
+    expect(triggers).toHaveLength(30)
     for (const t of triggers) {
       expect(t.tgenabled).toBe("O")
       expect(t.tgdeferrable).toBe(t.tgname === "scan_checked_preparation_bundle")

@@ -29,6 +29,24 @@ export async function applyAuthenticatedPreparation(
   )
   const row = current.rows[0]
   if (
+    row?.status === "COMPLETED" &&
+    row.state === "PREPARING" &&
+    ["START_PENDING", "ACTIVE", "STOPPING", "UNKNOWN"].includes(row.operationState)
+  )
+    return true
+  if (
+    row?.status === "COMPLETED" &&
+    [
+      "DISPATCH_PENDING",
+      "ACTIVE",
+      "STOP_REQUESTED",
+      "CLEANUP_PENDING",
+      "STOPPED",
+      "NEVER_DISPATCHED",
+    ].includes(row.state)
+  )
+    return true
+  if (
     !row ||
     !["RESERVED", "PREPARING"].includes(row.state) ||
     !["PREPARING", "PREPARED"].includes(row.operationState)

@@ -169,4 +169,17 @@ describe("runPreflight", () => {
     expect(result.passed).toBe(true)
     expect(result.checks.find((c) => c.name === "url_configured")?.passed).toBe(true)
   })
+  it("retains current target and concurrency checks while skipping resources for a proven stopped executor", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(
+      mockTarget({ type: "REPO", url: null, repoFullName: "acme/repo" }) as never
+    )
+    vi.mocked(prisma.scan.count).mockResolvedValue(1)
+    const result = await runPreflight("scan-one", "target-one", { executorAlreadyStopped: true })
+    expect(result.passed).toBe(true)
+    expect(result.checks.some((check) => check.name === "sandbox_resources")).toBe(false)
+    vi.mocked(prisma.scan.count).mockResolvedValue(2)
+    expect(
+      await runPreflight("scan-one", "target-one", { executorAlreadyStopped: true })
+    ).toMatchObject({ passed: false, errorMessage: "Concurrent scan already running" })
+  })
 })

@@ -1,3 +1,8 @@
+import {
+  isVerifiedNativeEngineResult,
+  type VerifiedNativeEngineResult,
+} from "./run-scan/native-engine-result"
+import { readScanDispatchCleanupProof } from "@lyrashield/db/src/scan-dispatch-cleanup-proof"
 import { notifyScanFailed } from "../notifications"
 import { readExecutionPolicy, failScanWithTimeout } from "./run-scan/execution-policy"
 import {
@@ -81,10 +86,42 @@ export {
 }
 
 export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Promise<ScanJobResult> {
+  return processStoredScanJob(job)
+}
+
+/** Only a root-bound native archive may resume already-dispatched work. */
+export async function processNativeScanResult(
+  job: Job<ScanJobData, ScanJobResult>,
+  native: VerifiedNativeEngineResult
+): Promise<ScanJobResult> {
+  if (!isVerifiedNativeEngineResult(native)) throw new Error("Native result authority unavailable")
+  try {
+    return await processStoredScanJob(job, native)
+  } finally {
+    native.cleanup()
+  }
+}
+
+async function processStoredScanJob(
+  job: Job<ScanJobData, ScanJobResult>,
+  native?: VerifiedNativeEngineResult
+): Promise<ScanJobResult> {
   const authority = await verifyScanJobAuthority(job)
   if (!authority.ok) return authority.result
   const { data, scanRecord, workspaceId, executionPlan } = authority
   const { scanId, targetId, goal, mode, policyId } = data
+  const nativeCleanup = native ? await readScanDispatchCleanupProof(workspaceId, scanId) : null
+  if (
+    native &&
+    (native.action.scanId !== scanId ||
+      native.action.workspaceId !== workspaceId ||
+      native.engineResult.sourceRevision !== executionPlan?.source?.revision ||
+      !nativeCleanup ||
+      nativeCleanup.operationId !== native.action.operationId ||
+      nativeCleanup.attemptId !== native.action.attemptId ||
+      nativeCleanup.authorityEpochId !== native.action.authorityEpochId)
+  )
+    throw new Error("Native cleanup or source proof unavailable")
   const elapsedScanMs = scanElapsedClock(scanRecord.startedAt)
 
   // Wrap the entire job in workspace context so the Prisma client extension's
@@ -103,7 +140,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     let execution: Awaited<ReturnType<typeof executeScanTarget>> | undefined
     let executorReturned = false
     let noBillableWork = true
-    let billingDisposition: ScanBillingDisposition | undefined
+    let billingDisposition: ScanBillingDisposition | undefined = nativeCleanup?.billingDisposition
     let recoveringPreviousExecution = Boolean(scanRecord.startedAt)
     let urlProfile: UrlScanProfile | undefined
     let engineProfile: ReturnType<typeof resolveEngineProfile> | undefined
@@ -117,13 +154,17 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         workspaceId,
         targetId,
       })
-      if (resumedFinalization) {
+      if (
+        resumedFinalization &&
+        !(native && resumedFinalization.errorCategory === "BILLABLE_PHASE_INTERRUPTED")
+      ) {
         recoveringPreviousExecution = true
         contended = resumedFinalization.errorCategory === "BILLABLE_PHASE_INTERRUPTED"
         return resumedFinalization
       }
 
       const preparation = await prepareScanExecution({
+        ...(native ? { executorAlreadyStopped: true as const } : {}),
         scanId,
         targetId,
         goal,
@@ -212,41 +253,56 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
       if (!admission.ok) return admission.result
 
-      await prepareScanCapacity({
-        accountingVersion: scanRecord.accountingVersion,
-        workspaceId,
-        scanId,
-        engineBacked,
-        deterministicRetest,
-        scanRuntimeBudgetMs,
-      })
+      if (!native)
+        await prepareScanCapacity({
+          accountingVersion: scanRecord.accountingVersion,
+          workspaceId,
+          scanId,
+          engineBacked,
+          deterministicRetest,
+          scanRuntimeBudgetMs,
+        })
       await updateUnclaimedScanStatus(scanId, "RUNNING" as ScanStatus)
       await markRetestsRunning(scanId)
-      execution = await executeScanTarget({
-        accountingVersion: scanRecord.accountingVersion,
-        scanId,
-        workspaceId,
-        goal,
-        mode,
-        focus: job.data.focus,
-        target,
-        policy,
-        policyMaxBudgetUsd,
-        scanRuntimeBudgetMs,
-        elapsedScanMs,
-        isScanCancelled,
-        markGlobalScanTimeout: () => {
-          globalScanTimeoutReached = true
-        },
-        markBillablePhaseStarted: () => {
-          billablePhaseStarted = true
-        },
-        deterministicRetest,
-        engineBacked,
-        urlEngineBacked,
-        scanProfile,
-        executionPlan,
-      })
+      if (native) {
+        native.verifySource()
+        billablePhaseStarted = true
+        const profile = resolveEngineProfile(mode)
+        execution = {
+          ok: true,
+          engineResult: native.engineResult,
+          engineProfile: profile,
+          engineModel: profile.model,
+          maxBudgetUsd: executionPlan!.limits.maxBudgetUsd,
+          engineStartedAtMs: native.startedAtMs,
+          capacityLimited: false,
+        }
+      } else
+        execution = await executeScanTarget({
+          accountingVersion: scanRecord.accountingVersion,
+          scanId,
+          workspaceId,
+          goal,
+          mode,
+          focus: job.data.focus,
+          target,
+          policy,
+          policyMaxBudgetUsd,
+          scanRuntimeBudgetMs,
+          elapsedScanMs,
+          isScanCancelled,
+          markGlobalScanTimeout: () => {
+            globalScanTimeoutReached = true
+          },
+          markBillablePhaseStarted: () => {
+            billablePhaseStarted = true
+          },
+          deterministicRetest,
+          engineBacked,
+          urlEngineBacked,
+          scanProfile,
+          executionPlan,
+        })
       executorReturned = executorProvenStopped(execution, engineBacked, deterministicRetest)
       if (!execution.ok) {
         // noBillableWork is still true. Only an acknowledged claim may finalize as its owner.
@@ -291,6 +347,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         !engineBacked ||
         deterministicRetest ||
         !hasObservedScanWork(scanId, exitInterpretation.status, runRecord)
+      if (nativeCleanup && !nativeCleanup.noBillableWork) noBillableWork = false
       const engineWorkObserved =
         engineBacked &&
         shouldRecordAgentMinutes(scanId, exitInterpretation.status, runRecord, { cancelled })
@@ -302,8 +359,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // Deep/Custom scans consume 3× minutes (applied inside recordAgentMinutes).
       // Billing outcome (founder-confirmed 2026-08-29): failed scans are never
       // billed; cancelled scans bill elapsed time only (no 1-minute floor).
-      const engineWallClockMs =
-        engineStartedAtMs === null ? 0 : Math.max(1, Date.now() - engineStartedAtMs)
+      const engineWallClockMs = native
+        ? native.finishedAtMs - native.startedAtMs
+        : engineStartedAtMs === null
+          ? 0
+          : Math.max(1, Date.now() - engineStartedAtMs)
       let agentMinuteTerminalError: ScanTerminalError | null = null
       const meterEngineRun = createEngineMinuteMeter({
         scanId,
@@ -344,9 +404,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               ...(runRecord?.reasoning_effort
                 ? { reasoningEffort: runRecord.reasoning_effort }
                 : {}),
-              image: env.LYRASHIELD_IMAGE || null,
-              ...(imageDigest(env.LYRASHIELD_IMAGE)
-                ? { imageDigest: imageDigest(env.LYRASHIELD_IMAGE) }
+              image: native
+                ? `ghcr.io/ecryptoguru/lyrashield-sandbox@${native.engineImageDigest}`
+                : env.LYRASHIELD_IMAGE || null,
+              ...(native || imageDigest(env.LYRASHIELD_IMAGE)
+                ? { imageDigest: native?.engineImageDigest ?? imageDigest(env.LYRASHIELD_IMAGE) }
                 : {}),
               ...(runRecord?.engine_version ? { engineVersion: runRecord.engine_version } : {}),
               ...(runRecord?.prompt_bundle_hash
@@ -486,12 +548,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         urlProfile,
       })
 
+      native?.verifySource()
       const triageOverlay = await runEngineTriageOverlay({
         scanId,
         scope: { workspaceId, targetId: target.id, targetType: target.type },
         sponsorAccountId: scanRecord.sponsorAccountId ?? scanRecord.createdById,
         mode,
         deterministicRetest,
+        allowEngineDispatch: !native,
         agentMinuteTerminalError,
         hasGlobalScanTimeout,
         isScanCancelled,
@@ -760,7 +824,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           noBillableWork,
           billingDisposition,
         })
-        await cleanupScanExecution(scanId, billablePhaseStarted, deterministicCheckout, execution)
+        if (!native)
+          await cleanupScanExecution(scanId, billablePhaseStarted, deterministicCheckout, execution)
       }
     }
   }) // end runWithWorkspaceContext

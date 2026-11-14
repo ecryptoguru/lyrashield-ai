@@ -14,12 +14,22 @@ import {
   SCAN_ATTACHMENT_MAX_BYTES,
   SCAN_ATTACHMENT_MAX_TOTAL_BYTES,
 } from "@lyrashield/types"
-import { canonicalJson, type PrepareCommand } from "@lyrashield/runtime-control"
+import {
+  canonicalJson,
+  observeInstalledExecutionAuthority,
+  createInstalledExecutionAuthorityCapability,
+  sha256Hex,
+  requireCurrentPreparationDelegation,
+  type AuthoritySqlConnection,
+  type PrepareCommand,
+} from "@lyrashield/runtime-control"
 import { executorResourceDescriptorSchema } from "@lyrashield/runtime-control/src/executor-resource-descriptor"
 import type {
   ScanPreparationCommandAuthority,
   ScanPreparationCompiler,
 } from "./scan-dispatch-command-descriptor"
+import { readStoredDispatchCommand } from "./scan-dispatch-command-descriptor"
+import { deriveCurrentPrepareBinding } from "./scan-supervisor-current-command"
 import {
   preparationProofFailure,
   trustedPreparationHostPolicySchema,
@@ -102,10 +112,14 @@ export function createTrustedPreparationCompiler(options: {
   const publicKey = options.issuerPublicKey,
     readStagingRecord = options.readStagingRecord,
     readExecutionContext = options.readExecutionContext
+  const readContext = async (authority: ScanPreparationCommandAuthority) =>
+    frozenPolicy.schema === "lyrashield-preparation-host-policy/2"
+      ? { environment: "PRODUCTION", installed: await observeInstalledExecutionAuthority() }
+      : readExecutionContext(authority)
   // Validate both established model routes during installation, before a scan.
   resolveEngineProfile("SAFE", frozenPolicy.modelRouting)
   resolveEngineProfile("DEEP", frozenPolicy.modelRouting)
-  return async (authority) => {
+  const compiler: ScanPreparationCompiler = async (authority) => {
     if (
       authority.target.workspaceId !== authority.attempt.workspaceId ||
       authority.target.type !== authority.executionPlan.targetType ||
@@ -143,7 +157,7 @@ export function createTrustedPreparationCompiler(options: {
       profile.maxEngineMinutes * 60000
     )
     if (timeoutMs <= 31000) preparationProofFailure()
-    const observedContext = await readExecutionContext(authority)
+    const observedContext = await readContext(authority)
     const { record, recordChecksum } = verifyPreparationStagingRecord(
       await readStagingRecord(authority),
       authority,
@@ -151,7 +165,10 @@ export function createTrustedPreparationCompiler(options: {
       publicKey,
       observedContext
     )
-    if (canonicalJson(await readExecutionContext(authority)) !== canonicalJson(observedContext))
+    if (
+      frozenPolicy.schema === "lyrashield-preparation-host-policy/1" &&
+      canonicalJson(await readContext(authority)) !== canonicalJson(observedContext)
+    )
       preparationProofFailure()
     requireStagedInputs(authority, record)
     const target: EngineTargetInfo = {
@@ -209,6 +226,45 @@ export function createTrustedPreparationCompiler(options: {
       provider: { ...frozenPolicy.provider, maxReservedCostMicros: micros.toNumber() },
     }
   }
+  if (frozenPolicy.schema !== "lyrashield-preparation-host-policy/2") return compiler
+  const installedCapability = createInstalledExecutionAuthorityCapability()
+  return Object.assign(compiler, {
+    async verifyPreparedCommand(client: AuthoritySqlConnection, command: PrepareCommand) {
+      const result = await client.query(
+        `SELECT o."commandInputJson",o."commandInputChecksum"
+        FROM "ScanDispatchOutbox" o JOIN "ScanDispatchAttempt" a ON a."attemptId"=o."attemptId" AND a."operationId"=o."operationId"
+        WHERE o.id=$1 AND o."operationId"=$2 AND o."attemptId"=$3 AND a."workspaceId"=$4
+        AND a."authorityEpochId"=$5 AND o."commandType"='PREPARE' AND o.status='PENDING'
+        AND a."authorityTransactionId"=pg_current_xact_id()::text AND app.scan_preparation_gate_held()
+        AND a."authorityDeadlineAt">clock_timestamp() AT TIME ZONE 'UTC'`,
+        [
+          command.commandId,
+          command.attempt.operationId,
+          command.attempt.attemptId,
+          command.attempt.workspaceId,
+          command.attempt.authorityEpochId,
+        ]
+      )
+      if (result.rows.length !== 1) preparationProofFailure()
+      const row = result.rows[0]!
+      if (typeof row.commandInputJson !== "string" || typeof row.commandInputChecksum !== "string")
+        preparationProofFailure()
+      const stored = readStoredDispatchCommand(row.commandInputJson, row.commandInputChecksum)
+      if (!stored || stored.type !== "PREPARE" || canonicalJson(stored) !== canonicalJson(command))
+        preparationProofFailure()
+      const installed = await installedCapability.verifyAction(
+        client,
+        deriveCurrentPrepareBinding(stored, row.commandInputChecksum)
+      )
+      const delegation = requireCurrentPreparationDelegation(installed.preparation, installed)
+      if (
+        delegation.preparationPolicyChecksum !== sha256Hex(canonicalJson(frozenPolicy)) ||
+        delegation.issuerKeyHash !== frozenPolicy.issuerKeyHash ||
+        delegation.issuerKeyId !== frozenPolicy.issuerKeyId
+      )
+        preparationProofFailure()
+    },
+  })
 }
 
 function compileProtectedExecutors(
