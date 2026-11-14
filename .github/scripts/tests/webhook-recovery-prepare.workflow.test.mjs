@@ -5,8 +5,9 @@ import test from "node:test"
 const workflow = readFileSync(".github/workflows/prepare-worker-recovery-candidate.yml", "utf8")
 const dockerfile = readFileSync("Dockerfile", "utf8")
 
-test("preparation is manual and binds dispatch to exact current main", () => {
-  assert.match(workflow, /on:\n  workflow_dispatch:/)
+test("preparation binds manual and reusable calls to exact current main", () => {
+  assert.match(workflow, /^  workflow_dispatch:/m)
+  assert.match(workflow, /^  workflow_call:/m)
   assert.doesNotMatch(workflow, /^  (?:pull_request|push|schedule):/m)
   assert.match(workflow, /test "\$DISPATCH_REF" = refs\/heads\/main/)
   assert.match(workflow, /test "\$SOURCE_SHA" = "\$DISPATCH_SHA"/)
