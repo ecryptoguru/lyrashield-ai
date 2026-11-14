@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto"
 import pg from "pg"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { canonicalizeJson, sha256Sync } from "@lyrashield/security/webmcp"
-import { createScanDispatchAuthorityBroker } from "./scan-dispatch-authority-broker"
+import { createBrokerService } from "../../../apps/broker/src/service"
+import {
+  createScanDispatchAuthorityBroker,
+  type PrepareDispatchResult,
+} from "./scan-dispatch-authority-broker"
 import {
   compilePreparationCommand,
   readStoredDispatchCommand,
@@ -79,6 +83,62 @@ describe.skipIf(!enabled)("persisted canonical controller command descriptors", 
     await broker?.close()
     await owner?.end()
     await queueWorker.close()
+  })
+
+  it("prepares through the packaged broker only with a compiler and a live grant", async () => {
+    const config = {
+      connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
+      transport: { kind: "unix" as const, socketPath: "/run/lyrashield/broker.sock" },
+      controlToken: "fixture-control-token-at-least-32-characters",
+      admission: "closed" as const,
+    }
+    const closed = createBrokerService(config)
+    const installed = createBrokerService({ ...config, preparationAuthority: compile })
+    try {
+      const denied = await preparationFixture(owner)
+      await expect(closed.prepare(preparationInput(denied))).rejects.toMatchObject({
+        code: "PREPARATION_AUTHORITY_CLOSED",
+      })
+      expect(
+        (
+          await owner.query(
+            'SELECT count(*)::int n FROM "ScanDispatchAttempt" WHERE "operationId"=$1',
+            [denied.operationId]
+          )
+        ).rows[0].n
+      ).toBe(0)
+
+      const f = await preparationFixture(owner)
+      const prepared = (await installed.prepare(preparationInput(f))) as PrepareDispatchResult
+      expect(prepared.kind).toBe("committed")
+      if (prepared.kind !== "committed") throw new Error("fixture did not prepare")
+      const row = await stored(prepared.commandId)
+      expect(
+        readStoredDispatchCommand(row.commandInputJson, row.commandInputChecksum)
+      ).toMatchObject({
+        type: "PREPARE",
+        attempt: { operationId: f.operationId, scanId: f.scanId, workspaceId: f.workspaceId },
+      })
+
+      const revoked = await preparationFixture(owner)
+      await owner.query(
+        'UPDATE "ScanWorkerInstanceGrant" SET "revokedAt"=CURRENT_TIMESTAMP, "updatedAt"=CURRENT_TIMESTAMP WHERE id=$1',
+        [revoked.grantId]
+      )
+      await expect(installed.prepare(preparationInput(revoked))).rejects.toMatchObject({
+        code: "WORKER_GRANT_INVALID",
+      })
+      expect(
+        (
+          await owner.query(
+            'SELECT count(*)::int n FROM "ScanDispatchAttempt" WHERE "operationId"=$1',
+            [revoked.operationId]
+          )
+        ).rows[0].n
+      ).toBe(0)
+    } finally {
+      await Promise.all([closed.close(), installed.close()])
+    }
   })
 
   it("builds identity from locked persistence and ignores worker execution choices", async () => {
