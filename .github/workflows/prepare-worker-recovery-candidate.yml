@@ -17,7 +17,7 @@ concurrency:
 
 env:
   SOURCE_SHA: ${{ inputs.source_sha }}
-  ENGINE_REVISION: 2b1d044308ec2c31c1a657ff0aa808b3e900ce24
+  ENGINE_REVISION: 0793bcb9644a1985165963375586124c993c020a
 
 jobs:
   build:
