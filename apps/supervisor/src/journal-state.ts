@@ -237,7 +237,8 @@ export function applyJournalRecord(
   if (event.type === "provider_grants_bound") {
     const attempt = attempts.get(event.attemptId)
     if (attempt) {
-      for (const grant of event.grants) attempt.grants.set(grant.providerId, grant)
+      for (const grant of event.grants)
+        attempt.grants.set(grant.providerId, { ...grant, grantRequestId: event.commandId })
       attempt.receipt = receipt
     }
     const command = commands.get(event.commandId)

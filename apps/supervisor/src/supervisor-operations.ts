@@ -465,8 +465,13 @@ export class SupervisorOperations {
     }
     const existing = attempt.grants.get(policy.providerId)
     if (existing && !existing.revoked) {
+      const origin = existing.grantRequestId
+        ? this.ctx.commands.get(existing.grantRequestId)?.request
+        : undefined
+      if (origin?.type !== "START_PAID" || origin.attemptId !== attempt.binding.attemptId)
+        throw new RuntimeControlError("GRANT_BINDING_MISMATCH", "provider grant origin is missing")
       const recovered = providerGrantSchema.safeParse(
-        await this.ctx.options.providerGateway.findGrantByRequest(grantRequestId)
+        await this.ctx.options.providerGateway.findGrantByRequest(origin.commandId)
       )
       if (
         !recovered.success ||
@@ -478,6 +483,8 @@ export class SupervisorOperations {
         throw new RuntimeControlError("GRANT_BINDING_MISMATCH", "provider grant recovery failed")
       return recovered.data
     }
+    if (existing)
+      throw new RuntimeControlError("GRANT_BINDING_MISMATCH", "provider grant was revoked")
     const received = providerGrantSchema.safeParse(
       await this.ctx.options.providerGateway.issueGrant(request)
     )
@@ -550,12 +557,16 @@ export class SupervisorOperations {
 
   private async lookupPotentialGrants(attempt: AttemptState): Promise<GrantBinding[]> {
     const found: GrantBinding[] = []
+    const grantRequestId = attempt.provider
+      ? attempt.grants.get(attempt.provider.providerId)?.grantRequestId
+      : undefined
     for (const state of this.ctx.commands.values()) {
       const request = state.request
       if (
         !request ||
         request.type !== "START_PAID" ||
-        request.attemptId !== attempt.binding.attemptId
+        request.attemptId !== attempt.binding.attemptId ||
+        (grantRequestId !== undefined && request.commandId !== grantRequestId)
       )
         continue
       const grant = await this.ctx.options.providerGateway.findGrantByRequest(request.commandId)

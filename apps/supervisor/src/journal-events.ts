@@ -256,6 +256,7 @@ export interface CommandState {
 export interface GrantBinding {
   providerId: string
   grantId: string
+  grantRequestId?: string
   revoked: boolean
   unsettled?: boolean
 }

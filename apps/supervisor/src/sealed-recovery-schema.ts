@@ -14,7 +14,13 @@ import { supervisorJournalEventSchema } from "./journal-events"
 const id = z.string().min(1).max(256)
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const grant = z
-  .object({ providerId: id, grantId: id, revoked: z.boolean(), unsettled: z.boolean().optional() })
+  .object({
+    providerId: id,
+    grantId: id,
+    grantRequestId: id.optional(),
+    revoked: z.boolean(),
+    unsettled: z.boolean().optional(),
+  })
   .strict()
 const pair = <K extends z.ZodType, V extends z.ZodType>(key: K, value: V) =>
   z.array(z.tuple([key, value]))

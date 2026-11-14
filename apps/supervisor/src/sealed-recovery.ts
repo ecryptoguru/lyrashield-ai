@@ -74,7 +74,17 @@ export function validateSealedRecoverySnapshot(snapshot: SealedRecoverySnapshot)
       assertUniqueSorted(values)
     if (
       state.plans.some(([key, plan]) => key !== plan.key) ||
-      state.grants.some(([key, grant]) => key !== grant.providerId) ||
+      state.grants.some(
+        ([key, grant]) =>
+          key !== grant.providerId ||
+          (grant.grantRequestId !== undefined &&
+            !snapshot.commands.some(
+              (command) =>
+                command.id === grant.grantRequestId &&
+                command.state.request?.type === "START_PAID" &&
+                command.state.request.attemptId === id
+            ))
+      ) ||
       state.planned.some(([key, ownership]) => key !== ownership.executorKey) ||
       state.resources.some(([key, ownership]) => key !== ownership.executorKey) ||
       state.nativeCreateProofs.some(([key, ownership]) => key !== ownership.executorKey) ||

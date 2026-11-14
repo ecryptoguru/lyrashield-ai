@@ -311,21 +311,6 @@ export class SupervisorService {
     if (Date.parse(attempt.binding.expiresAt) <= (this.options.now?.() ?? new Date()).getTime()) {
       return this.terminal(command, "REJECTED", "attempt authorization has expired")
     }
-    if (
-      command.type === "START_PAID" &&
-      [...this.commands.values()].some(
-        (state) =>
-          state.request &&
-          state.request.type === "START_PAID" &&
-          commandAttemptId(state.request) === command.attemptId
-      )
-    ) {
-      return this.terminal(
-        command,
-        "REJECTED",
-        "a paid start command already exists for this attempt"
-      )
-    }
     const plan = attempt.plans.get(command.executorKey)
     if (!plan)
       throw new RuntimeControlError("EXECUTOR_NOT_PREPARED", "executor was not prepared", 400)

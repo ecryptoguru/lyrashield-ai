@@ -24,7 +24,8 @@ import {
   supervisorJournalRecordSchema,
   type SupervisorJournalEvent,
 } from "./journal-events"
-import { createSealedRecoveryCandidate } from "./sealed-recovery"
+import { createSealedRecoveryCandidate, validateSealedRecoverySnapshot } from "./sealed-recovery"
+import { sealedRecoverySchema } from "./sealed-recovery-schema"
 import { loadSealedRecoveryBase } from "./sealed-recovery-load"
 import { commandRequestHash } from "./service-common"
 
@@ -67,7 +68,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
-async function fixture() {
+async function fixture(paid = false) {
   const root = await mkdtemp(join(tmpdir(), "sealed-recovery-"))
   roots.push(root)
   const original = new SignedJournal(join(root, "original"), sourceKey, (value) =>
@@ -142,28 +143,39 @@ async function fixture() {
     authorizeRecovery: async () => true,
   })
   const base = { supervisorInstanceId, observedAt: "2026-11-12T00:00:00.000Z" }
+  const attemptBinding = { ...binding, billingMode: paid ? ("PAID" as const) : binding.billingMode }
+  const provider = paid
+    ? {
+        providerId: "azure-ai",
+        maxRequests: 4,
+        costReservationMicros: 100,
+        maxReservedCostMicros: 1000,
+      }
+    : undefined
   await journal.append({
     ...base,
     type: "command_intent",
     command: {
       type: "PREPARE",
       commandId: "command-prepare-1",
-      attempt: binding,
+      attempt: attemptBinding,
       executors,
+      ...(provider ? { provider } : {}),
     },
   })
   await journal.append({
     ...base,
     type: "attempt_prepared",
     commandId: "command-prepare-1",
-    binding,
+    binding: attemptBinding,
     executors,
+    ...(provider ? { provider } : {}),
   })
   await journal.append({
     ...base,
     type: "command_intent",
     command: {
-      type: "START_UNMETERED",
+      type: paid ? "START_PAID" : "START_UNMETERED",
       commandId: "command-start-1",
       attemptId: binding.attemptId,
       executorKey: "sandbox",
@@ -348,6 +360,38 @@ async function pinnedFixture() {
 }
 
 describe("sealed supervisor recovery candidate", () => {
+  it("retains the signed provider request through sorted recovery and rejects a foreign origin", async () => {
+    const f = await fixture(true)
+    try {
+      await f.journal.append({
+        type: "provider_grants_bound",
+        supervisorInstanceId,
+        observedAt: "2026-11-12T00:00:00.000Z",
+        commandId: "command-start-1",
+        attemptId: binding.attemptId,
+        grants: [{ providerId: "azure-ai", grantId: "provider-grant-1", revoked: false }],
+      })
+      const candidate = await createSealedRecoveryCandidate(f.journal, {
+        epochId,
+        supervisorInstanceId,
+        lastSequence: 4,
+      })
+      const snapshot = sealedRecoverySchema.parse(
+        JSON.parse(Buffer.from(candidate.bytes).toString())
+      )
+      const grant = snapshot.attempts[0]!.state.grants[0]![1]
+      expect(grant.grantRequestId).toBe("command-start-1")
+      validateSealedRecoverySnapshot(snapshot)
+      grant.grantRequestId = "command-prepare-1"
+      expect(() => validateSealedRecoverySnapshot(snapshot)).toThrow("resource binding differs")
+      delete grant.grantRequestId
+      expect(() => validateSealedRecoverySnapshot(snapshot)).not.toThrow()
+    } finally {
+      await f.original.close()
+      await f.local.close()
+    }
+  })
+
   it("folds verified history without discarding historical keys or unresolved states", async () => {
     const f = await fixture()
     try {
