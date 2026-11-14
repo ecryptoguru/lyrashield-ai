@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { Client } from "pg"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { findMismatchedGateEvidence } from "./gate-reader-evidence"
 import { loadVerifiedAssessedScans } from "./gate-assessed-scan-evidence"
 import { loadBoundedGateVerdicts, MAX_GATE_VERDICT_BYTES } from "./gate-verdict-read"
@@ -13,6 +13,23 @@ import {
 } from "@lyrashield/gate"
 import { RESULT_MANIFEST_VERSION } from "@lyrashield/types"
 import type { ScopedTransaction } from "./rls"
+
+// Hoisting runs this guard before imports can construct the runtime client.
+// The fixture pairs the GATE_READER_OWNER_DATABASE_URL role with the restricted
+// GATE_READER_RUNTIME_DATABASE_URL role; bind that pair through the shared
+// disposable-pair guard.
+await vi.hoisted(async () => {
+  const owner = process.env.GATE_READER_OWNER_DATABASE_URL
+  const runtime = process.env.GATE_READER_RUNTIME_DATABASE_URL
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1" || !owner || !runtime) return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({
+    ...process.env,
+    DATABASE_URL: owner,
+    RLS_RUNTIME_DATABASE_URL: runtime,
+  })
+})
 
 const ownerUrl = process.env.GATE_READER_OWNER_DATABASE_URL
 const runtimeUrl = process.env.GATE_READER_RUNTIME_DATABASE_URL

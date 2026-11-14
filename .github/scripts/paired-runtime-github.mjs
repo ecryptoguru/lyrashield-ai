@@ -228,7 +228,8 @@ function claims(token, jwks, identity, aud, when, jobWorkflow = JOB, environment
 }
 export function verifyRecordWitness(token, jwks, identity, kind, digest, when, jobWorkflow = JOB) {
   check(kinds.has(kind) && hash.test(digest))
-  const qualification = qualificationKinds.has(kind)
+  const qualification =
+    qualificationKinds.has(kind) || (kind === "evidence" && jobWorkflow === ISSUER_JOB)
   check(!qualification || jobWorkflow === ISSUER_JOB)
   claims(
     token,
@@ -296,10 +297,20 @@ function currentRun() {
   return identity
 }
 export async function readAuthenticatedOwner(jobWorkflow = JOB) {
-  check(ownerJobs.has(jobWorkflow))
+  const issuer = jobWorkflow === ISSUER_JOB
+  check(issuer || ownerJobs.has(jobWorkflow))
   const x = currentRun(),
     aud = audience("owner", x.owner)
-  claims(await requestToken(aud), await keys(), x, aud, Math.floor(Date.now() / 1000), jobWorkflow)
+  if (issuer) check(x.repoId === "1286618458" && x.ownerId === "116722580")
+  claims(
+    await requestToken(aud),
+    await keys(),
+    x,
+    aud,
+    Math.floor(Date.now() / 1000),
+    jobWorkflow,
+    issuer ? ISSUER_ENV : ENV
+  )
   return x.owner
 }
 // Wire to the protected publishing step after qualifications. Keep the private
@@ -354,7 +365,10 @@ async function authenticateRecord(kind, digest, dir, jobWorkflow = JOB) {
   const witnessJobWorkflow = qualificationKinds.has(kind) ? ISSUER_JOB : same ? jobWorkflow : JOB
   // The consuming deployment authenticates its own ownership, while the
   // qualification artifact independently proves the isolated producer job.
-  if (same) check((await readAuthenticatedOwner(jobWorkflow)) === owner)
+  if (same) {
+    if (jobWorkflow === ISSUER_JOB) check(kind === "evidence")
+    check((await readAuthenticatedOwner(jobWorkflow)) === owner)
+  }
   const artifact = gh("actions/artifacts/" + loc.artifactId),
     w = artifact.workflow_run
   check(

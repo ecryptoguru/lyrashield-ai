@@ -197,6 +197,8 @@ export function triageEvidence(result: {
 }
 
 export async function runEngineTriageOverlay(params: {
+  /** Installed broker workers cannot launch a second legacy engine overlay. */
+  allowEngineDispatch?: boolean
   scanId: string
   scope: { workspaceId: string; targetId: string; targetType: string }
   sponsorAccountId: string
@@ -257,6 +259,7 @@ export async function runEngineTriageOverlay(params: {
     params.phpContext
   )
   const triageFeatureEnabled =
+    params.allowEngineDispatch !== false &&
     !deterministicRetest &&
     !agentMinuteTerminalError &&
     !hasGlobalScanTimeout() &&

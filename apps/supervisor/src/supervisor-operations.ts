@@ -4,7 +4,6 @@ import type {
   ExecutorSpec,
   JournalRecord,
   ProviderGrant,
-  ProviderGrantRequest,
   ProviderGrantStatus,
   ResourceOwnership,
   StartCommand,
@@ -12,7 +11,7 @@ import type {
   SupervisorCommand,
   SupervisorCommandResult,
 } from "@lyrashield/runtime-control"
-import { providerGrantSchema, resourceOwnershipSchema } from "@lyrashield/runtime-control"
+import { resourceOwnershipSchema } from "@lyrashield/runtime-control"
 import { executorActionBinding } from "./executor-action-binding"
 import { chainChecks, deriveOwnershipId, type ExecutorContext } from "./executor"
 import type {
@@ -24,6 +23,7 @@ import type {
 import { RuntimeControlError, matchesOwnership } from "./service-common"
 import { nativeInvocationAcknowledgement } from "./native-ack-producer"
 import { nativeRetirementEvidence } from "./native-retirement-producer"
+import { ensureProviderGrant } from "./supervisor-provider-grant"
 import { prepareSupervisorAttempt } from "./supervisor-prepare"
 import type { SupervisorServiceOptions } from "./service"
 
@@ -99,6 +99,7 @@ export class SupervisorOperations {
         assertActive()
         checkStop()
         const planned = await this.recordExecutorCreationIntent(attempt, command, spec)
+        await nativeInvocation?.planCreate?.(planned)
         assertActive()
         checkStop()
         const ownership = await this.ctx.options.executor.create(command.executorKey, spec, {
@@ -182,6 +183,24 @@ export class SupervisorOperations {
     return prepareSupervisorAttempt(this.ctx, command)
   }
 
+  private nativeRetirementFor(
+    attempt: AttemptState,
+    stop: StopCommand | undefined,
+    ownership: ResourceOwnership
+  ) {
+    return stop
+      ? nativeRetirementEvidence({
+          journal: this.ctx.options.journal,
+          supervisorInstanceId: this.ctx.options.supervisorInstanceId,
+          nowIso: this.ctx.nowIso,
+          apply: this.ctx.apply,
+          attempt,
+          stop,
+          ownership,
+        })
+      : undefined
+  }
+
   async stop(
     command: StopCommand,
     alreadyAccepted = false,
@@ -220,15 +239,7 @@ export class SupervisorOperations {
     let createUnresolved = this.ctx.hasUnresolvedExecutorEffect(attempt)
     let resourceUnresolved = false
     for (const resource of recorded) {
-      const nativeRetirement = nativeRetirementEvidence({
-        journal: this.ctx.options.journal,
-        supervisorInstanceId: this.ctx.options.supervisorInstanceId,
-        nowIso: this.ctx.nowIso,
-        apply: this.ctx.apply,
-        attempt,
-        stop: command,
-        ownership: resource,
-      })
+      const nativeRetirement = this.nativeRetirementFor(attempt, command, resource)
       const inspection = await this.ctx.options.executor
         .stop(resource, undefined, nativeRetirement)
         .catch(() => ({
@@ -252,6 +263,14 @@ export class SupervisorOperations {
         continue
       }
       if (inspection.state !== "PRESENT") {
+        if (attempt.nativeStartIntents?.get(planned.executorKey)?.phase === "EXECUTOR_CREATE") {
+          const retirement = this.nativeRetirementFor(attempt, command, planned)
+          const stopped = await this.ctx.options.executor
+            .stop(planned, undefined, retirement)
+            .catch(() => ({ state: "UNKNOWN" as const }))
+          if (stopped.state !== "ABSENT") resourceUnresolved = true
+          continue
+        }
         createUnresolved = true
         continue
       }
@@ -261,6 +280,14 @@ export class SupervisorOperations {
         continue
       }
       const owned = inspection.ownership
+      if (attempt.nativeStartIntents?.get(planned.executorKey)?.phase === "EXECUTOR_CREATE") {
+        const retirement = this.nativeRetirementFor(attempt, command, owned)
+        const stopped = await this.ctx.options.executor
+          .stop(owned, undefined, retirement)
+          .catch(() => ({ state: "UNKNOWN" as const }))
+        if (stopped.state !== "ABSENT") resourceUnresolved = true
+        continue
+      }
       const boundRecord = await this.ctx.options.journal.append({
         type: "resource_bound",
         supervisorInstanceId: this.ctx.options.supervisorInstanceId,
@@ -270,14 +297,18 @@ export class SupervisorOperations {
         ownership: owned,
       })
       this.ctx.applyResource(boundRecord)
-      const stopped = await this.ctx.options.executor.stop(owned).catch(() => ({
-        state: "UNKNOWN" as const,
-        detail: "planned executor teardown failed",
-      }))
+      const retirement = this.nativeRetirementFor(attempt, command, owned)
+      const stopped = await this.ctx.options.executor
+        .stop(owned, undefined, retirement)
+        .catch(() => ({
+          state: "UNKNOWN" as const,
+          detail: "planned executor teardown failed",
+        }))
       if (stopped.state !== "ABSENT") {
         resourceUnresolved = true
       }
     }
+    createUnresolved = this.ctx.hasUnresolvedExecutorEffect(attempt)
     const revocationUnresolved = await revocationOutcome
     const nativeGuardUnresolved = (attempt.nativeStartIntents?.size ?? 0) > 0
     if (revocationUnresolved || createUnresolved || resourceUnresolved || nativeGuardUnresolved) {
@@ -301,10 +332,20 @@ export class SupervisorOperations {
     if (!attempt) throw new RuntimeControlError("ATTEMPT_NOT_FOUND", "attempt not found", 404)
     this.ctx.assertCurrentReceipt(attempt, command.expectedReceiptHash)
     await this.ctx.appendIntent(command)
+    const retainedStop = [...this.ctx.commands.values()]
+      .map((state) => state.request)
+      .reverse()
+      .find(
+        (request): request is StopCommand =>
+          request?.type === "STOP" && request.attemptId === command.attemptId
+      )
     const stopRequested =
       this.ctx.options.admission !== "open" ||
       attempt.status === "STOPPING" ||
-      attempt.status === "UNKNOWN"
+      attempt.status === "UNKNOWN" ||
+      (attempt.status === "STOPPED" && retainedStop !== undefined)
+    const retirementFor = (ownership: ResourceOwnership) =>
+      this.nativeRetirementFor(attempt, retainedStop, ownership)
     const revocationOutcome = stopRequested
       ? this.revokeAllKnownOrPotentialGrants(attempt, command.commandId).then(
           () => false,
@@ -375,14 +416,21 @@ export class SupervisorOperations {
           this.ctx.applyResource(record)
         }
         if (stopRequested) {
-          const stopped = await this.ctx.options.executor.stop(owned).catch(() => ({
-            state: "UNKNOWN" as const,
-            detail: "resource teardown failed",
-          }))
-          if (stopped.state !== "ABSENT") {
-            resourceUnresolved = true
-          }
+          const stopped = await this.ctx.options.executor
+            .stop(owned, undefined, retirementFor(owned))
+            .catch(() => ({
+              state: "UNKNOWN" as const,
+              detail: "resource teardown failed",
+            }))
+          if (stopped.state !== "ABSENT") resourceUnresolved = true
         }
+      } else if (stopRequested && retirementFor(candidate)) {
+        // A previous STOP may have removed the container before its ACK was
+        // received. Reuse only that stored STOP's actual root removal proof.
+        const stopped = await this.ctx.options.executor
+          .stop(candidate, undefined, retirementFor(candidate))
+          .catch(() => ({ state: "UNKNOWN" as const }))
+        if (stopped.state !== "ABSENT") resourceUnresolved = true
       } else if (planned && !current) {
         if (!stopRequested) {
           await this.ctx.appendAttemptStatus(attempt, "UNKNOWN", command.commandId)
@@ -392,8 +440,14 @@ export class SupervisorOperations {
       }
     }
     if (stopRequested) {
+      createUnresolved = this.ctx.hasUnresolvedExecutorEffect(attempt)
       const revocationUnresolved = await revocationOutcome
-      if (revocationUnresolved || createUnresolved || resourceUnresolved) {
+      if (
+        revocationUnresolved ||
+        createUnresolved ||
+        resourceUnresolved ||
+        (attempt.nativeStartIntents?.size ?? 0) > 0
+      ) {
         return this.ctx.appendTerminal(
           command,
           "UNKNOWN",
@@ -414,7 +468,8 @@ export class SupervisorOperations {
       // A create intent alone is not dispatch. NEVER_DISPATCHED stays honest
       // only when no resource was ever bound and every planned executor was
       // inspected ABSENT in this reconcile pass.
-      const anyDispatch = attempt.resources.size > 0 || observedPresent
+      const anyDispatch =
+        attempt.resources.size > 0 || observedPresent || (attempt.nativeRetirements?.size ?? 0) > 0
       const status = anyDispatch ? "STOPPED" : "NEVER_DISPATCHED"
       await this.ctx.appendAttemptStatus(attempt, status, command.commandId)
       return this.ctx.appendTerminal(command, status)
@@ -442,67 +497,11 @@ export class SupervisorOperations {
     }
   }
 
-  private async ensureProviderGrant(
+  private ensureProviderGrant(
     attempt: AttemptState,
     grantRequestId: string
   ): Promise<ProviderGrant> {
-    const policy = attempt.provider
-    if (!policy)
-      throw new RuntimeControlError("PROVIDER_POLICY_REQUIRED", "provider policy is missing", 400)
-    const request: ProviderGrantRequest = {
-      grantRequestId,
-      attemptId: attempt.binding.attemptId,
-      scanId: attempt.binding.scanId,
-      workspaceId: attempt.binding.workspaceId,
-      operationId: attempt.binding.operationId,
-      authorityEpochId: attempt.binding.authorityEpochId,
-      authorityRevision: attempt.binding.authorityRevision,
-      expiresAt: attempt.binding.expiresAt,
-      providerId: policy.providerId,
-      maxRequests: policy.maxRequests,
-      costReservationMicros: policy.costReservationMicros,
-      maxReservedCostMicros: policy.maxReservedCostMicros,
-    }
-    const existing = attempt.grants.get(policy.providerId)
-    if (existing && !existing.revoked) {
-      const recovered = providerGrantSchema.safeParse(
-        await this.ctx.options.providerGateway.findGrantByRequest(grantRequestId)
-      )
-      if (
-        !recovered.success ||
-        recovered.data.grantId !== existing.grantId ||
-        recovered.data.attemptId !== attempt.binding.attemptId ||
-        recovered.data.providerId !== policy.providerId ||
-        recovered.data.expiresAt !== attempt.binding.expiresAt
-      )
-        throw new RuntimeControlError("GRANT_BINDING_MISMATCH", "provider grant recovery failed")
-      return recovered.data
-    }
-    const received = providerGrantSchema.safeParse(
-      await this.ctx.options.providerGateway.issueGrant(request)
-    )
-    if (
-      !received.success ||
-      received.data.attemptId !== attempt.binding.attemptId ||
-      received.data.providerId !== policy.providerId ||
-      received.data.expiresAt !== attempt.binding.expiresAt
-    ) {
-      throw new RuntimeControlError(
-        "GRANT_BINDING_MISMATCH",
-        "provider gateway returned a foreign grant"
-      )
-    }
-    const grant = received.data
-    const record = await this.ctx.options.journal.append({
-      type: "provider_grants_bound",
-      supervisorInstanceId: this.ctx.options.supervisorInstanceId,
-      observedAt: this.ctx.nowIso(),
-      commandId: grantRequestId,
-      attemptId: attempt.binding.attemptId,
-      grants: [{ providerId: grant.providerId, grantId: grant.grantId, revoked: false }],
-    })
-    this.ctx.apply(record)
-    return grant
+    return ensureProviderGrant(this.ctx, attempt, grantRequestId)
   }
 
   async revokeAllKnownOrPotentialGrants(attempt: AttemptState, commandId: string): Promise<void> {
@@ -550,12 +549,16 @@ export class SupervisorOperations {
 
   private async lookupPotentialGrants(attempt: AttemptState): Promise<GrantBinding[]> {
     const found: GrantBinding[] = []
+    const grantRequestId = attempt.provider
+      ? attempt.grants.get(attempt.provider.providerId)?.grantRequestId
+      : undefined
     for (const state of this.ctx.commands.values()) {
       const request = state.request
       if (
         !request ||
         request.type !== "START_PAID" ||
-        request.attemptId !== attempt.binding.attemptId
+        request.attemptId !== attempt.binding.attemptId ||
+        (grantRequestId !== undefined && request.commandId !== grantRequestId)
       )
         continue
       const grant = await this.ctx.options.providerGateway.findGrantByRequest(request.commandId)

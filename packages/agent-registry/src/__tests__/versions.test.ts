@@ -69,7 +69,13 @@ describe("release package versions", () => {
 
     for (const path of trackedFiles) {
       if (!textFile.test(path) || historicalPins.has(path)) continue
-      const content = readFileSync(resolve(repositoryRoot, path), "utf8")
+      let content: string
+      try {
+        content = readFileSync(resolve(repositoryRoot, path), "utf8")
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue
+        throw error
+      }
       for (const match of content.matchAll(/lyrashield@(\d+\.\d+\.\d+)(?![.\d])/g)) {
         references.push({ path, version: match[1]! })
       }

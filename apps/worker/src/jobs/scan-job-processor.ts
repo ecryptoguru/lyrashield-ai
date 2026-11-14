@@ -24,7 +24,10 @@ export function createWorkerScanJobProcessor(mode: WorkerAuthorityMode = { kind:
   }
 }
 
-// Preserve the deployed legacy baseline until issuer/IPC/receipt/worker grants
-// are qualified together. Cutover must replace this startup selection once;
-// the broker branch never calls the legacy executor, even after uncertainty.
-export const processWorkerScanJob = createWorkerScanJobProcessor(workerAuthorityStartup)
+// Imports used by operator CLIs remain closed. The actual worker entrypoint
+// completes its one-time installed authority initialization before invoking this.
+export async function processWorkerScanJob(
+  job: Job<ScanJobData, ScanJobResult>
+): Promise<ScanJobResult> {
+  return createWorkerScanJobProcessor(workerAuthorityStartup)(job)
+}

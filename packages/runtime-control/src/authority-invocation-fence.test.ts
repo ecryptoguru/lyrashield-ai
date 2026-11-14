@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import { PostgresDurableScanAuthorityFence } from "./authority-invocation-fence"
 import type { AuthorityAction } from "./authority-fence"
 import type { AuthoritySqlConnection } from "./postgres-mirror"
+import { ScanAuthorityContext } from "./authority-context"
 
 const binding: AuthorityAction = {
   phase: "SANDBOX_TOOL",
@@ -18,7 +19,7 @@ const binding: AuthorityAction = {
   authorityChecksum: "a".repeat(64),
   actionChecksum: "b".repeat(64),
 }
-function fixture() {
+function fixture(context?: ScanAuthorityContext) {
   const events = new EventEmitter()
   const calls: string[] = []
   let committed = false
@@ -59,11 +60,29 @@ function fixture() {
     events,
     guard,
     verify,
-    fence: new PostgresDurableScanAuthorityFence(pool, verify, guard),
+    fence: new PostgresDurableScanAuthorityFence(pool, verify, guard, context),
   }
 }
 
 describe("durable session invocation fence", () => {
+  it("exposes only the active installed fence connection and expires captured async context", async () => {
+    const context = new ScanAuthorityContext(),
+      f = fixture(context)
+    expect(context.current()).toBeUndefined()
+    let delayed!: () => Promise<unknown>
+    await f.fence.run(binding, async () => {
+      const active = context.forOperation(binding.operationId)!
+      expect(active.guardId).toBe("guard-1")
+      expect(active.binding).toEqual(binding)
+      expect(() => context.forOperation("foreign-operation")).toThrow()
+      await active.connection.query("SELECT scoped_read", [])
+      delayed = async () => active.connection.query("SELECT late_read", [])
+    })
+    expect(context.current()).toBeUndefined()
+    await expect(delayed()).rejects.toThrow()
+    expect(f.calls).toContain("SELECT scoped_read")
+    expect(f.calls).not.toContain("SELECT late_read")
+  })
   it("commits and verifies the original guard while holding the session gate through invocation", async () => {
     const f = fixture()
     const result = await f.fence.run(binding, (assertActive, context) => {

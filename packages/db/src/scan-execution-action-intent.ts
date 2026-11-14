@@ -6,6 +6,8 @@ import {
   canonicalJson,
   providerGrantRequestSchema,
   sha256Hex,
+  supervisorAttemptProofSchema,
+  verifySupervisorAttemptProof,
   type AuthorityAction,
   type AuthoritySqlConnection,
   type VerifyActionAuthority,
@@ -26,6 +28,7 @@ import {
 } from "./scan-supervisor-receipt-ingestion-verifier"
 
 import { assertPreparedInvocationCompleted } from "./scan-prepared-predecessor"
+import { verifyStoredSandboxToolIntent } from "./scan-sandbox-tool-intent"
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const providerActionSchema = z
@@ -147,7 +150,7 @@ export async function bindScanExecutionAuthorityContext(
 }
 
 /** Reads all current source authority on the caller's already-held native gate. */
-async function readCurrentAuthority(
+export async function readCurrentAuthority(
   connection: AuthoritySqlConnection,
   binding: CurrentAuthorityBinding
 ): Promise<CurrentAuthority> {
@@ -170,7 +173,7 @@ async function readCurrentAuthority(
       AND a."targetSnapshotDigest"=app.scan_target_snapshot_digest(a."targetId")
       AND CASE WHEN $6='PREPARE' THEN r.state='RESERVED' ELSE r.state='RUNNING' END
       AND ($6='PREPARE' OR EXISTS(SELECT 1 FROM "ScanDispatchStart" st WHERE st."operationId"=a."operationId" AND st."attemptId"=a."attemptId"
-        AND st."policyDigest"=a."policyDigest" AND st."maxBudgetUsd"=a."maxBudgetUsd" AND st."maxRuntimeMs" BETWEEN 1 AND a."maxRuntimeMs"
+        AND st."policyDigest"=a."policyDigest" AND st."maxBudgetUsd"=a."maxBudgetUsd" AND st."maxRuntimeMs"=a."maxRuntimeMs"
         AND ((st.kind='PAID' AND a."maxBudgetUsd">0 AND st."billableClaimEventId" IS NOT NULL AND st."providerGrantDigest" IS NOT NULL)
           OR (st.kind='UNMETERED' AND a."maxBudgetUsd"=0 AND st."billableClaimEventId" IS NULL AND st."providerGrantDigest" IS NULL))))`,
       [
@@ -215,9 +218,11 @@ async function authenticatedPredecessor(
   checkReceiptKeys(authority)
   const found = (
     await connection.query(
-      `SELECT "receiptHash" FROM "ScanSupervisorReceipt" WHERE "operationId"=$1 AND "attemptId"=$2 AND "workspaceId"=$3 AND "commandId"=$4
-   AND "authorityEpochId"=$5 AND "supervisorInstanceId"=$6 AND "journalRecordId" IS NOT NULL AND ("terminalStatus" IS NOT NULL OR "eventType"='attempt_prepared')
-   AND ($7='' OR "receiptHash"=$7) ORDER BY sequence DESC LIMIT 1`,
+      `SELECT r."receiptHash" FROM "ScanSupervisorReceipt" r
+   JOIN "ScanDispatchAttempt" a ON a."operationId"=r."operationId" AND a."attemptId"=r."attemptId"
+   WHERE r."operationId"=$1 AND r."attemptId"=$2 AND a."workspaceId"=$3 AND r."commandId"=$4
+   AND r."authorityEpochId"=$5 AND r."supervisorInstanceId"=$6 AND r."journalRecordId" IS NOT NULL AND (r."terminalStatus" IS NOT NULL OR r."eventType"='attempt_prepared')
+   AND ($7='' OR r."receiptHash"=$7) ORDER BY r.sequence DESC LIMIT 1`,
       [
         binding.operationId,
         binding.attemptId,
@@ -480,7 +485,8 @@ export function createScanExecutionActionAuthorityVerifier(
         ?.held !== true
     )
       unavailable()
-    if (binding.phase === "SANDBOX_TOOL") unavailable() // Full authenticated tool ownership producer is not installed yet.
+    if (binding.phase === "SANDBOX_TOOL")
+      return verifyStoredSandboxToolIntent(connection, binding, supervisorAuthority)
     if (binding.phase === "PROVIDER_DISPATCH") {
       const row = (
         await connection.query(
@@ -540,7 +546,7 @@ export function createScanExecutionActionAuthorityVerifier(
       unavailable()
     const row = (
       await connection.query(
-        `SELECT "commandInputJson","commandInputChecksum" FROM "ScanDispatchOutbox" WHERE id=$1 AND "operationId"=$2 AND "attemptId"=$3 AND status IN ('PENDING','LEASED','DELIVERED','ACCEPTED')`,
+        `SELECT "commandInputJson","commandInputChecksum","authorityProofInputJson","authorityProofChecksum","createdAt" AT TIME ZONE 'UTC' AS "createdAt" FROM "ScanDispatchOutbox" WHERE id=$1 AND "operationId"=$2 AND "attemptId"=$3 AND status IN ('PENDING','LEASED','DELIVERED','ACCEPTED')`,
         [binding.commandId!, binding.operationId, binding.attemptId]
       )
     ).rows[0]
@@ -563,16 +569,48 @@ export function createScanExecutionActionAuthorityVerifier(
         command.executorKey !== binding.executorKey ||
         !prepare.executors.some((plan) => plan.key === binding.executorKey) ||
         current.prepareStatus !== "COMPLETED" ||
-        !["PREPARING", "DISPATCH_PENDING"].includes(current.physicalState)
+        !["PREPARING", "DISPATCH_PENDING", "ACTIVE"].includes(current.physicalState)
       )
         unavailable()
-      await authenticatedPredecessor(
+      const predecessor = await authenticatedPredecessor(
         connection,
         binding,
         supervisorAuthority,
-        prepare,
-        command.expectedReceiptHash
+        prepare
       )
+      if (
+        !supervisorAuthority ||
+        typeof row.authorityProofInputJson !== "string" ||
+        sha256Hex(row.authorityProofInputJson) !== row.authorityProofChecksum ||
+        !(row.createdAt instanceof Date)
+      )
+        unavailable()
+      const retained = supervisorAttemptProofSchema.parse(JSON.parse(row.authorityProofInputJson))
+      const proof = verifySupervisorAttemptProof(
+        retained,
+        {
+          ...retained.input,
+          operationId: binding.operationId,
+          attemptId: binding.attemptId,
+          scanId: binding.scanId,
+          workspaceId: binding.workspaceId,
+          authorityEpochId: binding.authorityEpochId,
+          commandId: command.commandId,
+          type: command.type,
+          executorKey: command.executorKey,
+        },
+        {
+          publicKey: supervisorAuthority.attemptProofPublicKey ?? "",
+          supervisorInstanceId: supervisorAuthority.supervisorInstanceId,
+        },
+        row.createdAt
+      )
+      if (
+        proof.prepareChecksum !== sha256Hex(canonicalJson(prepare)) ||
+        proof.commandChecksum !== row.commandInputChecksum ||
+        predecessor.commandPredecessors.get(command.commandId) !== command.expectedReceiptHash
+      )
+        unavailable()
     }
     return { deadlineAt: current.deadlineAt }
   }
