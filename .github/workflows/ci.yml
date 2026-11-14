@@ -92,6 +92,7 @@ jobs:
       database-services: ${{ steps.classify.outputs.database-services }}
       desktop-frontend-tests: ${{ steps.classify.outputs.desktop-frontend-tests }}
       egress-image: ${{ steps.classify.outputs.egress-image }}
+      controller-image: ${{ steps.classify.outputs.controller-image }}
       worker-image: ${{ steps.classify.outputs.worker-image }}
       web-image: ${{ steps.classify.outputs.web-image }}
       web-component: ${{ steps.classify.outputs.web-component }}
@@ -1035,7 +1036,7 @@ jobs:
   container-build:
     name: Container image build (no push)
     needs: changes
-    if: needs.changes.outputs.web-image == 'true' || needs.changes.outputs.worker-image == 'true' || needs.changes.outputs.egress-image == 'true'
+    if: needs.changes.outputs.web-image == 'true' || needs.changes.outputs.worker-image == 'true' || needs.changes.outputs.egress-image == 'true' || needs.changes.outputs.controller-image == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -1051,7 +1052,7 @@ jobs:
       # deploy-azure.yml so the PR gate cannot drift from production. Do not
       # bump the pin here.
       - name: Read pinned engine revision
-        if: needs.changes.outputs.worker-image == 'true'
+        if: needs.changes.outputs.worker-image == 'true' || needs.changes.outputs.controller-image == 'true'
         id: engine
         shell: bash
         run: |
@@ -1120,6 +1121,48 @@ jobs:
           push: false
           cache-from: type=gha,scope=container-build-egress-proxy
           cache-to: type=gha,mode=max,scope=container-build-egress-proxy
+
+      # The three control-plane roles share one Dockerfile base but are separate
+      # digest-pinned images. Building them here keeps the release package path
+      # exercised on every change to their sources.
+      - name: Build broker image (no push)
+        if: needs.changes.outputs.controller-image == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: controller
+          push: false
+          build-args: |
+            PRODUCT_REVISION=${{ github.sha }}
+            ENGINE_REVISION=${{ steps.engine.outputs.revision }}
+          cache-from: type=gha,scope=container-build-controller
+          cache-to: type=gha,mode=max,scope=container-build-controller
+
+      - name: Build supervisor image (no push)
+        if: needs.changes.outputs.controller-image == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: supervisor
+          push: false
+          build-args: |
+            PRODUCT_REVISION=${{ github.sha }}
+            ENGINE_REVISION=${{ steps.engine.outputs.revision }}
+          cache-from: type=gha,scope=container-build-controller
+          cache-to: type=gha,mode=max,scope=container-build-controller
+
+      - name: Build provider-gateway image (no push)
+        if: needs.changes.outputs.controller-image == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: provider-gateway
+          push: false
+          build-args: |
+            PRODUCT_REVISION=${{ github.sha }}
+            ENGINE_REVISION=${{ steps.engine.outputs.revision }}
+          cache-from: type=gha,scope=container-build-controller
+          cache-to: type=gha,mode=max,scope=container-build-controller
 
   desktop-rust:
     name: Desktop Rust (cargo)

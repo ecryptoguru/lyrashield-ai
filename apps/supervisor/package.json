@@ -13,11 +13,12 @@
   "dependencies": {
     "@lyrashield/db": "workspace:*",
     "@lyrashield/runtime-control": "workspace:*",
+    "pg": "^8.23.0",
+    "tsx": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "tsx": "catalog:",
     "typescript": "catalog:"
   }
 }
