@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { createBrokerHandler } from "../../../../broker/src/http"
+import { createBrokerService } from "../../../../broker/src/service"
 import type { BrokerService } from "../../../../broker/src/service"
 import { createWorkerBrokerClient } from "./broker-client"
 
@@ -162,6 +163,29 @@ describe("worker broker client", () => {
         await expect(client.consumeSupervisorReceipts(attempt.operationId)).rejects.toThrow()
       }
     )
+  })
+
+  it("retains closed admission and missing receipt authority over the real broker service", async () => {
+    const broker = createBrokerService({
+      connectionString: "postgres://broker@127.0.0.1:5432/lyrashield_test",
+      transport: { kind: "unix", socketPath: "/run/lyrashield/broker.sock" },
+      controlToken: token,
+      admission: "closed",
+    })
+    try {
+      expect(broker.admission).toBe("closed")
+      await withServer(createServer(createBrokerHandler(broker, token)), async () => {
+        const client = createWorkerBrokerClient(token)
+        await expect(client.prepare(preparation)).rejects.toThrow("Broker control unavailable")
+        await expect(client.consumeSupervisorReceipts(attempt.operationId)).rejects.toThrow(
+          "Broker control unavailable"
+        )
+        expect("startPaid" in client).toBe(false)
+        expect("startUnmetered" in client).toBe(false)
+      })
+    } finally {
+      await broker.close()
+    }
   })
 
   it("does not retry an unacknowledged mutation or expose the token", async () => {
