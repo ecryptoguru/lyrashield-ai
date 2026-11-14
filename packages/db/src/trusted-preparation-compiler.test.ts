@@ -339,6 +339,34 @@ describe("protected preparation compiler", () => {
       await expect(compiler(f.authority)).rejects.toThrow()
     }
   })
+  it("rejects production claims from the disposable preparation issuer", async () => {
+    const { authority, unsigned } = fixture()
+    const productionContext = { ...executionContext, environment: "PRODUCTION" }
+    expect(() =>
+      createTrustedPreparationCompiler({
+        hostPolicy: { ...hostPolicy, executionContext: productionContext },
+        issuerPublicKey,
+        readStagingRecord: async () => undefined,
+        readExecutionContext: async () => productionContext,
+      })
+    ).toThrow()
+
+    const raw = canonicalJson({ ...unsigned, purpose: "production-preparation" })
+    const compiler = createTrustedPreparationCompiler({
+      hostPolicy,
+      issuerPublicKey,
+      readStagingRecord: async () => ({
+        raw,
+        result: {
+          algorithm: "RS256",
+          keyId: hostPolicy.issuerKeyId,
+          signature: sign("RSA-SHA256", Buffer.from(raw), privateKey).toString("base64"),
+        },
+      }),
+      readExecutionContext: async () => executionContext,
+    })
+    await expect(compiler(authority)).rejects.toThrow()
+  })
   it("rejects unapproved key, host policy and caller-injected mount fields", async () => {
     const { authority, unsigned, signed } = fixture()
     const otherKey = generateKeyPairSync("rsa", { modulusLength: 3072 })
