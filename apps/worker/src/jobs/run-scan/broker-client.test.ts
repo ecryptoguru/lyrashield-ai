@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto"
 import { createServer, type Server } from "node:http"
 import { mkdtemp, rm } from "node:fs/promises"
 import { join } from "node:path"
@@ -22,7 +23,7 @@ vi.mock("node:http", async (importOriginal) => {
   }
 })
 
-const token = "fixture-broker-control-token-at-least-32-characters"
+const token = randomBytes(32).toString("hex")
 const attempt = {
   operationId: "operation-1",
   attemptId: "attempt-1",
