@@ -15,7 +15,7 @@ python3.12 .github/scripts/run-cold-engine-native-probes.py \
 python3.12 .github/scripts/tests/cold-engine-native-probes.test.py
 ```
 
-The engine pin is `2b1d044308ec2c31c1a657ff0aa808b3e900ce24`. The harness must
+The engine pin is `0793bcb9644a1985165963375586124c993c020a`. The harness must
 match its committed Git object byte for byte. The engine's installed Python
 package files must match that pin, and OpenAI, Agents SDK, LiteLLM and HTTPX
 versions must match its lock. This verifies engine Python source and dependency
