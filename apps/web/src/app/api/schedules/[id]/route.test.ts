@@ -91,7 +91,7 @@ describe("PATCH /api/schedules/[id]", () => {
     } as never)
   })
 
-  it("rejects an API Standard update when the spec has been removed", async () => {
+  it("refuses a mode outside the launch offering", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(apiTargetNoSpec as never)
 
     const res = await PATCH(
@@ -103,19 +103,16 @@ describe("PATCH /api/schedules/[id]", () => {
 
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error.code).toBe("API_SPEC_REQUIRED")
+    expect(json.error.code).toBe("URL_MODE_UNAVAILABLE")
     expect(updateSchedule).not.toHaveBeenCalled()
   })
 
-  it("allows a mode update when the target still supports it", async () => {
+  it("allows a mode update to a tier the launch offering supports", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(apiTarget as never)
 
-    const res = await PATCH(
-      makePatchRequest("sched-1", { workspaceId: "ws-1", mode: "STANDARD" }),
-      {
-        params: Promise.resolve({ id: "sched-1" }),
-      }
-    )
+    const res = await PATCH(makePatchRequest("sched-1", { workspaceId: "ws-1", mode: "SAFE" }), {
+      params: Promise.resolve({ id: "sched-1" }),
+    })
 
     expect(res.status).toBe(200)
     expect(updateSchedule).toHaveBeenCalled()
