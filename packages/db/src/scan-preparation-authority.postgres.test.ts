@@ -1458,6 +1458,82 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
     ).toBe(false)
   })
 
+  it("scopes an unresolved invocation guard to its own workspace", async () => {
+    const f = await preparationFixture(owner)
+    const other = `${f.workspaceId}-other`
+    const input = preparationInput(f)
+    const prepared = await broker.prepare(input)
+    if (prepared.kind !== "committed") throw new Error("fixture did not commit")
+    // Owner stages the exact state a lost acknowledgement leaves: a guard with
+    // no resolution. The guard's own invariants do not apply to this fixture.
+    const seed = await owner.connect()
+    try {
+      await seed.query("BEGIN")
+      await seed.query(
+        'ALTER TABLE "ScanExecutionInvocationGuard" DISABLE TRIGGER scan_execution_invocation_guard'
+      )
+      await seed.query(
+        `INSERT INTO "ScanExecutionInvocationGuard"(id,"operationId","attemptId","scanId","workspaceId","authorityEpochId",phase,"authorityChecksum","actionChecksum","bindingInputJson")
+         VALUES ($1,$2,$3,$4,$5,$6,'START',repeat('a',64),repeat('b',64),'{}')`,
+        [`${f.operationId}-stuck`, f.operationId, prepared.attemptId, f.scanId, other, f.epochId]
+      )
+      await seed.query(
+        'ALTER TABLE "ScanExecutionInvocationGuard" ENABLE TRIGGER scan_execution_invocation_guard'
+      )
+      await seed.query("COMMIT")
+    } catch (error) {
+      await seed.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      seed.release()
+    }
+
+    // Without a workspace context the write cannot be attributed, so the global
+    // check still applies and the fence stays closed.
+    const global = await owner.query("SELECT app.scan_execution_invocation_pending() AS pending")
+    expect(global.rows[0].pending).toBe(true)
+
+    // The unresolved guard's own workspace still fails closed.
+    const blocked = await owner.connect()
+    try {
+      await blocked.query("BEGIN")
+      await blocked.query("SELECT set_config('app.current_workspace_id',$1,true)", [other])
+      const pending = await blocked.query(
+        "SELECT app.scan_execution_invocation_pending() AS pending"
+      )
+      expect(pending.rows[0].pending).toBe(true)
+      await expect(
+        blocked.query('UPDATE "Scan" SET "updatedAt"=clock_timestamp() WHERE id=$1', [f.scanId])
+      ).rejects.toThrow(/revocation pending/)
+      await blocked.query("ROLLBACK")
+    } catch (error) {
+      await blocked.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      blocked.release()
+    }
+
+    // Another workspace is unaffected: the guard is scoped, not global, so the
+    // source-authority write path stays open for every other tenant.
+    const clear = await owner.connect()
+    try {
+      await clear.query("BEGIN")
+      await clear.query("SELECT set_config('app.current_workspace_id',$1,true)", [f.workspaceId])
+      const pending = await clear.query("SELECT app.scan_execution_invocation_pending() AS pending")
+      expect(pending.rows[0].pending).toBe(false)
+      await clear.query('UPDATE "Scan" SET "updatedAt"=clock_timestamp() WHERE id=$1', [f.scanId])
+      await clear.query("COMMIT")
+    } catch (error) {
+      await clear.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      clear.release()
+    }
+    // Disposable owner cleanup only; the staged guard must not leak into the
+    // context-less fixtures other cases in this file seed.
+    await owner.query('TRUNCATE "ScanExecutionInvocationGuard" CASCADE')
+  })
+
   it("keeps money settlement writable under SERIALIZABLE while source authority needs READ COMMITTED", async () => {
     const f = await preparationFixture(owner)
     const policyId = (await owner.query('SELECT "policyId" FROM "Scan" WHERE id=$1', [f.scanId]))

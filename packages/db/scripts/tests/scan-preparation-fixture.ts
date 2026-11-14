@@ -314,6 +314,24 @@ export async function applyPreparationFixtureMigration(owner: pg.Pool) {
     )
     await owner.query(sql)
   }
+  // The guard-scoping migration must land after the migration that creates the
+  // original zero-argument predicate.
+  const scopedGuard = await owner.query(
+    `SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname='app' AND p.proname='scan_execution_invocation_pending'
+      AND position('workspace_id' in p.prosrc)>0`
+  )
+  if (!scopedGuard.rowCount) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const sql = await readFile(
+      new URL(
+        "../../prisma/migrations/20261114010000_scope_invocation_guard_to_workspace/migration.sql",
+        import.meta.url
+      ),
+      "utf8"
+    )
+    await owner.query(sql)
+  }
 }
 
 const usedLegacy = new Set<string>()

@@ -107,7 +107,7 @@ function fixture() {
   const state = {
     pulls: [pull(1)],
     details: new Map(),
-    files: new Map(),
+    failUpdate: false,
     releases: [{ id: 5, head_sha: main, status: "completed", conclusion: "success" }],
     ci: new Map(
       heads.map((head, index) => [
@@ -157,8 +157,6 @@ function fixture() {
     }
     if (path === `${root}/git/ref/heads/main`) return { object: { sha: main } }
     if (path === `${root}/pulls`) return paginate(state.pulls)
-    const files = new RegExp(`^${root}/pulls/(\\d+)/files$`).exec(path)
-    if (files) return paginate(state.files.get(Number(files[1])) ?? [])
     if (path.startsWith(`${root}/pulls/`)) {
       const number = Number(path.split("/").at(-1))
       return state.details.get(number) ?? state.pulls.find((pr) => pr.number === number)
@@ -234,7 +232,14 @@ function fixture() {
     run: () =>
       runAutoMergeQueue({
         api,
-        updateBranch: (number, head) => state.actions.push(["update", number, head]),
+        updateBranch: (number, head) => {
+          if (state.failUpdate) {
+            const error = new Error("Command failed")
+            error.stderr = "gh: refusing to allow a GitHub App to create or update workflow"
+            throw error
+          }
+          state.actions.push(["update", number, head])
+        },
         mergeReady: (number, head) => state.actions.push(["merge", number, head]),
         disableAutoMerge: (number, head) => state.actions.push(["disable", number, head]),
       }),
@@ -521,12 +526,19 @@ test("rejects fork, untrusted author, spoofed bot, draft, and changed head", () 
   assert.deepEqual(f.state.actions, [])
 })
 
-test("skips a behind workflow change it cannot update and merges the next candidate", () => {
+test("updates a behind pull request even when it touches workflows", () => {
   const f = fixture()
-  f.state.pulls = [pull(1, { mergeable_state: "behind" }), pull(2)]
-  f.state.files.set(1, [{ filename: ".github/workflows/ci.yml" }])
-  assert.deepEqual(f.run(), { action: "auto-merge", number: 2 })
-  assert.deepEqual(f.state.actions, [["merge", 2, heads[1]]])
+  f.state.pulls = [pull(1, { mergeable_state: "behind" })]
+  assert.deepEqual(f.run(), { action: "update", number: 1 })
+  assert.deepEqual(f.state.actions, [["update", 1, heads[0]]])
+})
+
+test("holds a behind pull request when GitHub refuses the branch update", () => {
+  const f = fixture()
+  f.state.pulls = [pull(1, { mergeable_state: "behind" })]
+  f.state.failUpdate = true
+  assert.deepEqual(f.run(), { action: "disable-auto-merge", number: 1 })
+  assert.deepEqual(f.state.actions, [["disable", 1, heads[0]]])
 })
 
 test("refuses to mutate when a required check is not bound to GitHub Actions", () => {

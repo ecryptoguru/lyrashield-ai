@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current production evidence: 2026-11-02 IST (deployed product revision `d488862bd269c07194afe87a918ca413e4a62217`, released by run `41438792830`; marketing redeployed with source unchanged from `0d8fc0f6c126271aa966ca895608cec2460f8cb4`). This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
+> Current production evidence: 2026-11-02 (deployed product revision `b03f0bbe2b42f3a49e24e103655187372ba0a5f6`, released by run `41518076035`; marketing serves build revision `c69f11ce64ecde4df92c441b80b8b06b89451ac9`). This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
@@ -415,6 +415,14 @@ The rerun of [release 43477651002](https://github.com/ecryptoguru/lyrashield-ai/
 Deployment stays held until an exact-artifact record can be issued from authenticated protected-host runtime evidence. No protected Linux fleet host, managed runtime authority or compatible rollback tuple is installed, so there is no record for the deployment job to consume. The corrupt pre-existing federated credential could not be deleted or patched through Microsoft Graph and remains immutable in place; the working credential is additive. The release path fails closed at the empty variable and does not bypass qualification.
 
 No paid acceptance, positive provider Fix PR/retest, physical-device or screen-reader qualification, or financial readiness follows from this merge.
+
+### Current deployed production — 2026-11-02 21:04 UTC
+
+A later November 2 release superseded the 11:41 IST nonbilling release above. [PR #1070](https://github.com/ecryptoguru/lyrashield-ai/pull/1070) merged as `b03f0bbe2b42f3a49e24e103655187372ba0a5f6`, and [release 41518076035](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41518076035) succeeded at `2026-11-02T21:04:43Z`, including source qualification, exact-worker disposable rehearsal, production smoke and worker promotion.
+
+An independent Azure and VM readback at `2026-11-14T00:13Z`–`00:16Z` confirmed the deployed state: app `lyrashield-app--0000515`, scanner `lyrashield-scanner--0000489` and egress proxy `lyrashield-egress-proxy--0000355` all healthy and serving 100% traffic on `b03f0bbe2b`, with web digest `sha256:b6bc5a4dab854a1949342808659ec79ff9d74d4bf1da71967ba1e012c1825726` and proxy digest `sha256:272b72d1c81f87d94348caed86bda0dd5ba0c80500252ba9f0989080b786de4c`. The worker service had been active since `2026-11-02T21:00:11Z` with zero restarts, container healthy, on image digest `sha256:9e942d0564e849d9c453b301bd5a88b1a35d8b326ba7791149bdf95048f96ad3` with product revision `b03f0bbe2b42f3a49e24e103655187372ba0a5f6` and engine `3001517530300ca5f602536bfadcbd3c95ad3039`. `https://app.lyrashieldai.com/api/ready`, `/api/ready/scans` and `https://scanner.lyrashieldai.com/api/ready` each returned 200 with their expected checks, and `https://lyrashieldai.com/` returned 200 serving build revision `c69f11ce64ecde4df92c441b80b8b06b89451ac9`.
+
+This is a deployment fact only. The deployed source is 390 commits behind current main, so it does not contain the retained launch scope merged since. It does not establish authenticated customer journeys, database migration or RLS state, billing or entitlement behavior, scan execution quality, positive provider Fix PR/retest, or any financial readiness.
 
 ### Controller integration local verification — 2026-11-13
 
