@@ -96,7 +96,16 @@ function failure(error: unknown): { status: number; code: string } {
   const named = typeof code === "string" ? code : "BROKER_REJECTED"
   if (named === "SUPERVISOR_CONSUMER_NOT_INSTALLED") return { status: 503, code: named }
   if (CLIENT_ERRORS.has(named)) return { status: 409, code: named }
-  if (named === "DATABASE_REJECTED" || named === "PREPARATION_AUTHORITY_BUSY")
+  // Expected unavailable-authority conditions: the installation simply is not
+  // open (for example PREPARATION_AUTHORITY_CLOSED) or cannot compile the
+  // command from installed policy. These are 503, not 500: they describe a
+  // closed capability, never an internal fault.
+  if (
+    named === "DATABASE_REJECTED" ||
+    named === "PREPARATION_AUTHORITY_BUSY" ||
+    named === "PREPARATION_AUTHORITY_UNAVAILABLE" ||
+    named === "PREPARATION_AUTHORITY_CLOSED"
+  )
     return { status: 503, code: named }
   return { status: 500, code: named }
 }

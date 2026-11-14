@@ -126,6 +126,65 @@ describe("broker control surface", () => {
     })
   })
 
+  it("maps closed and unavailable preparation authority to bounded 503 responses", async () => {
+    const failing = service({
+      prepare: async () => {
+        throw Object.assign(new Error("closed"), { code: "PREPARATION_AUTHORITY_CLOSED" })
+      },
+      startPaid: async () => {
+        throw Object.assign(new Error("no policy"), { code: "PREPARATION_AUTHORITY_UNAVAILABLE" })
+      },
+      startUnmetered: async () => {
+        throw Object.assign(new Error("policy mismatch"), {
+          code: "PREPARATION_AUTHORITY_UNAVAILABLE",
+        })
+      },
+      stop: async () => {
+        throw Object.assign(new Error("busy"), { code: "PREPARATION_AUTHORITY_BUSY" })
+      },
+    })
+    await withServer(failing, async (server) => {
+      expect(
+        (
+          await call(server, "/operations/prepare", {
+            method: "POST",
+            body: JSON.stringify({
+              operationId,
+              workerInstanceId: "worker-1",
+              workerGrantId: "grant-1",
+              authorityEpochId: "epoch-1",
+              expiresAt: "2026-11-14T00:00:00.000Z",
+            }),
+          })
+        ).status
+      ).toBe(503)
+      expect(
+        (
+          await call(server, `/operations/${operationId}/start-paid`, {
+            method: "POST",
+            body: JSON.stringify(attempt),
+          })
+        ).status
+      ).toBe(503)
+      expect(
+        (
+          await call(server, `/operations/${operationId}/start-unmetered`, {
+            method: "POST",
+            body: JSON.stringify(attempt),
+          })
+        ).status
+      ).toBe(503)
+      expect(
+        (
+          await call(server, `/operations/${operationId}/stop`, {
+            method: "POST",
+            body: JSON.stringify({ ...attempt, reasonCode: "SCAN_CANCELLED" }),
+          })
+        ).status
+      ).toBe(503)
+    })
+  })
+
   it("maps stored authority codes instead of echoing internals", async () => {
     const failing = service({
       consume: async () => {
