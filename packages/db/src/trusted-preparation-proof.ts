@@ -1,6 +1,11 @@
 import { createHash, createPublicKey, verify } from "node:crypto"
 import { z } from "zod"
-import { canonicalJson, sha256Hex } from "@lyrashield/runtime-control"
+import {
+  canonicalJson,
+  sha256Hex,
+  installedExecutionAuthoritySchema,
+  requireCurrentPreparationDelegation,
+} from "@lyrashield/runtime-control"
 import {
   protectedSourceResourceSchema,
   protectedAttachmentsResourceSchema,
@@ -24,7 +29,7 @@ export const disposableExecutionContextSchema = z
   })
   .strict()
 export type DisposableExecutionContext = z.infer<typeof disposableExecutionContextSchema>
-export const trustedPreparationHostPolicySchema = z
+const preparationHostPolicyBase = z
   .object({
     schema: z.literal("lyrashield-preparation-host-policy/1"),
     authorityEpochId: z.string().min(3).max(192),
@@ -67,9 +72,28 @@ export const trustedPreparationHostPolicySchema = z
       .strict(),
   })
   .strict()
+export const trustedPreparationHostPolicySchema = z
+  .discriminatedUnion("schema", [
+    preparationHostPolicyBase,
+    preparationHostPolicyBase.extend({
+      schema: z.literal("lyrashield-preparation-host-policy/2"),
+      executionContext: z.object({ environment: z.literal("PRODUCTION") }).strict(),
+    }),
+  ])
   .refine((policy) => policy.network !== "host" && policy.network !== "bridge")
+export const productionExecutionContextSchema = z
+  .object({
+    environment: z.literal("PRODUCTION"),
+    installed: installedExecutionAuthoritySchema.refine((value) => value.preparation !== undefined),
+  })
+  .strict()
+export const preparationExecutionContextSchema = z.discriminatedUnion("environment", [
+  disposableExecutionContextSchema,
+  productionExecutionContextSchema,
+])
+export type PreparationExecutionContext = z.infer<typeof preparationExecutionContextSchema>
 export type TrustedPreparationHostPolicy = z.infer<typeof trustedPreparationHostPolicySchema>
-export const preparationStagingRecordSchema = z
+const preparationStagingRecordBase = z
   .object({
     schema: z.literal("lyrashield-preparation-staging/1"),
     issuerKeyHash: hash,
@@ -107,7 +131,44 @@ export const preparationStagingRecordSchema = z
       .strict(),
   })
   .strict()
+export const preparationStagingRecordSchema = z.discriminatedUnion("schema", [
+  preparationStagingRecordBase,
+  preparationStagingRecordBase.extend({
+    schema: z.literal("lyrashield-preparation-staging/2"),
+    purpose: z.literal("production-preparation"),
+    executionContext: productionExecutionContextSchema,
+  }),
+])
 export type PreparationStagingRecord = z.infer<typeof preparationStagingRecordSchema>
+
+export function requirePreparationExecutionContext(
+  input: unknown,
+  policy: TrustedPreparationHostPolicy
+): PreparationExecutionContext {
+  const context = preparationExecutionContextSchema.parse(input)
+  if (policy.schema === "lyrashield-preparation-host-policy/1") {
+    if (
+      context.environment !== "DISPOSABLE" ||
+      canonicalJson(context) !== canonicalJson(policy.executionContext)
+    )
+      preparationProofFailure()
+    return context
+  }
+  if (context.environment !== "PRODUCTION") preparationProofFailure()
+  const delegation = requireCurrentPreparationDelegation(
+    context.installed.preparation,
+    context.installed
+  )
+  if (
+    delegation.preparationPolicyChecksum !== sha256Hex(canonicalJson(policy)) ||
+    delegation.issuerKeyHash !== policy.issuerKeyHash ||
+    delegation.issuerKeyId !== policy.issuerKeyId ||
+    context.installed.epochId !== policy.authorityEpochId ||
+    context.installed.sourceRevision !== policy.productRevision
+  )
+    preparationProofFailure()
+  return context
+}
 
 export function preparationProofFailure(): never {
   throw new Error("Trusted preparation infrastructure or staged authority is unavailable")
@@ -134,11 +195,8 @@ export function verifyPreparationStagingRecord(
     .parse(input)
   if (Buffer.byteLength(envelope.raw) > 128 * 1024) preparationProofFailure()
   const record = preparationStagingRecordSchema.parse(JSON.parse(envelope.raw))
-  const currentContext = disposableExecutionContextSchema.parse(observedContext)
-  if (
-    canonicalJson(currentContext) !== canonicalJson(policy.executionContext) ||
-    canonicalJson(currentContext) !== canonicalJson(record.executionContext)
-  )
+  const currentContext = requirePreparationExecutionContext(observedContext, policy)
+  if (canonicalJson(currentContext) !== canonicalJson(record.executionContext))
     preparationProofFailure()
   if (canonicalJson(record) !== envelope.raw) preparationProofFailure()
   const publicKey = createPublicKey(publicKeyInput)
@@ -186,6 +244,20 @@ export function verifyPreparationStagingRecord(
     Date.parse(record.expiresAt) > Date.parse(authority.attempt.expiresAt)
   )
     preparationProofFailure()
+  if (currentContext.environment === "PRODUCTION") {
+    const delegation = currentContext.installed.preparation!
+    if (
+      record.schema !== "lyrashield-preparation-staging/2" ||
+      Date.parse(record.expiresAt) > Date.parse(delegation.expiresAt) ||
+      Date.parse(record.expiresAt) - Date.parse(record.issuedAt) >
+        delegation.maxStagingLifetimeMs ||
+      !delegation.targetTypes.includes(authority.target.type as "REPO") ||
+      !delegation.scanWorkflows.includes(
+        authority.executionPlan.workflow as "REVIEW_TARGET" | "REVIEW_CHANGES"
+      )
+    )
+      preparationProofFailure()
+  } else if (record.schema !== "lyrashield-preparation-staging/1") preparationProofFailure()
   return { record, recordChecksum: sha256Hex(envelope.raw) }
 }
 
@@ -195,20 +267,36 @@ export function buildPreparationStagingRecord(
   policy: TrustedPreparationHostPolicy,
   resources: PreparationStagingRecord["resources"],
   observed: PreparationStagingRecord["observed"],
-  executionContext: DisposableExecutionContext
+  executionContext: PreparationExecutionContext
 ): PreparationStagingRecord {
+  const context = requirePreparationExecutionContext(executionContext, policy)
+  const production = context.environment === "PRODUCTION"
   if (
-    canonicalJson(disposableExecutionContextSchema.parse(executionContext)) !==
-    canonicalJson(policy.executionContext)
+    production &&
+    (!context.installed.preparation!.targetTypes.includes(authority.target.type as "REPO") ||
+      !context.installed.preparation!.scanWorkflows.includes(
+        authority.executionPlan.workflow as "REVIEW_TARGET" | "REVIEW_CHANGES"
+      ) ||
+      resources.source?.revision !== authority.executionPlan.source?.revision)
   )
     preparationProofFailure()
+  const expiresAt = production
+    ? new Date(
+        Math.min(
+          Date.parse(authority.attempt.expiresAt),
+          Date.now() + context.installed.preparation!.maxStagingLifetimeMs,
+          Date.parse(context.installed.preparation!.expiresAt)
+        )
+      ).toISOString()
+    : authority.attempt.expiresAt
+  if (Date.parse(expiresAt) <= Date.now()) preparationProofFailure()
   return preparationStagingRecordSchema.parse({
-    schema: "lyrashield-preparation-staging/1",
-    purpose: "disposable-preparation",
+    schema: production ? "lyrashield-preparation-staging/2" : "lyrashield-preparation-staging/1",
+    purpose: production ? "production-preparation" : "disposable-preparation",
     executionContext,
     issuerKeyHash: policy.issuerKeyHash,
     issuedAt: new Date().toISOString(),
-    expiresAt: authority.attempt.expiresAt,
+    expiresAt,
     operationId: authority.attempt.operationId,
     attemptId: authority.attempt.attemptId,
     scanId: authority.attempt.scanId,

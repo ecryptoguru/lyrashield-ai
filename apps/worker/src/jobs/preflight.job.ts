@@ -105,7 +105,11 @@ async function checkSandboxResources(): Promise<PreflightCheck> {
   }
 }
 
-export async function runPreflight(scanId: string, targetId: string): Promise<PreflightResult> {
+export async function runPreflight(
+  scanId: string,
+  targetId: string,
+  options?: { executorAlreadyStopped: true }
+): Promise<PreflightResult> {
   const checks: PreflightCheck[] = []
 
   const target = await prisma.target.findFirst({
@@ -141,14 +145,16 @@ export async function runPreflight(scanId: string, targetId: string): Promise<Pr
 
     // REPO scans run a Docker sandbox with configured resource limits.
     // Verify the host has enough free memory, CPU, and disk before starting.
-    const resourceCheck = await checkSandboxResources()
-    checks.push(resourceCheck)
-    if (!resourceCheck.passed) {
-      return {
-        passed: false,
-        checks,
-        errorCategory: "PREFLIGHT",
-        errorMessage: resourceCheck.message,
+    if (!options?.executorAlreadyStopped) {
+      const resourceCheck = await checkSandboxResources()
+      checks.push(resourceCheck)
+      if (!resourceCheck.passed) {
+        return {
+          passed: false,
+          checks,
+          errorCategory: "PREFLIGHT",
+          errorMessage: resourceCheck.message,
+        }
       }
     }
   } else if (

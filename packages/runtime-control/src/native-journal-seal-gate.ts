@@ -53,8 +53,12 @@ const helper = "/opt/lyrashield/runtime-control/paired-runtime-host-observation.
 const publicPin = "/opt/lyrashield/runtime-control/runtime-qualification-key.json"
 
 /** The root launcher installs exact verified helper/key bytes; no request selects paths or keys. */
-export function readInstalledJournalSealControlPolicy(source: string): JournalSealControlPolicy {
+export function readInstalledJournalSealControlPolicy(
+  source: string,
+  stream: "controller" | "tools" = "controller"
+): JournalSealControlPolicy {
   check(process.getuid?.() === 0 && /^[a-f0-9]{40}$/.test(source))
+  check(stream === "controller" || stream === "tools")
   for (const path of [
     "/opt",
     "/opt/lyrashield",
@@ -67,17 +71,21 @@ export function readInstalledJournalSealControlPolicy(source: string): JournalSe
     check(file.uid === 0 && !file.isSymbolicLink() && (file.mode & 0o022) === 0)
   }
   try {
-    const bytes = execFileSync("/usr/bin/python3", [helper, "seal-gate:" + source, publicPin], {
-      timeout: 10_000,
-      maxBuffer: 8192,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        NODE_ENV: "production",
-        PATH: "/usr/bin:/bin",
-        PYTHONNOUSERSITE: "1",
-        PYTHONDONTWRITEBYTECODE: "1",
-      },
-    })
+    const bytes = execFileSync(
+      "/usr/bin/python3",
+      [helper, (stream === "tools" ? "tool-seal-gate:" : "seal-gate:") + source, publicPin],
+      {
+        timeout: 10_000,
+        maxBuffer: 8192,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          NODE_ENV: "production",
+          PATH: "/usr/bin:/bin",
+          PYTHONNOUSERSITE: "1",
+          PYTHONDONTWRITEBYTECODE: "1",
+        },
+      }
+    )
     const policy = policySchema.parse(JSON.parse(bytes.toString("utf8")))
     check(policy.productRevision === source)
     return policy
@@ -90,13 +98,14 @@ export function readInstalledJournalSealControlPolicy(source: string): JournalSe
 export class NativeInstalledJournalSealGate implements JournalSealControlGate {
   constructor(
     private readonly pool: AuthoritySqlPool,
-    private readonly source: string
+    private readonly source: string,
+    private readonly stream: "controller" | "tools" = "controller"
   ) {}
   async withAuthorizedStream<T>(
     stream: { epochId: string; supervisorInstanceId: string },
     action: (proof: JournalSealControlProof) => Promise<T>
   ): Promise<T> {
-    const policy = readInstalledJournalSealControlPolicy(this.source)
+    const policy = readInstalledJournalSealControlPolicy(this.source, this.stream)
     check(
       policy.epochId === stream.epochId &&
         policy.supervisorInstanceId === stream.supervisorInstanceId
@@ -154,7 +163,7 @@ export class NativeInstalledJournalSealGate implements JournalSealControlGate {
       assertActive()
       // Reobserve protected policy without accepting changed source/epoch/control namespace.
       check(
-        JSON.stringify(readInstalledJournalSealControlPolicy(this.source)) ===
+        JSON.stringify(readInstalledJournalSealControlPolicy(this.source, this.stream)) ===
           JSON.stringify(policy)
       )
       assertActive()

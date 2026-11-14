@@ -48,7 +48,7 @@ export type QueueOutboxStoreResult =
   | { kind: "unknown"; reasonCode: string }
 
 /** Same user/workspace/target/account/scan/operation/outbox lock order as broker. */
-async function lockQueueOutbox(client: pg.PoolClient, scope: QueueOutboxScope) {
+async function lockQueueOutbox(client: pg.PoolClient, scope: QueueOutboxScope, readOnly = false) {
   await client.query("SELECT set_config('app.current_workspace_id',$1,true)", [scope.workspaceId])
   const pre = (
     await client.query<{
@@ -69,22 +69,24 @@ async function lockQueueOutbox(client: pg.PoolClient, scope: QueueOutboxScope) {
     "SELECT set_config('app.current_scan_user_id',$1,true), set_config('app.current_account_id',$2,true)",
     [pre.userId, pre.sponsorId]
   )
-  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
-    `scan-user:${pre.userId}`,
-  ])
-  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [scope.workspaceId])
-  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [pre.targetId])
-  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
-    `account:${pre.sponsorId}`,
-  ])
-  await client.query('SELECT id FROM "Scan" WHERE id=$1 AND "workspaceId"=$2 FOR UPDATE', [
-    pre.scanId,
-    scope.workspaceId,
-  ])
-  await client.query(
-    'SELECT "operationId" FROM "ScanDispatchOperation" WHERE "operationId"=$1 AND "workspaceId"=$2 FOR UPDATE',
-    [scope.operationId, scope.workspaceId]
-  )
+  if (!readOnly) {
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `scan-user:${pre.userId}`,
+    ])
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [scope.workspaceId])
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [pre.targetId])
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `account:${pre.sponsorId}`,
+    ])
+    await client.query('SELECT id FROM "Scan" WHERE id=$1 AND "workspaceId"=$2 FOR UPDATE', [
+      pre.scanId,
+      scope.workspaceId,
+    ])
+    await client.query(
+      'SELECT "operationId" FROM "ScanDispatchOperation" WHERE "operationId"=$1 AND "workspaceId"=$2 FOR UPDATE',
+      [scope.operationId, scope.workspaceId]
+    )
+  }
   const row = (
     await client.query<QueueOutboxRow>(
       `SELECT s.id, s."workspaceId", s."targetId", s.goal, s.mode, s."policyId",
@@ -102,11 +104,22 @@ async function lockQueueOutbox(client: pg.PoolClient, scope: QueueOutboxScope) {
       FROM "ScanQueueOutbox" q JOIN "ScanDispatchOperation" o ON o."operationId"=q."operationId"
       JOIN "Scan" s ON s.id=q."scanId" AND s.id=o."scanId" AND s."workspaceId"=o."workspaceId"
       JOIN "Workspace" w ON w.id=s."workspaceId" JOIN "Target" t ON t.id=s."targetId" AND t."workspaceId"=s."workspaceId"
-      WHERE q."operationId"=$1 AND s."workspaceId"=$2 FOR UPDATE OF q`,
+      WHERE q."operationId"=$1 AND s."workspaceId"=$2 ${readOnly ? "" : "FOR UPDATE OF q"}`,
       [scope.operationId, scope.workspaceId]
     )
   ).rows[0]
   return row ?? null
+}
+
+/** Same persisted publication facts, without row mutations or publisher capability. */
+export async function readPublishedScanQueueAuthority(
+  client: pg.PoolClient,
+  scope: QueueOutboxScope
+) {
+  const row = await lockQueueOutbox(client, queueOutboxScopeSchema.parse(scope), true)
+  if (!row || !["QUEUED", "WAITING_CAPACITY", "PREPARED"].includes(row.operationState)) return null
+  verifyPublishedQueueOutbox(row)
+  return row
 }
 
 export function verifyQueueOutboxAuthority(row: QueueOutboxRow, requireLive = true) {
@@ -239,6 +252,7 @@ export function createScanQueueOutboxStore(pool: pg.Pool, leaseMs: number) {
           if (!row.leaseLive) return quarantine(client, row, "QUEUE_LEASE_EXPIRED_UNKNOWN")
           return { kind: "busy" }
         }
+        await client.query("SELECT app.assign_scan_dispatch_worker($1)", [scope.operationId])
         const token = randomUUID()
         await client.query(
           `UPDATE "ScanQueueOutbox" SET state='LEASED', "attempts"="attempts"+1,

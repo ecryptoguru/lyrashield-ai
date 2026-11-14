@@ -135,6 +135,8 @@ export const WORKSPACE_SCOPE_EXCLUSIONS = new Set<string>([
   // authority transaction, never a tenant-facing read boundary.
   "ScanDispatchOperation",
   "ScanDispatchAttempt",
+  "ScanDispatchWorkerAssignment", // immutable worker identity; private dispatch SQL authorizes access
+  "ScanDispatchLifecycleProof", // private supervisor acceptance facts; no tenant Prisma access
   "ScanPhysicalExecution",
   "ScanSupervisorJournalRecord",
   "ScanExecutionActionIntent",

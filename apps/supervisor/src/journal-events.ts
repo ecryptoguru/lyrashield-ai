@@ -1,5 +1,6 @@
 import { z } from "zod"
 import {
+  sandboxToolRetirementProofSchema,
   attemptBindingSchema,
   commandStatusSchema,
   executorKeySchema,
@@ -17,6 +18,7 @@ import {
   type SupervisorCommand,
   type SupervisorReceipt,
 } from "@lyrashield/runtime-control"
+import { nativeRemovalProofSchema } from "./native-removal-proof"
 
 const boundGrantSchema = z
   .object({ providerId: z.string(), grantId: z.string(), revoked: z.boolean().default(false) })
@@ -150,14 +152,58 @@ export const supervisorJournalEventSchema = z.discriminatedUnion("type", [
       executorKey: executorKeySchema,
       guardId: z.string().min(3).max(192),
       nativeRequestId: z.string().min(3).max(192),
-      nativeOperation: z.enum(["CONTAINER_CREATE_ACK", "CONTAINER_START_ACK"]),
+      nativeOperation: z.enum([
+        "CONTAINER_CREATE_ACK",
+        "CONTAINER_START_ACK",
+        "SANDBOX_TOOL_START_ACK",
+        "SANDBOX_TOOL_MUTATION_ACK",
+      ]),
+      requestId: z.string().uuid().optional(),
+      execId: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      nativeMutationId: z.string().min(3).max(192).optional(),
+      nativeReceiptSha256: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      nativeTargets: z
+        .array(
+          z
+            .object({
+              execId: z.string().regex(/^[a-f0-9]{64}$/),
+              originalGuardId: z.string().min(3).max(192),
+              sessionId: z.number().int().positive().safe(),
+            })
+            .strict()
+        )
+        .max(32)
+        .optional(),
       bindingInputChecksum: z.string().regex(/^[a-f0-9]{64}$/),
       actionChecksum: z.string().regex(/^[a-f0-9]{64}$/),
       commandInputChecksum: z.string().regex(/^[a-f0-9]{64}$/),
       ownership: resourceOwnershipSchema,
       inspection: resourceInspectionSchema,
     })
-    .strict(),
+    .strict()
+    .refine((event) =>
+      event.nativeOperation === "SANDBOX_TOOL_MUTATION_ACK"
+        ? event.requestId !== undefined &&
+          event.execId === undefined &&
+          event.executorKey === "sandbox" &&
+          event.nativeMutationId === event.guardId &&
+          event.nativeReceiptSha256 !== undefined &&
+          event.nativeTargets !== undefined
+        : event.nativeMutationId === undefined &&
+          event.nativeReceiptSha256 === undefined &&
+          event.nativeTargets === undefined &&
+          (event.nativeOperation === "SANDBOX_TOOL_START_ACK"
+            ? event.requestId !== undefined &&
+              event.execId !== undefined &&
+              event.executorKey === "sandbox"
+            : event.requestId === undefined && event.execId === undefined)
+    ),
   z
     .object({
       type: z.literal("prepare_invocation_completed"),
@@ -176,6 +222,7 @@ export const supervisorJournalEventSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("native_invocation_planned"),
+      phase: z.enum(["EXECUTOR_CREATE", "EXECUTOR_START"]).optional(),
       ...brokerEnvelope,
       commandId: z.string().min(3).max(192),
       attemptId: z.string().min(3).max(192),
@@ -193,6 +240,9 @@ export const supervisorJournalEventSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("native_invocation_retired"),
+      phase: z.enum(["EXECUTOR_CREATE", "EXECUTOR_START", "SANDBOX_TOOL"]).optional(),
+      nativeToolRetirementProof: sandboxToolRetirementProofSchema.optional(),
+      nativeRemovalProof: nativeRemovalProofSchema.optional(),
       ...brokerEnvelope,
       commandId: z.string().min(3).max(192),
       stopCommandId: z.string().min(3).max(192),
@@ -276,6 +326,7 @@ export interface AttemptState {
   startAcknowledged: Set<ExecutorKey>
   nativeAckGuards?: Set<string>
   nativeCreateProofs?: Map<ExecutorKey, ResourceOwnership>
+  nativeRetirements?: Map<ExecutorKey, ResourceOwnership>
   nativeStartIntents?: Map<
     ExecutorKey,
     Extract<SupervisorJournalEvent, { type: "native_invocation_planned" }>

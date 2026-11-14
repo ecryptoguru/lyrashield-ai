@@ -2095,6 +2095,7 @@ model ScanAuthorityEpoch {
   supervisorReceipts       ScanSupervisorReceipt[]
   supervisorJournalStreams ScanSupervisorJournalStream[]
   releaseReceipts          ScanDispatchReleaseReceipt[]
+  workerAssignments        ScanDispatchWorkerAssignment[]
 }
 
 /// Supervisor-issued worker identity. Only the credential digest is durable;
@@ -2111,9 +2112,10 @@ model ScanWorkerInstanceGrant {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  authorityEpoch     ScanAuthorityEpoch      @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
+  authorityEpoch     ScanAuthorityEpoch             @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
   attempts           ScanDispatchAttempt[]
   physicalExecutions ScanPhysicalExecution[]
+  assignments        ScanDispatchWorkerAssignment[]
 
   @@index([authorityEpochId])
   @@index([expiresAt])
@@ -2133,10 +2135,27 @@ model ScanDispatchOperation {
   createdAt       DateTime                   @default(now())
   updatedAt       DateTime                   @updatedAt
 
-  attempt ScanDispatchAttempt?
+  attempt          ScanDispatchAttempt?
+  workerAssignment ScanDispatchWorkerAssignment?
 
   @@index([workspaceId, state])
   @@index([state, updatedAt])
+}
+
+/// Immutable single-worker launch assignment. A trusted publisher selects the
+/// sole live grant before publication; workers cannot select their own payer or scope.
+model ScanDispatchWorkerAssignment {
+  operationId      String   @id
+  workspaceId      String
+  workerGrantId    String
+  authorityEpochId String
+  assignedAt       DateTime @default(now())
+
+  operation      ScanDispatchOperation   @relation(fields: [operationId], references: [operationId], onDelete: Restrict)
+  workerGrant    ScanWorkerInstanceGrant @relation(fields: [workerGrantId], references: [id], onDelete: Restrict)
+  authorityEpoch ScanAuthorityEpoch      @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, workerGrantId])
 }
 
 /// BullMQ publication is transport, not execution authority. Queue publication
@@ -2226,10 +2245,13 @@ model ScanDispatchOutbox {
   operationId          String
   attemptId            String
   commandType          ScanDispatchCommandType
+  executorKey          String                   @default("")
   sequence             Int                      @default(1)
   commandDigest        String
   commandInputJson     String?
   commandInputChecksum String?
+  authorityProofInputJson String?
+  authorityProofChecksum String?
   status               ScanDispatchOutboxStatus @default(PENDING)
   attempts             Int                      @default(0)
   availableAt          DateTime                 @default(now())
@@ -2242,7 +2264,7 @@ model ScanDispatchOutbox {
   attempt  ScanDispatchAttempt     @relation(fields: [operationId, attemptId], references: [operationId, attemptId], onDelete: Restrict)
   receipts ScanSupervisorReceipt[]
 
-  @@unique([operationId, commandType])
+  @@unique([operationId, commandType, executorKey])
   @@index([attemptId])
   @@index([status, availableAt])
 }
@@ -2250,8 +2272,23 @@ model ScanDispatchOutbox {
 /// Immutable start decision. Paid starts retain the existing lifetime billable
 /// claim; unmetered starts require a zero-budget attempt and bind it to an
 /// existing RESERVED capacity reservation without settling or releasing it.
+model ScanDispatchLifecycleProof {
+  proofChecksum String @id
+  operationId String
+  attemptId String
+  workspaceId String
+  authorityEpochId String
+  headInputChecksum String
+  headSequence BigInt
+  issuedAt DateTime @db.Timestamp(3)
+  expiresAt DateTime @db.Timestamp(3)
+  createdAt DateTime @default(now()) @db.Timestamp(3)
+}
+
 model ScanDispatchStart {
   startId              String                @id @default(cuid())
+  authorityProofInputJson String?
+  authorityProofChecksum String?
   operationId          String                @unique
   attemptId            String                @unique
   kind                 ScanDispatchStartKind
@@ -3440,6 +3477,8 @@ model ScanExecutionInvocationGuard {
   authorityChecksum String
   actionChecksum    String
   bindingInputJson  String
+  nativeBackendPid  Int?
+  nativeBackendStart DateTime?                         @db.Timestamptz(6)
   createdAt         DateTime                           @default(now())
   attempt           ScanDispatchAttempt                @relation(fields: [operationId, attemptId], references: [operationId, attemptId], onDelete: Restrict)
   resolution        ScanExecutionInvocationResolution?

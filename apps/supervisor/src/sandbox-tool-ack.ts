@@ -77,7 +77,8 @@ export class SandboxToolAcknowledgements {
         validateSandboxToolOutput(await this.responses.load(binding, requestId, proof), latest)
         return proof
       }
-      if (latest.type !== "tool_started") throw new Error("sandbox tool outcome unresolved")
+      if (latest.type !== "tool_started" && latest.type !== "tool_mutated")
+        throw new Error("sandbox tool outcome unresolved")
       if (!this.observer) throw new Error("sandbox terminal observer unavailable")
       const response = await observeSandboxToolTerminal(this.observer, binding, latest)
       const proof = await this.responses.retain(binding, requestId, response)
@@ -90,7 +91,8 @@ export class SandboxToolAcknowledgements {
     binding = sandboxToolResponseBindingSchema.parse(binding)
     return this.exclusive(requestId, async () => {
       const latest = (await this.state(binding, requestId)).at(-1)!
-      if (latest.type !== "tool_started") throw new Error("sandbox tool outcome unresolved")
+      if (latest.type !== "tool_started" && latest.type !== "tool_mutated")
+        throw new Error("sandbox tool outcome unresolved")
       if (!this.observer) throw new Error("sandbox terminal observer unavailable")
       const observed = await observeSandboxToolTerminal(this.observer, binding, latest)
       const { response, proof } = await this.responses.recover(binding, requestId)

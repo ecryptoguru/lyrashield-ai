@@ -104,7 +104,7 @@ describe("exact protected provider action evidence", () => {
 })
 
 describe("sandbox tool authority", () => {
-  it("fails closed even with a bound workspace and the preparation gate held", async () => {
+  it("fails closed without a retained authenticated tool intent despite a held gate", async () => {
     const rows = [
       [{ workspaceId: "workspace-original", accountId: "account", userId: "user" }],
       [],
@@ -126,7 +126,7 @@ describe("sandbox tool authority", () => {
         commandId: "prepare-original",
         executorKey: "sandbox",
       })
-    ).rejects.toThrow("Current scan execution action authority is unavailable")
-    expect(query).toHaveBeenCalledTimes(3)
+    ).rejects.toThrow("Authenticated sandbox tool authority is unavailable")
+    expect(query).toHaveBeenCalledTimes(4)
   })
 })

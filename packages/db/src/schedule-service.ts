@@ -1,7 +1,7 @@
 import { targetReadScopeWhere } from "./read-query-scope"
 import { prisma } from "./client"
 import { getSystemPrisma } from "./system-client"
-import type { Schedule, ScanGoal, ScanMode, Prisma } from "./generated/prisma"
+import type { Schedule, ScanGoal, ScanMode, Prisma, Target } from "./generated/prisma"
 import { createScan } from "./scan-service"
 import { withWorkspaceRLS } from "./rls"
 import { lockUserScanAdmission } from "./scan-slot"
@@ -218,7 +218,12 @@ function pendingOccurrenceWhere(schedule: Schedule, now: Date): Prisma.ScheduleW
  * this scan. The claim and shared scan/slot/reservation creation commit together.
  * A crash before commit or any admission contention leaves the timestamp due.
  */
-export async function createScheduledScan(schedule: Schedule, now: Date, nextRunAt: Date) {
+export async function createScheduledScan(
+  schedule: Schedule,
+  now: Date,
+  nextRunAt: Date,
+  source?: Parameters<typeof createScan>[0]["source"]
+) {
   if (nextRunAt <= now) throw new Error("schedule_next_run_must_be_future")
   return withWorkspaceRLS(schedule.workspaceId, async (tx) => {
     // Preserve the global user-first order before locking the occurrence row.
@@ -242,6 +247,7 @@ export async function createScheduledScan(schedule: Schedule, now: Date, nextRun
         mode: schedule.mode,
         createdById: schedule.createdById,
         triggerType: "schedule",
+        ...(source ? { source } : {}),
       },
       tx
     )
@@ -347,7 +353,16 @@ export async function claimDueSchedule(
   return result.count === 1
 }
 
-export async function getDueSchedules(now: Date, afterId?: string): Promise<ScheduleWithDetails[]> {
+export async function getDueSchedules(
+  now: Date,
+  afterId?: string
+): Promise<
+  Array<
+    ScheduleWithDetails & {
+      target: Pick<Target, "installationId" | "repoOwner" | "repoName" | "repoFullName" | "branch">
+    }
+  >
+> {
   // The schedule runner is a cross-workspace background process. Use the
   // privileged system client so it can read due schedules from all tenants.
   const schedules = await getSystemPrisma().schedule.findMany({
@@ -361,11 +376,24 @@ export async function getDueSchedules(now: Date, afterId?: string): Promise<Sche
       OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }],
     },
     include: {
-      target: { select: { id: true, name: true, type: true, url: true, apiSpecUrl: true } },
+      target: {
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          url: true,
+          apiSpecUrl: true,
+          installationId: true,
+          repoOwner: true,
+          repoName: true,
+          repoFullName: true,
+          branch: true,
+        },
+      },
     },
     orderBy: { id: "asc" },
     take: 50,
   })
 
-  return schedules as ScheduleWithDetails[]
+  return schedules
 }

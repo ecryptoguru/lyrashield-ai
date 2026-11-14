@@ -34,7 +34,17 @@ const binding = z
 const tool = z
   .object({
     requestId: id,
-    kind: z.enum(["exec", "pty/start"]),
+    kind: z.enum([
+      "exec",
+      "pty/start",
+      "pty/stdin",
+      "pty/terminate",
+      "files/read",
+      "files/write",
+      "workspace/persist",
+      "workspace/hydrate",
+      "state/renew",
+    ]),
     commandId: id,
     prepareCommandId: id,
     invocationGuardId: id,
@@ -47,7 +57,23 @@ const tool = z
       .positive()
       .max(1024 * 1024)
       .optional(),
+    timeoutSeconds: z.number().positive().max(300).optional(),
+    bindingInputJson: z.string().max(4096).optional(),
     execId: hash.optional(),
+    nativeMutationId: id.optional(),
+    nativeReceiptSha256: hash.optional(),
+    nativeTargets: z
+      .array(
+        z
+          .object({
+            execId: hash,
+            originalGuardId: id,
+            sessionId: z.number().int().positive().safe(),
+          })
+          .strict()
+      )
+      .max(32)
+      .optional(),
     responseChecksum: z
       .string()
       .regex(/^sha256:[a-f0-9]{64}$/)
@@ -62,6 +88,7 @@ export const sandboxToolEventSchema = z
       "tool_created",
       "tool_starting",
       "tool_started",
+      "tool_mutated",
       "tool_response",
       "tool_ack",
     ]),
@@ -74,9 +101,23 @@ export const sandboxToolEventSchema = z
   .refine((event) => {
     const terminal = event.type === "tool_response" || event.type === "tool_ack"
     return (
-      (event.type === "tool_intent"
-        ? event.tool.execId === undefined
-        : event.tool.execId !== undefined) &&
+      (event.tool.kind === "pty/stdin" || event.tool.kind === "pty/terminate"
+        ? event.tool.execId === undefined &&
+          (event.type === "tool_intent"
+            ? event.tool.nativeMutationId === undefined &&
+              event.tool.nativeReceiptSha256 === undefined &&
+              event.tool.nativeTargets === undefined
+            : (event.type === "tool_mutated" || terminal) &&
+              event.tool.nativeMutationId === event.tool.invocationGuardId &&
+              event.tool.nativeReceiptSha256 !== undefined &&
+              event.tool.nativeTargets !== undefined &&
+              (event.tool.kind !== "pty/stdin" || event.tool.nativeTargets.length === 1))
+        : event.tool.nativeMutationId === undefined &&
+          event.tool.nativeReceiptSha256 === undefined &&
+          event.tool.nativeTargets === undefined &&
+          (event.type === "tool_intent"
+            ? event.tool.execId === undefined
+            : event.tool.execId !== undefined)) &&
       (terminal
         ? event.tool.responseChecksum !== undefined && event.tool.objectDigest !== undefined
         : event.tool.responseChecksum === undefined && event.tool.objectDigest === undefined)
@@ -98,7 +139,17 @@ export class SandboxToolJournal {
     private readonly sourceSigningSecret: string,
     private readonly epochId: string,
     private readonly supervisorInstanceId: string,
-    ownerSupervisorInstanceId: string
+    ownerSupervisorInstanceId: string,
+    private readonly installation?: {
+      authorizeStream: () => Promise<boolean>
+      authorizeAppend?: (event: SandboxToolEvent) => Promise<boolean>
+      readOnly?: boolean
+      readOperation?: <T>(operation: () => Promise<T>) => Promise<T>
+      publicationWrapper?: Pick<
+        JournalPort<AuthorityEvent<Original>>,
+        "load" | "readRange" | "readRawRange"
+      >
+    }
   ) {
     id.parse(supervisorInstanceId)
     id.parse(ownerSupervisorInstanceId)
@@ -144,6 +195,11 @@ export class SandboxToolJournal {
   }
 
   private async readConfirmed(): Promise<Original[]> {
+    if (this.installation && !(await this.installation.authorizeStream()))
+      throw new IndependentAuthorityError(
+        "AUTHORITY_CONFLICT",
+        "tool stream authority is unavailable"
+      )
     const originals = await this.readSource()
     const confirmed = await this.independent.loadConfirmed()
     if (
@@ -158,7 +214,9 @@ export class SandboxToolJournal {
   }
 
   private exclusive<T>(operation: () => Promise<T>): Promise<T> {
-    const run = (sourceSerial.get(this.source) ?? Promise.resolve()).then(operation)
+    const run = (sourceSerial.get(this.source) ?? Promise.resolve()).then(() =>
+      this.installation?.readOperation ? this.installation.readOperation(operation) : operation()
+    )
     const settled = run.then(
       () => undefined,
       () => undefined
@@ -171,6 +229,34 @@ export class SandboxToolJournal {
 
   async load(): Promise<Original[]> {
     return this.exclusive(() => this.readConfirmed())
+  }
+
+  /** Root publication holds its cross-process gate while these histories are checked. */
+  async withPublication<T>(
+    operation: (ports: {
+      original: JournalPort<SandboxToolEvent>
+      wrapper: Pick<JournalPort<AuthorityEvent<Original>>, "load" | "readRange" | "readRawRange">
+      independent: IndependentAuthorityJournal<Original>
+      validateOriginal: typeof sandboxToolEventSchema.parse
+    }) => Promise<T>
+  ): Promise<T> {
+    return this.exclusive(async () => {
+      const before = await this.readConfirmed()
+      const result = await operation({
+        original: this.source,
+        wrapper: this.installation?.publicationWrapper ?? {
+          load: () => this.independent.loadConfirmed(),
+        },
+        independent: this.independent,
+        validateOriginal: sandboxToolEventSchema.parse,
+      })
+      if (canonicalJson(before) !== canonicalJson(await this.readConfirmed()))
+        throw new IndependentAuthorityError(
+          "AUTHORITY_CONFLICT",
+          "tool history changed during seal publication"
+        )
+      return result
+    })
   }
 
   /** The caller must hold the authenticated attempt fence for this exact ACK. */
@@ -214,6 +300,11 @@ export class SandboxToolJournal {
 
   /** Replay only the exact signed source tail; never repeat a physical tool operation. */
   async recoverExactTail(input: { sequence: number; hash: string }): Promise<Original> {
+    if (this.installation?.readOnly)
+      throw new IndependentAuthorityError(
+        "AUTHORITY_CONFLICT",
+        "publication tool journal is read-only"
+      )
     return this.exclusive(async () => {
       const sequence = z.number().int().positive().safe().parse(input.sequence)
       const expectedHash = hash.parse(input.hash)
@@ -244,6 +335,11 @@ export class SandboxToolJournal {
   }
 
   async append(input: SandboxToolEvent): Promise<Original> {
+    if (this.installation?.readOnly)
+      throw new IndependentAuthorityError(
+        "AUTHORITY_CONFLICT",
+        "publication tool journal is read-only"
+      )
     return this.exclusive(async () => {
       const event = sandboxToolEventSchema.parse(input)
       if (
@@ -278,6 +374,11 @@ export class SandboxToolJournal {
       )
         throw new Error("sandbox tool operation is already recorded or unresolved")
       projectSandboxToolHistory([...history, event])
+      if (this.installation?.authorizeAppend && !(await this.installation.authorizeAppend(event)))
+        throw new IndependentAuthorityError(
+          "AUTHORITY_CONFLICT",
+          "tool append authority is unavailable"
+        )
       const record = await this.source.append(event)
       verifyJournalRecord(record, this.sourceSigningSecret, (value) =>
         sandboxToolEventSchema.parse(value)

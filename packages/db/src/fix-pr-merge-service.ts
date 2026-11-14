@@ -7,6 +7,8 @@ import {
   type ScanMode,
 } from "@lyrashield/types"
 import type { FixPrMergeResult } from "./fix-proposal-service"
+import type { Target } from "./generated/prisma/client"
+import type { CreateScanParams } from "./scan-service-types"
 import { evaluateGateForTarget } from "./gate-evaluation-service"
 import { bindAccountRLSContext, withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
@@ -22,6 +24,21 @@ type FixPrMergeReevaluationOptions = {
   repoFullName: string | undefined
   recoveryIdentity?: { headRepoFullName: string; body: string }
   assertRetestWorkerAvailable: () => Promise<void>
+  resolveRetestSource: (target: Target) => Promise<CreateScanParams["source"]>
+}
+
+function retestTargetIdentity(target: Target): string {
+  return JSON.stringify([
+    target.id,
+    target.workspaceId,
+    target.type,
+    target.installationId,
+    target.repoOwner,
+    target.repoName,
+    target.repoFullName,
+    target.branch,
+    target.updatedAt,
+  ])
 }
 
 async function checkRetestWorkerAvailable(assertAvailable: () => Promise<void>): Promise<void> {
@@ -53,16 +70,43 @@ export async function handleFixPrMergedAndReevaluate({
   repoFullName,
   recoveryIdentity,
   assertRetestWorkerAvailable,
+  resolveRetestSource,
 }: FixPrMergeReevaluationOptions): Promise<FixPrMergeOutcome | null> {
   if (typeof assertRetestAllowed !== "function") {
     throw new Error("Retest admission guard required")
   }
+  if (typeof resolveRetestSource !== "function") throw new Error("Retest source resolver required")
   const [repoOwner, repoName, ...extra] = repoFullName?.split("/") ?? []
   if (repoFullName && (!repoOwner || !repoName || extra.length > 0)) {
     throw new Error("Invalid GitHub repository identity")
   }
   const advisoryKey = `fix-loop:${workspaceId}:${branchName}`
   const anchorContext = { workspaceId, branchName, prNumber, repoOwner, repoName }
+
+  const sourceTarget = await withWorkspaceRLS(workspaceId, async (tx) => {
+    // Observe the current target for a recovery candidate before taking write locks.
+    // handleFixPrMerged still independently authenticates the recovery identity.
+    const anchor = await findFixPrMergeAnchor(tx, anchorContext, false, Boolean(recoveryIdentity))
+    if (!anchor) return null
+    const prior = await tx.retest.findFirst({
+      where: {
+        workspaceId,
+        findingId: anchor.findingId,
+        resultBefore: `Automatic fix PR retest: ${anchor.pullRequestId}`,
+      },
+      select: { id: true },
+    })
+    // Redelivery uses the existing immutable scan; no new provider ref is needed.
+    if (prior) return null
+    return tx.target.findFirst({ where: { workspaceId, id: anchor.targetId, deletedAt: null } })
+  })
+  // The trusted caller resolves provider refs after this read scope closes, before either write lock.
+  const source = sourceTarget ? await resolveRetestSource(sourceTarget) : undefined
+  if (
+    sourceTarget?.type === "REPO" &&
+    !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(source?.revision ?? "")
+  )
+    throw new Error("SCAN_REF_UNRESOLVED")
 
   const { handleFixPrMerged } = await import("./fix-proposal-service")
   // This helper commits merge state separately so failed retest creation can
@@ -116,9 +160,10 @@ export async function handleFixPrMergedAndReevaluate({
       if (pending) return null
       const target = await lockTx.target.findFirst({
         where: { workspaceId, id: anchor.targetId, deletedAt: null },
-        select: { type: true, apiSpecUrl: true },
       })
       if (!target) return null
+      if (!sourceTarget || retestTargetIdentity(target) !== retestTargetIdentity(sourceTarget))
+        throw new Error("SCAN_REF_UNRESOLVED")
       const candidates = await lockTx.findingCandidate.findMany({
         where: { workspaceId, findingId: anchor.findingId, scanId: anchor.sourceScanId },
         select: { scannerSource: true },
@@ -151,6 +196,7 @@ export async function handleFixPrMergedAndReevaluate({
             goal: anchor.template.goal,
             mode: profile.mode as ScanMode,
             determinismMode: profile.determinismMode,
+            ...(source ? { source } : {}),
             policyId: anchor.template.policyId ?? undefined,
             createdById: result.actedById,
             triggerType: "retest",
@@ -226,18 +272,21 @@ async function findFixPrMergeAnchor(
     prNumber?: number
     repoOwner?: string
     repoName?: string
-  }
+  },
+  loadLatestTemplate = true,
+  observeRecovery = false
 ) {
   const pr = await tx.pullRequest.findFirst({
     where: {
       branchName,
       ...(repoOwner && repoName ? { repoOwner, repoName } : {}),
       ...(prNumber ? { OR: [{ prNumber }, { prNumber: null }] } : {}),
-      status: { in: ["open", "merged"] },
+      status: { in: ["open", "merged", ...(observeRecovery ? ["opening", "recovery"] : [])] },
       deletedAt: null,
       fixProposal: { finding: { workspaceId, deletedAt: null } },
     },
     select: {
+      id: true,
       fixProposal: {
         select: {
           finding: {
@@ -254,13 +303,15 @@ async function findFixPrMergeAnchor(
     },
   })
   const finding = pr?.fixProposal?.finding
-  if (!finding?.targetId || !finding.scan) return null
+  if (!pr || !finding?.targetId || !finding.scan) return null
 
-  const latestCompleted = await tx.scan.findFirst({
-    where: { workspaceId, targetId: finding.targetId, status: "COMPLETED", deletedAt: null },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, goal: true, mode: true, policyId: true, targetId: true },
-  })
+  const latestCompleted = loadLatestTemplate
+    ? await tx.scan.findFirst({
+        where: { workspaceId, targetId: finding.targetId, status: "COMPLETED", deletedAt: null },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, goal: true, mode: true, policyId: true, targetId: true },
+      })
+    : null
   const template = latestCompleted ?? finding.scan
   if (!template.targetId) return null
   const retestTemplate: {
@@ -271,6 +322,7 @@ async function findFixPrMergeAnchor(
     targetId: string
   } = { ...template, targetId: template.targetId }
   return {
+    pullRequestId: pr.id,
     findingId: finding.id,
     sourceScanId: finding.scan.id,
     sourceMode: finding.scan.mode,

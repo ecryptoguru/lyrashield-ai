@@ -1,5 +1,10 @@
 import { createServer, type Server } from "node:http"
+import { createHash, randomBytes } from "node:crypto"
 import { describe, expect, it } from "vitest"
+import {
+  requireScanDispatchWorkerAssignment,
+  scanDispatchWorkerReceiptCredential,
+} from "@lyrashield/db/src/scan-dispatch-worker-assignment"
 import { createBrokerHandler } from "./http"
 import type { BrokerService } from "./service"
 
@@ -54,6 +59,154 @@ async function withServer<T>(target: BrokerService, run: (server: Server) => Pro
 }
 
 describe("broker control surface", () => {
+  it("proxies result chunks only under the original scoped worker credential", async () => {
+    const credential = randomBytes(32).toString("hex")
+    let calls = 0
+    await withServer(
+      service({
+        readResult: async (value) => {
+          expect(value).toEqual({ operationId, attemptId: attempt.attemptId, offset: 0 })
+          expect(scanDispatchWorkerReceiptCredential(operationId)).toBe(credential)
+          calls++
+          return { kind: "pending", operationId, attemptId: attempt.attemptId }
+        },
+      }),
+      async (server) => {
+        const send = (body: unknown, tokenValue = credential) =>
+          call(server, `/operations/${operationId}/result`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${tokenValue}`, "content-type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        expect((await send({ attemptId: attempt.attemptId, offset: 0 })).status).toBe(200)
+        expect((await send({ attemptId: attempt.attemptId, offset: 0 }, token)).status).toBe(403)
+        for (const body of [
+          { attemptId: attempt.attemptId, offset: -1 },
+          { attemptId: attempt.attemptId, offset: 0, path: "/tmp/output" },
+        ])
+          expect((await send(body)).status).toBe(400)
+        expect(calls).toBe(1)
+        expect(scanDispatchWorkerReceiptCredential(operationId)).toBeUndefined()
+      }
+    )
+  })
+
+  it("accepts only worker-bound dispatch without caller executor or billing choices", async () => {
+    const workerCredential = randomBytes(32).toString("hex")
+    const digest = createHash("sha256").update(workerCredential).digest("hex")
+    const client = {
+      query: async (sql: string, values?: string[]) =>
+        sql.includes("pg_try")
+          ? { rows: [{ held: true }], rowCount: 1 }
+          : values?.[1] === digest
+            ? { rows: [{ ...attempt, workerGrantId: attempt.workerGrantId }], rowCount: 1 }
+            : { rows: [], rowCount: 0 },
+    } as unknown as Parameters<typeof requireScanDispatchWorkerAssignment>[0]
+    let calls = 0
+    await withServer(
+      service({
+        dispatchPrepared: async (input) => {
+          await requireScanDispatchWorkerAssignment(client, input.operationId)
+          calls++
+          expect(input).toEqual({ ...attempt, operationId })
+          return { kind: "idle", operationId, attemptId: input.attemptId }
+        },
+      }),
+      async (server) => {
+        const path = `/operations/${operationId}/dispatch`
+        const send = (body: unknown, credential = workerCredential) =>
+          call(server, path, {
+            method: "POST",
+            headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        expect((await send(attempt)).status).toBe(200)
+        expect((await send({ ...attempt, executorKey: "sandbox" })).status).toBe(400)
+        expect((await send({ ...attempt, billingMode: "paid" })).status).toBe(400)
+        expect((await send(attempt, token)).status).toBe(403)
+        expect((await send(attempt, randomBytes(32).toString("hex"))).status).toBe(401)
+        expect(calls).toBe(1)
+      }
+    )
+  })
+
+  it("uses assigned worker credentials for scoped routes and rejects worker START authority", async () => {
+    const workerCredential = randomBytes(32).toString("hex")
+    const digest = createHash("sha256").update(workerCredential).digest("hex")
+    const client = {
+      query: async (sql: string, values?: string[]) =>
+        sql.includes("pg_try_advisory_xact_lock")
+          ? { rowCount: 1, rows: [{ held: true }] }
+          : values?.[0] === operationId && values?.[1] === digest
+            ? { rowCount: 1, rows: [{ ...attempt, workerGrantId: "grant-1" }] }
+            : { rowCount: 0, rows: [] },
+    } as unknown as Parameters<typeof requireScanDispatchWorkerAssignment>[0]
+    let starts = 0
+    let stopped = 0
+    const target = service({
+      status: async (id) => {
+        await requireScanDispatchWorkerAssignment(client, id)
+        return {
+          kind: "available",
+          operationId: id,
+          state: "PREPARED",
+          attemptId: "attempt-1",
+          preparationEligibility: "CHECKED_INTENT_ONLY",
+        }
+      },
+      stop: async (input) => {
+        await requireScanDispatchWorkerAssignment(client, input.operationId)
+        stopped++
+        return { kind: "committed", operationId: input.operationId }
+      },
+      startPaid: async () => {
+        starts++
+        return {}
+      },
+    })
+    await withServer(target, async (server) => {
+      const headers = { authorization: `Bearer ${workerCredential}` }
+      expect(await call(server, `/operations/${operationId}`, { headers })).toEqual({
+        status: 200,
+        body: {
+          kind: "available",
+          operationId,
+          state: "PREPARED",
+          attemptId: "attempt-1",
+          preparationEligibility: "CHECKED_INTENT_ONLY",
+        },
+      })
+      expect(await call(server, "/operations/op-other", { headers })).toEqual({
+        status: 401,
+        body: { error: "UNAUTHORIZED" },
+      })
+      expect(
+        await call(server, `/operations/${operationId}`, {
+          headers: { authorization: `Bearer ${randomBytes(32).toString("hex")}` },
+        })
+      ).toEqual({ status: 401, body: { error: "UNAUTHORIZED" } })
+      expect(
+        await call(server, `/operations/${operationId}/stop`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            ...attempt,
+            workerInstanceId: "another-worker",
+            reasonCode: "SCAN_CANCELLED",
+          }),
+        })
+      ).toEqual({ status: 401, body: { error: "UNAUTHORIZED" } })
+      expect(
+        await call(server, `/operations/${operationId}/start-paid`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(attempt),
+        })
+      ).toEqual({ status: 403, body: { error: "CONTROL_AUTHORITY_REQUIRED" } })
+      expect(starts).toBe(0)
+      expect(stopped).toBe(0)
+    })
+  })
   it("leaves liveness open and refuses every other route without the control token", async () => {
     await withServer(service(), async (server) => {
       const address = server.address()

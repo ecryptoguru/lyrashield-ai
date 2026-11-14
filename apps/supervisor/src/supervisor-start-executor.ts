@@ -25,6 +25,9 @@ export function startFencedExecutor(options: {
     async (assertActive, nativeInvocation) => {
       assertActive()
       checkStop()
+      await operations.recordExecutorStartIntent(attempt, command)
+      assertActive()
+      checkStop()
       if (nativeInvocation) {
         await recordNativeStartPlan({
           journal: service.journal,

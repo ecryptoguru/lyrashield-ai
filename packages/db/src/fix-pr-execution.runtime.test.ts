@@ -446,6 +446,7 @@ describe("durable fix PR persistence", () => {
       },
       assertRetestAllowed: async () => {},
       assertRetestWorkerAvailable: async () => {},
+      resolveRetestSource: vi.fn(async () => ({ revision: "a".repeat(40) })),
     }
     expect(
       await handleFixPrMergedAndReevaluate({ ...options, repoFullName: "other/repo" })
@@ -486,10 +487,19 @@ describe("durable fix PR persistence", () => {
     })
     expect(await handleFixPrMergedAndReevaluate(options)).toBeNull()
     await owner.pullRequest.update({ where: { id: intent.id }, data: { prNumber: null } })
+    options.resolveRetestSource.mockClear()
     const first = await handleFixPrMergedAndReevaluate(options)
     expect(first?.retestScanId).toBeTruthy()
+    expect(options.resolveRetestSource).toHaveBeenCalledOnce()
+    expect(options.resolveRetestSource).toHaveBeenCalledWith(
+      expect.objectContaining({ id: `fix-target-${suffix}`, workspaceId, type: "REPO" })
+    )
+    expect(
+      await owner.scan.findUniqueOrThrow({ where: { id: first!.retestScanId } })
+    ).toMatchObject({ executionPlan: { source: { revision: "a".repeat(40) } } })
     const replay = await handleFixPrMergedAndReevaluate(options)
     expect(replay?.retestScanId).toBe(first?.retestScanId)
+    expect(options.resolveRetestSource).toHaveBeenCalledOnce()
     expect(await owner.retest.count({ where: { workspaceId, findingId } })).toBe(1)
     expect(await owner.scan.count({ where: { workspaceId, triggerType: "retest" } })).toBe(1)
     expect(provider.pr.mock.calls.length - before).toBe(1)

@@ -11,6 +11,7 @@ import {
   type AttemptBinding,
   type PrepareCommand,
   type SupervisorCommand,
+  type AuthoritySqlConnection,
 } from "@lyrashield/runtime-control"
 import { ScanDispatchAuthorityError } from "./scan-dispatch-authority-error"
 
@@ -63,11 +64,13 @@ export type ScanPreparationCommandAuthority = Readonly<{
 }>
 
 /** Installed broker code captures protected host policy; this is never a worker request field. */
-export type ScanPreparationCompiler = (
+export type ScanPreparationCompiler = ((
   authority: ScanPreparationCommandAuthority
 ) =>
   | Pick<PrepareCommand, "executors" | "provider">
-  | Promise<Pick<PrepareCommand, "executors" | "provider">>
+  | Promise<Pick<PrepareCommand, "executors" | "provider">>) & {
+  verifyPreparedCommand?: (client: AuthoritySqlConnection, command: PrepareCommand) => Promise<void>
+}
 
 export function readStoredDispatchCommand(
   inputJson: string | null,

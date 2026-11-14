@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { buildScanExecutionPlan } from "@lyrashield/types"
 import { computeScanExecutionPlanHash } from "@lyrashield/db/src/scan-execution-plan"
@@ -13,17 +14,33 @@ const mocks = vi.hoisted(() => ({
   connection: vi.fn(),
   entitlement: vi.fn(),
   update: vi.fn(),
+  terminalUpdate: vi.fn(),
   legacy: vi.fn(),
+  nativeFinalize: vi.fn(),
+  nativeVerify: vi.fn(),
   getJob: vi.fn(),
   provenance: vi.fn(),
+  cleanupProof: vi.fn(),
+  capacityStopped: vi.fn(),
+  releaseSlot: vi.fn(),
 }))
-vi.mock("../run-scan.job", () => ({ processScanJob: mocks.legacy }))
+vi.mock("../run-scan.job", () => ({
+  processScanJob: mocks.legacy,
+  processNativeScanResult: mocks.nativeFinalize,
+}))
+vi.mock("./native-engine-result", () => ({ verifyNativeEngineResult: mocks.nativeVerify }))
 vi.mock("@lyrashield/config", () => ({
   env: { LYRASHIELD_AUTH_ASSESSMENT_ENABLED: "0", LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST: "" },
   evaluateAuthAssessmentAdmission: () => ({ allowed: false }),
   resolveWorkerExecutionProvenance: mocks.provenance,
 }))
-vi.mock("@lyrashield/billing", () => ({ evaluateScanEntitlement: mocks.entitlement }))
+vi.mock("@lyrashield/billing", () => ({
+  evaluateScanEntitlement: mocks.entitlement,
+  confirmScanCapacityStopped: mocks.capacityStopped,
+}))
+vi.mock("@lyrashield/db/src/scan-dispatch-cleanup-proof", () => ({
+  readScanDispatchCleanupProof: mocks.cleanupProof,
+}))
 vi.mock("@lyrashield/integrations", () => ({
   getScanQueue: () => ({ name: "scans", getJob: mocks.getJob }),
 }))
@@ -34,14 +51,16 @@ vi.mock("@lyrashield/db", async () => {
     "@lyrashield/db/src/scan-execution-plan"
   )
   const tx = {
-    scan: { findFirst: mocks.current },
+    scan: {
+      findFirst: (args: { select?: { executionPlan?: boolean } }) =>
+        args.select?.executionPlan ? mocks.scan(args) : mocks.current(args),
+    },
     workspace: { findFirst: mocks.workspace },
     target: { findFirst: mocks.target },
     scanDispatchOperation: { findFirst: mocks.operation },
   }
   return {
     verifyStoredScanExecutionPlan: plan.verifyStoredScanExecutionPlan,
-    getSystemPrisma: () => ({ scan: { findUnique: mocks.scan } }),
     withWorkspaceRLS: (_id: string, work: (value: typeof tx) => unknown) => work(tx),
     runWithWorkspaceContext: (_id: string, work: () => unknown) => work(),
     runWithAccountContext: (_id: string, work: () => unknown) => work(),
@@ -50,9 +69,12 @@ vi.mock("@lyrashield/db", async () => {
       agentConnection: { findFirst: mocks.connection },
     },
     updateUnclaimedScanStatus: mocks.update,
+    updateScanStatus: mocks.terminalUpdate,
     CANONICAL_OPERATIONS: { SCAN_CREATE: "scan.create", RETEST_CREATE: "retest.create" },
     resolveAuthenticatedAssessmentAuthorization: vi.fn(),
     LiveAiSafetyError: class extends Error {},
+    releaseStoppedScanSlot: mocks.releaseSlot,
+    TERMINAL_SCAN_STATUSES: new Set(["CANCELLED", "COMPLETED", "FAILED", "STOPPED_BUDGET"]),
   }
 })
 
@@ -109,6 +131,14 @@ function fixture() {
   const startPaid = vi.fn(),
     startUnmetered = vi.fn()
   const broker = {
+    dispatchPrepared: vi.fn().mockResolvedValue({
+      kind: "committed",
+      operationId: "op-1",
+      attemptId: "attempt-1",
+      state: "START_PENDING",
+      startId: "start-1",
+      commandId: "start-command-1",
+    }),
     prepare: vi.fn().mockResolvedValue({
       kind: "committed",
       operationId: "op-1",
@@ -135,7 +165,7 @@ function fixture() {
       attemptId: "attempt-1",
       commandId: "stop-1",
     }),
-    reconcile: vi.fn(),
+    reconcile: vi.fn().mockResolvedValue({ kind: "unknown", operationId: "op-1" }),
     startPaid,
     startUnmetered,
   }
@@ -185,6 +215,88 @@ function barrier() {
 }
 
 describe("broker worker boundary and retained authority", () => {
+  it.each(["STOPPED", "NEVER_DISPATCHED"])(
+    "recognizes %s while requiring independent cleanup proof before release",
+    async (status) => {
+      const f = fixture()
+      mocks.current.mockResolvedValue({ status: "FAILED", deletedAt: null })
+      f.broker.consumeSupervisorReceipts.mockResolvedValue({
+        operationId: "op-1",
+        confirmedSequence: 1,
+        receipts: 1,
+        dispositions: [{ commandId: "command-one", status, observedStatus: status }],
+      })
+      f.broker.status.mockResolvedValue({
+        kind: "available",
+        operationId: "op-1",
+        state: "TERMINATED",
+        attemptId: "attempt-1",
+      })
+      mocks.cleanupProof.mockResolvedValue(null)
+      expect((await f.processor(f.job)).errorCategory).toBe("BROKER_CLEANUP_PROOF_UNAVAILABLE")
+      expect(mocks.capacityStopped).not.toHaveBeenCalled()
+      expect(mocks.releaseSlot).not.toHaveBeenCalled()
+      expect(mocks.nativeFinalize).not.toHaveBeenCalled()
+    }
+  )
+  it("keeps command ACKs bounded separately from short authority reads and never replays a timed-out START", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+    try {
+      const late = fixture()
+      late.broker.status.mockResolvedValue({
+        kind: "available",
+        operationId: "op-1",
+        state: "PREPARED",
+        attemptId: "attempt-1",
+      })
+      late.broker.dispatchPrepared.mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  kind: "committed",
+                  operationId: "op-1",
+                  attemptId: "attempt-1",
+                  state: "START_PENDING",
+                  startId: "start-1",
+                  commandId: "command-one",
+                }),
+              35_000
+            )
+          )
+      )
+      const pending = late.processor(late.job)
+      await vi.waitFor(() => expect(late.broker.dispatchPrepared).toHaveBeenCalledOnce())
+      await vi.advanceTimersByTimeAsync(35_001)
+      expect((await pending).errorCategory).toBe("BROKER_START_PENDING")
+      expect(late.broker.dispatchPrepared).toHaveBeenCalledOnce()
+      const stalled = fixture()
+      stalled.broker.status.mockResolvedValue({
+        kind: "available",
+        operationId: "op-1",
+        state: "PREPARED",
+        attemptId: "attempt-1",
+      })
+      stalled.broker.dispatchPrepared.mockImplementation(() => new Promise(() => {}))
+      const unknown = stalled.processor(stalled.job)
+      await vi.waitFor(() => expect(stalled.broker.dispatchPrepared).toHaveBeenCalledOnce())
+      await vi.advanceTimersByTimeAsync(40_001)
+      expect((await unknown).errorCategory).toBe("BROKER_OUTCOME_UNKNOWN")
+      expect(stalled.broker.dispatchPrepared).toHaveBeenCalledOnce()
+      const read = fixture()
+      read.broker.status.mockImplementation(() => new Promise(() => {}))
+      const readUnknown = read.processor(read.job)
+      await vi.waitFor(() => expect(read.broker.status).toHaveBeenCalledOnce())
+      await vi.advanceTimersByTimeAsync(5001)
+      expect((await readUnknown).errorCategory).toBe("BROKER_OUTCOME_UNKNOWN")
+      expect(read.broker.prepare).not.toHaveBeenCalled()
+      expect(read.broker.dispatchPrepared).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   beforeEach(() => {
     vi.resetAllMocks()
     mocks.provenance.mockReturnValue(provenance)
@@ -242,10 +354,47 @@ describe("broker worker boundary and retained authority", () => {
     expect(mocks.scan).not.toHaveBeenCalled()
     expect(mocks.legacy).not.toHaveBeenCalled()
   })
+  it.each([false, true])(
+    "releases stopped runtime holds only after exact physical proof (paid=%s)",
+    async (paid) => {
+      const f = fixture()
+      mocks.current.mockResolvedValue({ status: "CANCELLED", deletedAt: null })
+      f.broker.status.mockResolvedValue({
+        kind: "available",
+        operationId: "op-1",
+        state: "TERMINATED",
+        attemptId: "attempt-1",
+      })
+      mocks.cleanupProof.mockResolvedValue(null)
+      expect((await f.processor(f.job)).errorCategory).toBe("BROKER_CLEANUP_PROOF_UNAVAILABLE")
+      expect(mocks.capacityStopped).not.toHaveBeenCalled()
+      expect(mocks.releaseSlot).not.toHaveBeenCalled()
+      mocks.cleanupProof.mockResolvedValue({
+        noBillableWork: !paid,
+        billingDisposition: paid ? "settlement_required" : "nonbillable",
+      })
+      expect((await f.processor(f.job)).errorCategory).toBe(
+        paid ? "BROKER_SETTLEMENT_REQUIRED" : "BROKER_DISPATCH_STOPPED"
+      )
+      expect(mocks.capacityStopped).toHaveBeenCalledWith(
+        "ws-1",
+        "scan-1",
+        !paid,
+        paid ? "settlement_required" : "nonbillable"
+      )
+      expect(mocks.releaseSlot).toHaveBeenCalledWith("ws-1", "scan-1")
+      expect(mocks.update).not.toHaveBeenCalled()
+    }
+  )
   it("selects legacy only through explicit startup compatibility, never queue fields", async () => {
     const { job } = fixture()
     job.data = Object.assign({}, data, { authorityMode: "broker", payerId: "attacker" })
-    await processWorkerScanJob(job)
+    expect((await processWorkerScanJob(job)).errorCategory).toBe("BROKER_AUTHORITY_CLOSED")
+    expect(mocks.legacy).not.toHaveBeenCalled()
+    await createWorkerScanJobProcessor({
+      kind: "legacy",
+      compatibility: "existing-production-baseline",
+    })(job)
     expect(mocks.legacy).toHaveBeenCalledExactlyOnceWith(job)
     const invalid = createWorkerScanJobProcessor({
       kind: "legacy",
@@ -273,6 +422,66 @@ describe("broker worker boundary and retained authority", () => {
     expect(broker.startUnmetered).not.toHaveBeenCalled()
     expect(mocks.legacy).not.toHaveBeenCalled()
     expect(mocks.update).not.toHaveBeenCalled()
+  })
+  it.each([
+    ["WEB_APP", "SAFE"],
+    ["WEB_APP", "QUICK"],
+    ["API", "SAFE"],
+    ["API", "QUICK"],
+  ] as const)(
+    "runs only the stored %s %s plan through canonical deterministic finalization",
+    async (targetType, mode) => {
+      const f = fixture()
+      const deterministicPlan = buildScanExecutionPlan({ targetType, mode })
+      const deterministicHash = computeScanExecutionPlanHash(deterministicPlan)
+      const currentScan = {
+        ...stored,
+        mode,
+        executionPlan: deterministicPlan,
+        executionPlanHash: deterministicHash,
+      }
+      f.job.data = { ...data, mode }
+      mocks.scan.mockResolvedValue(currentScan)
+      mocks.getJob.mockResolvedValue({
+        id: data.scanId,
+        name: "scan",
+        data: f.job.data,
+        getState: async () => "waiting",
+      })
+      mocks.target.mockResolvedValue({ type: targetType })
+      f.publication.verifyDispatch.mockResolvedValue({
+        kind: "published",
+        row: {
+          operationId: "op-1",
+          id: data.scanId,
+          workspaceId: data.workspaceId,
+          executionPlanHash: deterministicHash,
+          requestDigest: "d".repeat(64),
+          payloadInputJson: buildScanQueuePayload(currentScan, data.focus),
+        },
+      })
+      expect(await f.processor(f.job)).toEqual({ status: "completed" })
+      expect(mocks.legacy).toHaveBeenCalledExactlyOnceWith(f.job)
+      expect(f.broker.prepare).not.toHaveBeenCalled()
+      expect(f.broker.startPaid).not.toHaveBeenCalled()
+      expect(f.broker.startUnmetered).not.toHaveBeenCalled()
+      f.broker.status.mockResolvedValue({
+        kind: "available",
+        operationId: "op-1",
+        state: "PREPARED",
+        attemptId: "attempt-1",
+      })
+      expect((await f.processor(f.job)).errorCategory).toBe("BROKER_DISPATCH_PENDING")
+      expect(mocks.legacy).toHaveBeenCalledTimes(1)
+      expect(f.broker.dispatchPrepared).not.toHaveBeenCalled()
+    }
+  )
+  it("rejects a changed stored target type before canonical deterministic execution", async () => {
+    const f = fixture()
+    mocks.target.mockResolvedValue({ type: "API" })
+    expect((await f.processor(f.job)).errorCategory).toBe("SCAN_AUTHORIZATION_REVOKED")
+    expect(mocks.legacy).not.toHaveBeenCalled()
+    expect(f.broker.prepare).not.toHaveBeenCalled()
   })
   it("retains capacity and unknown preparation outcomes without starting work", async () => {
     const { job, processor, broker } = fixture()
@@ -430,7 +639,7 @@ describe("broker worker boundary and retained authority", () => {
       expect(mocks.legacy).not.toHaveBeenCalled()
     }
   )
-  it("never synthesizes a prepared receipt or starts from PREPARED/UNKNOWN", async () => {
+  it("requests only server-selected START from authentic PREPARED and retains UNKNOWN", async () => {
     const { processor, job, broker } = fixture()
     broker.status.mockResolvedValue({
       kind: "available",
@@ -438,7 +647,14 @@ describe("broker worker boundary and retained authority", () => {
       state: "PREPARED",
       attemptId: "attempt-1",
     })
-    expect((await processor(job)).errorCategory).toBe("BROKER_RECEIPT_BRIDGE_UNAVAILABLE")
+    expect((await processor(job)).errorCategory).toBe("BROKER_START_PENDING")
+    expect(broker.dispatchPrepared).toHaveBeenCalledWith({
+      operationId: "op-1",
+      attemptId: "attempt-1",
+      authorityEpochId: "epoch-1",
+      workerInstanceId: "worker-1",
+      workerGrantId: "grant-1",
+    })
     broker.status.mockResolvedValue({
       kind: "available",
       operationId: "op-1",
@@ -451,6 +667,136 @@ describe("broker worker boundary and retained authority", () => {
     expect(broker.startUnmetered).not.toHaveBeenCalled()
     expect(mocks.legacy).not.toHaveBeenCalled()
   })
+  it("routes retained UNKNOWN to server-selected cleanup without worker-selected STOP bytes", async () => {
+    const f = fixture()
+    f.installation.authority.expiresAt = new Date(0)
+    f.installation.cleanup = {
+      inventory: vi.fn().mockResolvedValue([
+        {
+          operationId: "op-1",
+          workspaceId: "ws-1",
+          scanId: "scan-1",
+          attemptId: "attempt-1",
+          state: "UNKNOWN",
+        },
+      ]),
+    }
+    await createBrokerWorkerAuthorityAdapter(f.installation).reconcileRetained()
+    expect(f.broker.reconcile).toHaveBeenCalledWith({
+      operationId: "op-1",
+      attemptId: "attempt-1",
+      authorityEpochId: "epoch-1",
+      workerInstanceId: "worker-1",
+      workerGrantId: "grant-1",
+    })
+    expect(f.broker.stop).not.toHaveBeenCalled()
+    expect(f.broker.prepare).not.toHaveBeenCalled()
+    expect(f.broker.startPaid).not.toHaveBeenCalled()
+  })
+
+  it("releases retained cleanup only after the exact terminal proof and keeps paid settlement required", async () => {
+    const f = fixture()
+    f.installation.authority.expiresAt = new Date(0)
+    f.installation.cleanup = {
+      inventory: vi.fn().mockResolvedValue([
+        {
+          operationId: "op-1",
+          workspaceId: "ws-1",
+          scanId: "scan-1",
+          attemptId: "attempt-1",
+          state: "TERMINATED",
+        },
+      ]),
+    }
+    const adapter = createBrokerWorkerAuthorityAdapter(f.installation)
+    for (const proof of [
+      null,
+      { operationId: "op-1", attemptId: "foreign-attempt", authorityEpochId: "epoch-1" },
+    ]) {
+      mocks.cleanupProof.mockResolvedValue(proof)
+      await adapter.reconcileRetained()
+      expect(mocks.terminalUpdate).not.toHaveBeenCalled()
+      expect(mocks.capacityStopped).not.toHaveBeenCalled()
+      expect(mocks.releaseSlot).not.toHaveBeenCalled()
+    }
+    mocks.cleanupProof.mockResolvedValue({
+      operationId: "op-1",
+      attemptId: "attempt-1",
+      authorityEpochId: "epoch-1",
+      noBillableWork: false,
+      billingDisposition: "settlement_required",
+    })
+    await adapter.reconcileRetained()
+    expect(mocks.terminalUpdate).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({ errorCategory: "SCAN_AUTHORIZATION_REVOKED" }),
+      "ws-1"
+    )
+    expect(mocks.capacityStopped).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      false,
+      "settlement_required"
+    )
+    expect(mocks.releaseSlot).toHaveBeenCalledWith("ws-1", "scan-1")
+    expect(f.broker.prepare).not.toHaveBeenCalled()
+    expect(mocks.nativeFinalize).not.toHaveBeenCalled()
+  })
+
+  it("uses root retained inventory to deliver exact cleanup after grant expiry without positive execution", async () => {
+    const f = fixture()
+    f.installation.authority.expiresAt = new Date(0)
+    const inventory = vi.fn().mockResolvedValue([
+      {
+        operationId: "op-1",
+        workspaceId: "ws-1",
+        scanId: "scan-1",
+        attemptId: "attempt-1",
+        state: "ACTIVE",
+      },
+    ])
+    f.installation.cleanup = { inventory }
+    const adapter = createBrokerWorkerAuthorityAdapter(f.installation)
+    expect(await adapter.isCurrent()).toBe(false)
+    await adapter.reconcileRetained()
+    expect(f.broker.stop).toHaveBeenCalledWith({
+      operationId: "op-1",
+      attemptId: "attempt-1",
+      authorityEpochId: "epoch-1",
+      workerInstanceId: "worker-1",
+      workerGrantId: "grant-1",
+      reasonCode: "SCAN_AUTHORIZATION_REVOKED",
+    })
+    expect(f.broker.prepare).not.toHaveBeenCalled()
+    expect(f.broker.dispatchPrepared).not.toHaveBeenCalled()
+    expect(f.broker.startPaid).not.toHaveBeenCalled()
+    expect(mocks.nativeFinalize).not.toHaveBeenCalled()
+  })
+
+  it("delivers cleanup for revoked admission after START without creating more execution", async () => {
+    const { broker, processor, job } = fixture()
+    mocks.member.mockResolvedValue(null)
+    broker.status.mockResolvedValue({
+      kind: "available",
+      operationId: "op-1",
+      state: "ACTIVE",
+      attemptId: "attempt-1",
+    })
+    expect((await processor(job)).errorCategory).toBe("SCAN_AUTHORIZATION_REVOKED")
+    expect(broker.stop).toHaveBeenCalledWith({
+      operationId: "op-1",
+      attemptId: "attempt-1",
+      authorityEpochId: "epoch-1",
+      workerInstanceId: "worker-1",
+      workerGrantId: "grant-1",
+      reasonCode: "SCAN_AUTHORIZATION_REVOKED",
+    })
+    expect(broker.prepare).not.toHaveBeenCalled()
+    expect(broker.dispatchPrepared).not.toHaveBeenCalled()
+    expect(broker.startPaid).not.toHaveBeenCalled()
+  })
+
   it("cancels only the persisted attempt and retains a lost stop ACK", async () => {
     const { processor, job, broker } = fixture()
     mocks.current.mockResolvedValue({ status: "CANCELLED", deletedAt: null })
@@ -524,5 +870,122 @@ describe("broker worker boundary and retained authority", () => {
         adapter: createBrokerWorkerAuthorityAdapter(),
       })
     ).toBe(false)
+  })
+  it("reconciles only current root-assigned retained queue identities on the existing tick", async () => {
+    const f = fixture()
+    const inventory = vi.fn().mockResolvedValue([
+      {
+        operationId: "op-1",
+        workspaceId: data.workspaceId,
+        scanId: data.scanId,
+        attemptId: "attempt-1",
+        state: "ACTIVE",
+      },
+    ])
+    f.installation.results = { read: vi.fn().mockResolvedValue(null), proof: vi.fn(), inventory }
+    f.broker.status.mockResolvedValue({
+      kind: "available",
+      operationId: "op-1",
+      state: "ACTIVE",
+      attemptId: "attempt-1",
+    } as never)
+    mocks.getJob.mockResolvedValue(f.job)
+    const adapter = createBrokerWorkerAuthorityAdapter(f.installation)
+    await adapter.reconcileRetained()
+    expect(inventory).toHaveBeenCalledWith(undefined)
+    expect(f.broker.dispatchPrepared).toHaveBeenCalledWith(
+      expect.objectContaining({ operationId: "op-1", attemptId: "attempt-1" })
+    )
+    expect(f.publication.verifyDispatch).not.toHaveBeenCalled()
+    mocks.getJob.mockResolvedValue({ ...f.job, id: "other-scan" })
+    f.broker.dispatchPrepared.mockClear()
+    await adapter.reconcileRetained()
+    expect(f.broker.dispatchPrepared).not.toHaveBeenCalled()
+  })
+  it("requires independent root output proof and exact cleanup before shared native finalization", async () => {
+    const f = fixture()
+    const native = {
+      action: { operationId: "op-1", attemptId: "attempt-1", authorityEpochId: "epoch-1" },
+      cleanup: vi.fn(),
+    }
+    mocks.nativeVerify.mockReturnValue(native)
+    f.broker.status.mockResolvedValue({
+      kind: "available",
+      operationId: "op-1",
+      state: "ACTIVE",
+      attemptId: "attempt-1",
+    } as never)
+    const proof = vi.fn().mockResolvedValue({})
+    f.installation.results = {
+      read: vi.fn().mockResolvedValue(Buffer.from("fixture bytes")),
+      proof,
+      inventory: vi.fn(),
+    }
+    const adapter = createBrokerWorkerAuthorityAdapter(f.installation)
+    mocks.cleanupProof.mockResolvedValue(null)
+    await adapter.process(f.job)
+    expect(proof).toHaveBeenCalledWith("op-1")
+    expect(f.broker.stop).toHaveBeenCalledWith(
+      expect.objectContaining({ reasonCode: "ENGINE_OUTPUT_CAPTURED" })
+    )
+    expect(native.cleanup).toHaveBeenCalled()
+    expect(mocks.nativeFinalize).not.toHaveBeenCalled()
+    f.broker.status.mockResolvedValue({
+      kind: "available",
+      operationId: "op-1",
+      state: "TERMINATED",
+      attemptId: "attempt-1",
+    } as never)
+    mocks.cleanupProof.mockResolvedValue({
+      operationId: "op-1",
+      attemptId: "attempt-1",
+      authorityEpochId: "epoch-1",
+      noBillableWork: false,
+      billingDisposition: "settlement_required",
+    })
+    mocks.nativeFinalize.mockResolvedValue({ status: "completed" })
+    await expect(adapter.process(f.job)).resolves.toEqual({ status: "completed" })
+    expect(mocks.nativeFinalize).toHaveBeenCalledWith(f.job, native)
+    expect(mocks.legacy).not.toHaveBeenCalled()
+  })
+  it("cleans exact root-authenticated finished resources while retaining incomplete output", async () => {
+    const f = fixture(),
+      bytes = Buffer.from("actual bounded fixture archive")
+    const action = {
+      operationId: "op-1",
+      attemptId: "attempt-1",
+      scanId: data.scanId,
+      workspaceId: data.workspaceId,
+      authorityEpochId: "epoch-1",
+      phase: "EXECUTOR_CREATE",
+      executorKey: "engine",
+    }
+    f.installation.results = {
+      read: vi.fn().mockResolvedValue(bytes),
+      proof: vi.fn().mockResolvedValue({
+        action,
+        sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+        totalBytes: bytes.length,
+      }),
+      inventory: vi.fn(),
+    }
+    f.broker.status.mockResolvedValue({
+      kind: "available",
+      operationId: "op-1",
+      state: "ACTIVE",
+      attemptId: "attempt-1",
+    } as never)
+    mocks.nativeVerify.mockImplementation(() => {
+      throw new Error("source unavailable")
+    })
+    const adapter = createBrokerWorkerAuthorityAdapter(f.installation)
+    await expect(adapter.process(f.job)).resolves.toMatchObject({
+      errorCategory: "BROKER_RESULT_INCOMPLETE",
+    })
+    expect(f.broker.stop).toHaveBeenCalledWith(
+      expect.objectContaining({ reasonCode: "ENGINE_OUTPUT_INCOMPLETE" })
+    )
+    expect(mocks.nativeFinalize).not.toHaveBeenCalled()
+    expect(mocks.capacityStopped).not.toHaveBeenCalled()
   })
 })

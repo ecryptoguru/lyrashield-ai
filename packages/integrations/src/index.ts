@@ -23,6 +23,12 @@ export {
   createPullRequest,
 } from "./github"
 export type { GitHubRepo, InstallationInfo } from "./github"
+export {
+  resolveRepositoryScanSource,
+  RepositorySourceUnavailableError,
+  type RepositoryScanTarget,
+  type RepositoryScanSourceOptions,
+} from "./repository-scan-source"
 
 export {
   sendNotification,

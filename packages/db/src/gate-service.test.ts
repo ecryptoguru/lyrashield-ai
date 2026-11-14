@@ -80,6 +80,11 @@ const workerAvailable = vi.fn(async () => {
     throw new Error("Redis worker admission check ran inside a database transaction")
   }
 })
+const resolveRetestSource = vi.fn(async () => {
+  if (rlsTransactionNestingGuard.depth > 0)
+    throw new Error("Source resolution ran inside a database transaction")
+  return { revision: "a".repeat(40) }
+})
 const handleFixPrMergedAndReevaluate = (workspaceId: string, branch: string, prNumber?: number) =>
   handleMerge({
     workspaceId,
@@ -88,6 +93,7 @@ const handleFixPrMergedAndReevaluate = (workspaceId: string, branch: string, prN
     assertRetestAllowed: admission,
     repoFullName: undefined,
     assertRetestWorkerAvailable: workerAvailable,
+    resolveRetestSource,
   })
 
 const mockPrisma = prisma as unknown as {
@@ -174,6 +180,41 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
       rlsTransactionNestingGuard.enabled = false
       rlsTransactionNestingGuard.depth = 0
     }
+  })
+
+  it("pins the current target source before write locks and preserves it in the retest plan", async () => {
+    await handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+    expect(resolveRetestSource).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "target-1", type: "REPO" })
+    )
+    expect(createScan).toHaveBeenCalledWith(
+      expect.objectContaining({ source: { revision: "a".repeat(40) } }),
+      expect.anything()
+    )
+    expect(resolveRetestSource.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPrisma.pullRequest.update.mock.invocationCallOrder[0]!
+    )
+  })
+
+  it("does not create a retest when source resolution fails", async () => {
+    resolveRetestSource.mockRejectedValueOnce(new Error("SCAN_REF_UNRESOLVED"))
+    await expect(
+      handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+    ).rejects.toThrow("SCAN_REF_UNRESOLVED")
+    expect(createScan).not.toHaveBeenCalled()
+    expect(mockPrisma.pullRequest.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects target changes between source observation and the locked scan plan", async () => {
+    mockPrisma.target.findFirst.mockResolvedValueOnce({
+      id: "target-1",
+      type: "REPO",
+      branch: "old-branch",
+    })
+    await expect(
+      handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+    ).rejects.toThrow("SCAN_REF_UNRESOLVED")
+    expect(createScan).not.toHaveBeenCalled()
   })
 
   it("checks Redis worker availability before opening the retest lock transaction", async () => {
@@ -316,6 +357,7 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
     expect(createScan).not.toHaveBeenCalled()
     vi.mocked(prisma.retest.findFirst)
       .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ id: "pending" } as never)
     expect(
       await handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
@@ -330,7 +372,7 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
     expect(prisma.retest.create).not.toHaveBeenCalled()
   })
   it("reuses the durable queued scan on delivery retry", async () => {
-    vi.mocked(prisma.retest.findFirst).mockResolvedValueOnce({
+    vi.mocked(prisma.retest.findFirst).mockResolvedValue({
       id: "retest-existing",
       scanId: "queued-1",
       scan: { status: "QUEUED", mode: "SAFE", goal: "Review", policyId: null },
@@ -338,6 +380,7 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
     const result = await handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
     expect(result?.retestScanId).toBe("queued-1")
     expect(createScan).not.toHaveBeenCalled()
+    expect(resolveRetestSource).not.toHaveBeenCalled()
     expect(prisma.$executeRaw).toHaveBeenCalled()
   })
   it("fails closed without the injected admission boundary", async () => {
@@ -349,6 +392,7 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
         assertRetestAllowed: undefined as never,
         repoFullName: undefined,
         assertRetestWorkerAvailable: workerAvailable,
+        resolveRetestSource,
       })
     ).rejects.toThrow("Retest admission guard required")
   })

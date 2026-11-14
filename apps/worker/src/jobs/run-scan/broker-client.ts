@@ -93,6 +93,20 @@ const stopResult = z.discriminatedUnion("kind", [
     })
     .strict(),
 ])
+const dispatchResult = z.discriminatedUnion("kind", [
+  unknown,
+  z.object({ kind: z.literal("idle"), operationId: id, attemptId: id }).strict(),
+  z
+    .object({
+      kind: z.literal("committed"),
+      operationId: id,
+      attemptId: id,
+      state: z.literal("START_PENDING"),
+      startId: id,
+      commandId: id,
+    })
+    .strict(),
+])
 const reconcileResult = z.discriminatedUnion("kind", [
   unknown,
   z
@@ -101,7 +115,7 @@ const reconcileResult = z.discriminatedUnion("kind", [
       operationId: id,
       attemptId: id,
       commandId: id,
-      state: z.literal("UNKNOWN"),
+      state: z.enum(["UNKNOWN", "STOPPING"]),
     })
     .strict(),
 ])
@@ -114,7 +128,7 @@ const receiptResult = z
       z
         .object({
           commandId: id,
-          status: z.enum(["HELD", "UNKNOWN", "PREPARED"]),
+          status: z.enum(["HELD", "UNKNOWN", "PREPARED", "STARTED", "STOPPED", "NEVER_DISPATCHED"]),
           observedStatus: z.string().min(1).max(128),
         })
         .strict()
@@ -122,14 +136,16 @@ const receiptResult = z
   })
   .strict()
 
-/** Construct only from protected worker installation credentials. No network URL is accepted. */
-export function createWorkerBrokerClient(controlToken: string): WorkerBrokerInstallation["broker"] {
+/** Use the persisted worker-instance grant credential, never the broker control token. */
+export function createWorkerBrokerClient(
+  workerCredential: string
+): WorkerBrokerInstallation["broker"] {
   if (
-    typeof controlToken !== "string" ||
-    controlToken.length < 32 ||
-    controlToken.length > 1024 ||
-    controlToken.trim() !== controlToken ||
-    /[\r\n]/.test(controlToken)
+    typeof workerCredential !== "string" ||
+    workerCredential.length < 32 ||
+    workerCredential.length > 1024 ||
+    workerCredential.trim() !== workerCredential ||
+    /[\r\n]/.test(workerCredential)
   )
     throw new Error("Broker control credential unavailable")
 
@@ -145,7 +161,7 @@ export function createWorkerBrokerClient(controlToken: string): WorkerBrokerInst
           method,
           path,
           headers: {
-            authorization: `Bearer ${controlToken}`,
+            authorization: `Bearer ${workerCredential}`,
             accept: "application/json",
             ...(raw === undefined ? {} : { "content-type": "application/json" }),
           },
@@ -168,7 +184,10 @@ export function createWorkerBrokerClient(controlToken: string): WorkerBrokerInst
           })
         }
       )
-      const timer = setTimeout(() => finish(true), 4000)
+      const command =
+        method === "POST" &&
+        (path === "/operations/prepare" || /\/(dispatch|stop|reconcile)$/.test(path))
+      const timer = setTimeout(() => finish(true), command ? 35_000 : 4000)
       function finish(failed: boolean, result?: unknown) {
         if (settled) return
         settled = true
@@ -183,6 +202,18 @@ export function createWorkerBrokerClient(controlToken: string): WorkerBrokerInst
     })
 
   return {
+    async dispatchPrepared(input) {
+      const { operationId, ...body } = attempt.parse(input)
+      const result = dispatchResult.parse(
+        await call("POST", `/operations/${operationId}/dispatch`, body)
+      )
+      if (
+        result.operationId !== operationId ||
+        ("attemptId" in result && result.attemptId !== body.attemptId)
+      )
+        throw new Error("Broker operation mismatch")
+      return result
+    },
     async prepare(input) {
       const parsed = prepareInput.parse(input)
       const result = prepareResult.parse(await call("POST", "/operations/prepare", parsed))

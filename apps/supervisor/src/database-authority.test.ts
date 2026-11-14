@@ -26,7 +26,7 @@ vi.mock("@lyrashield/runtime-control", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/runtime-control")>()
   return {
     ...actual,
-    createInstalledExecutionAuthorityCapability: () => ({
+    createSupervisorExecutionAuthorityCapability: () => ({
       verifyAction: async () => {
         if (!fixture.hostAvailable) throw new Error("installed authority unavailable")
         return fixture.installed

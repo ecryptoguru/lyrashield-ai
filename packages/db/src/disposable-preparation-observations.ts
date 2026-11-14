@@ -1,10 +1,8 @@
 import { execFileSync } from "node:child_process"
-import { createHash } from "node:crypto"
-import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from "node:fs"
-import { join } from "node:path"
+import { lstatSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { z } from "zod"
-import { canonicalJson, sha256Hex } from "@lyrashield/runtime-control"
+import { canonicalJson, readSourceTree } from "@lyrashield/runtime-control"
 import {
   disposableExecutionContextSchema,
   preparationProofFailure,
@@ -104,41 +102,6 @@ export function inspectDisposablePreparationImage(
     entrypoint,
   }
 }
-function stagedFileChecksum(path: string, maximum: number) {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- validated staged leaf; no-follow descriptor prevents pathname substitution
-  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
-  try {
-    const before = fstatSync(fd)
-    if (
-      !before.isFile() ||
-      before.nlink !== 1 ||
-      before.size > maximum ||
-      before.uid !== process.getuid?.() ||
-      (before.mode & 0o022) !== 0
-    )
-      preparationProofFailure()
-    const bytes = Buffer.allocUnsafe(before.size + 1)
-    let length = 0
-    while (length < bytes.length) {
-      const count = readSync(fd, bytes, length, bytes.length - length, null)
-      if (!count) break
-      length += count
-    }
-    const after = fstatSync(fd)
-    if (
-      length !== before.size ||
-      before.dev !== after.dev ||
-      before.ino !== after.ino ||
-      before.size !== after.size ||
-      before.mtimeMs !== after.mtimeMs ||
-      before.ctimeMs !== after.ctimeMs
-    )
-      preparationProofFailure()
-    return createHash("sha256").update(bytes.subarray(0, length)).digest("hex")
-  } finally {
-    closeSync(fd)
-  }
-}
 export function readDisposableSourceReceipt(root: string, revision: string) {
   if (!root.startsWith("/") || !/^[a-f0-9]{40}$/.test(revision)) preparationProofFailure()
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- protected operator-installed staged root; no worker selects it
@@ -179,29 +142,11 @@ export function readDisposableSourceReceipt(root: string, revision: string) {
     .split("\0")
     .filter(Boolean)
   if (paths.length === 0 || paths.length > 10000) preparationProofFailure()
-  let total = 0
+  const observed = readSourceTree(root, { ownerUid: process.getuid!(), immutable: false })
   const entries = paths.sort().map((path) => {
-    if (path.startsWith("/") || path.split("/").includes("..")) preparationProofFailure()
-    const file = join(root, path)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- git-owned relative leaf inside validated private staged source
-    const stat = lstatSync(file)
-    if (
-      !stat.isFile() ||
-      stat.isSymbolicLink() ||
-      stat.nlink !== 1 ||
-      stat.uid !== process.getuid?.() ||
-      (stat.mode & 0o022) !== 0 ||
-      stat.size > 5 * 1024 * 1024
-    )
-      preparationProofFailure()
-    total += stat.size
-    if (total > 20 * 1024 * 1024) preparationProofFailure()
-    const checksum = stagedFileChecksum(file, 5 * 1024 * 1024)
-    return {
-      path,
-      bytes: stat.size,
-      checksum,
-    }
+    const entry = observed.entries.find((file) => file.path === path)
+    if (!entry) preparationProofFailure()
+    return entry
   })
-  return { revision, entries, stagedTreeDigest: sha256Hex(canonicalJson(entries)) }
+  return { revision, entries, stagedTreeDigest: observed.stagedTreeDigest }
 }

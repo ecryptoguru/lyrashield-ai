@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { createHash, createHmac } from "node:crypto"
+import { createHash, createHmac, generateKeyPairSync } from "node:crypto"
 import { Readable } from "node:stream"
 import { afterEach, describe, expect, it } from "vitest"
 import {
@@ -17,6 +17,8 @@ import {
   type JournalRecord,
   type StoredObject,
   type JournalSealControlGate,
+  sha256Hex,
+  verifySupervisorAttemptProof,
 } from "@lyrashield/runtime-control"
 import { SupervisorAuthorityJournal } from "./authority-journal"
 import {
@@ -28,7 +30,12 @@ import { createSealedRecoveryCandidate, validateSealedRecoverySnapshot } from ".
 import { sealedRecoverySchema } from "./sealed-recovery-schema"
 import { loadSealedRecoveryBase } from "./sealed-recovery-load"
 import { commandRequestHash } from "./service-common"
+import { createSupervisorAttemptProofIssuer } from "./attempt-proof"
 
+const { privateKey, publicKey } = generateKeyPairSync("ed25519", {
+  privateKeyEncoding: { format: "pem", type: "pkcs8" },
+  publicKeyEncoding: { format: "pem", type: "spki" },
+})
 const roots: string[] = []
 const epochId = "epoch-test-1",
   supervisorInstanceId = "supervisor-test-1"
@@ -68,7 +75,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
-async function fixture(paid = false) {
+async function fixture(paid = false, pendingStart = true) {
   const root = await mkdtemp(join(tmpdir(), "sealed-recovery-"))
   roots.push(root)
   const original = new SignedJournal(join(root, "original"), sourceKey, (value) =>
@@ -171,17 +178,18 @@ async function fixture(paid = false) {
     executors,
     ...(provider ? { provider } : {}),
   })
-  await journal.append({
-    ...base,
-    type: "command_intent",
-    command: {
-      type: paid ? "START_PAID" : "START_UNMETERED",
-      commandId: "command-start-1",
-      attemptId: binding.attemptId,
-      executorKey: "sandbox",
-      expectedReceiptHash: "0".repeat(64),
-    },
-  })
+  if (pendingStart)
+    await journal.append({
+      ...base,
+      type: "command_intent",
+      command: {
+        type: paid ? "START_PAID" : "START_UNMETERED",
+        commandId: "command-start-1",
+        attemptId: binding.attemptId,
+        executorKey: "sandbox",
+        expectedReceiptHash: "0".repeat(64),
+      },
+    })
   return {
     journal,
     original,
@@ -360,6 +368,90 @@ async function pinnedFixture() {
 }
 
 describe("sealed supervisor recovery candidate", () => {
+  it("issues only a scoped fixed-head lifecycle proof after real preparation completion", async () => {
+    const f = await fixture(false, false)
+    try {
+      const issue = createSupervisorAttemptProofIssuer({
+        journal: f.journal,
+        privateKey,
+        epochId,
+        supervisorInstanceId,
+        now: () => new Date("2026-11-12T00:00:00.000Z"),
+      })
+      const input = {
+        operationId: binding.operationId,
+        attemptId: binding.attemptId,
+        workspaceId: binding.workspaceId,
+        scanId: binding.scanId,
+        authorityEpochId: epochId,
+        commandId: "command-new-1",
+        type: "START_UNMETERED" as const,
+        executorKey: "sandbox" as const,
+        challenge: "a".repeat(64),
+      }
+      await expect(issue(input)).rejects.toThrow("Attempt proof is unavailable")
+      const original = (await f.original.load())[0]!.payload
+      if (original.type !== "command_intent" || original.command.type !== "PREPARE")
+        throw new Error("fixture PREPARE missing")
+      const command = original.command
+      const action = {
+        phase: "PREPARE",
+        operationId: binding.operationId,
+        attemptId: binding.attemptId,
+        scanId: binding.scanId,
+        workspaceId: binding.workspaceId,
+        authorityEpochId: epochId,
+        authorityRevision: binding.authorityRevision,
+        authorityChecksum: sha256Hex(
+          canonicalJson({
+            attempt: command.attempt,
+            executors: command.executors,
+            provider: command.provider ?? null,
+          })
+        ),
+        actionChecksum: commandRequestHash(command),
+        commandId: command.commandId,
+      }
+      await f.journal.append({
+        type: "prepare_invocation_completed",
+        supervisorInstanceId,
+        observedAt: "2026-11-12T00:00:00.000Z",
+        commandId: command.commandId,
+        attemptId: binding.attemptId,
+        operationId: binding.operationId,
+        authorityEpochId: epochId,
+        guardId: "guard-prepare-1",
+        nativeRequestId: "guard-prepare-1",
+        bindingInputChecksum: sha256Hex(canonicalJson(action)),
+        actionChecksum: action.actionChecksum,
+        commandInputChecksum: action.actionChecksum,
+      })
+      const proof = await issue(input)
+      expect(
+        verifySupervisorAttemptProof(
+          proof,
+          input,
+          { publicKey, supervisorInstanceId },
+          new Date("2026-11-12T00:00:00.000Z")
+        ).preparedCompleted
+      ).toBe(true)
+      expect(proof.command).toEqual({
+        type: input.type,
+        commandId: input.commandId,
+        attemptId: binding.attemptId,
+        executorKey: "sandbox",
+        expectedReceiptHash: (await f.original.load())[1]!.hash,
+      })
+      expect(Object.keys(proof)).not.toContain("records")
+      await expect(issue({ ...input, workspaceId: "foreign-workspace" })).rejects.toThrow(
+        "Attempt proof is unavailable"
+      )
+    } finally {
+      await f.original.close()
+      await f.local.close()
+    }
+  })
+
   it("retains the signed provider request through sorted recovery and rejects a foreign origin", async () => {
     const f = await fixture(true)
     try {

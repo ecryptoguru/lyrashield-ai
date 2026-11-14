@@ -1094,7 +1094,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
       c.release()
     }
   })
-  it("retains the additive closed catalog: private definers, invoker guards and twenty-nine enabled triggers", async () => {
+  it("retains the additive closed catalog: private definers, invoker guards and thirty enabled triggers", async () => {
     const names = [
       "scan_preparation_context",
       "require_scan_preparation_role",
@@ -1138,7 +1138,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
         [names]
       )
     ).rows
-    expect(triggers).toHaveLength(29)
+    expect(triggers).toHaveLength(30)
     for (const t of triggers) {
       expect(t.tgenabled).toBe("O")
       expect(t.tgdeferrable).toBe(t.tgname === "scan_checked_preparation_bundle")

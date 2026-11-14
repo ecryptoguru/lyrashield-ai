@@ -103,6 +103,142 @@ async function withServer<T>(server: Server, run: () => Promise<T>) {
 }
 
 describe("worker broker client", () => {
+  it.each(["STARTED", "STOPPED", "NEVER_DISPATCHED"])(
+    "retains the existing authenticated %s receipt disposition",
+    async (status) => {
+      await withServer(
+        createServer(
+          createBrokerHandler(
+            service({
+              consume: async (operationId) => ({
+                operationId,
+                confirmedSequence: 1,
+                receipts: 1,
+                dispositions: [{ commandId: "command-one", status, observedStatus: status }],
+              }),
+            }),
+            token
+          )
+        ),
+        async () => {
+          expect(
+            await createWorkerBrokerClient(token).consumeSupervisorReceipts(attempt.operationId)
+          ).toMatchObject({ dispositions: [{ status }] })
+        }
+      )
+    }
+  )
+  it("waits for a bounded late command ACK while status keeps its short deadline", async () => {
+    let received: (() => void) | undefined, reply: import("node:http").ServerResponse | undefined
+    const server = createServer(async (request, response) => {
+      for await (const chunk of request) {
+        void chunk
+      }
+      reply = response
+      received?.()
+    })
+    await withServer(server, async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+      const capture = <T>(promise: Promise<T>) =>
+        promise.then(
+          (value) => ({ value, error: undefined }),
+          (error) => ({ value: undefined, error })
+        )
+      const client = createWorkerBrokerClient(token)
+      try {
+        let ready = new Promise<void>((resolve) => {
+          received = resolve
+        })
+        const late = capture(client.reconcile(attempt))
+        await ready
+        await vi.advanceTimersByTimeAsync(5000)
+        reply!.writeHead(200, { "content-type": "application/json" })
+        reply!.end(
+          JSON.stringify({
+            kind: "committed",
+            operationId: attempt.operationId,
+            attemptId: attempt.attemptId,
+            state: "STOPPING",
+            commandId: "first-stop-one",
+          })
+        )
+        expect((await late).value).toMatchObject({ state: "STOPPING" })
+        ready = new Promise<void>((resolve) => {
+          received = resolve
+        })
+        const read = capture(client.status(attempt.operationId))
+        await ready
+        await vi.advanceTimersByTimeAsync(4001)
+        expect((await read).error).toBeInstanceOf(Error)
+        ready = new Promise<void>((resolve) => {
+          received = resolve
+        })
+        const stalled = capture(client.reconcile(attempt))
+        await ready
+        await vi.advanceTimersByTimeAsync(35_001)
+        expect((await stalled).error).toBeInstanceOf(Error)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+  it("accepts server-selected first STOP from the existing reconcile route without exposing command selection", async () => {
+    const reconcile = vi.fn(async (input) => ({
+      kind: "committed",
+      operationId: input.operationId,
+      attemptId: input.attemptId,
+      state: "STOPPING",
+      commandId: "first-stop-one",
+    }))
+    await withServer(createServer(createBrokerHandler(service({ reconcile }), token)), async () => {
+      const client = createWorkerBrokerClient(randomBytes(32).toString("hex"))
+      expect(await client.reconcile(attempt)).toMatchObject({
+        state: "STOPPING",
+        commandId: "first-stop-one",
+      })
+      expect(reconcile).toHaveBeenCalledExactlyOnceWith(attempt)
+      await expect(
+        client.reconcile({ ...attempt, commandId: "caller-stop" } as never)
+      ).rejects.toThrow()
+      expect(reconcile).toHaveBeenCalledOnce()
+    })
+  })
+  it("requests only server-selected dispatch with the original worker credential and retains its acknowledgement", async () => {
+    const workerCredential = randomBytes(32).toString("hex")
+    const dispatch = vi.fn(async (input) => ({
+      kind: "committed",
+      operationId: input.operationId,
+      attemptId: input.attemptId,
+      state: "START_PENDING",
+      startId: "start-one",
+      commandId: "command-one",
+    }))
+    await withServer(
+      createServer(createBrokerHandler(service({ dispatchPrepared: dispatch }), token)),
+      async () => {
+        const client = createWorkerBrokerClient(workerCredential)
+        expect(await client.dispatchPrepared(attempt)).toMatchObject({
+          kind: "committed",
+          state: "START_PENDING",
+        })
+        expect(dispatch).toHaveBeenCalledExactlyOnceWith(attempt)
+        await expect(
+          client.dispatchPrepared({ ...attempt, executorKey: "sandbox" } as never)
+        ).rejects.toThrow()
+        expect(dispatch).toHaveBeenCalledTimes(1)
+        dispatch.mockResolvedValueOnce({
+          kind: "committed",
+          operationId: "other-operation",
+          attemptId: attempt.attemptId,
+          state: "START_PENDING",
+          startId: "start-one",
+          commandId: "command-one",
+        })
+        await expect(client.dispatchPrepared(attempt)).rejects.toThrow("Broker operation mismatch")
+        await expect(createWorkerBrokerClient(token).dispatchPrepared(attempt)).rejects.toThrow()
+      }
+    )
+  })
   it("uses the actual authenticated broker routes and preserves authority identity", async () => {
     let prepared = 0
     const target = service({

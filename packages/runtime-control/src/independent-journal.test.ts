@@ -12,6 +12,7 @@ import {
   type AuthorityMirror,
   type ConditionalObjectStore,
   type StoredObject,
+  type IndependentAuthorityJournalOptions,
 } from "./independent-journal"
 
 const secret = "j".repeat(48)
@@ -116,7 +117,8 @@ async function setup(
   store = new Store(),
   mirror = new Mirror(),
   authorizeEvent = async () => true,
-  maxSegmentBytes?: number
+  maxSegmentBytes?: number,
+  authorizeConfirmed?: IndependentAuthorityJournalOptions<{ action: string }>["authorizeConfirmed"]
 ) {
   const root = await mkdtemp(join(tmpdir(), "independent-journal-test-"))
   roots.push(root)
@@ -135,11 +137,62 @@ async function setup(
     signingSecret: "k".repeat(48),
     payloadSchema: z.object({ action: z.string() }).strict(),
     authorize: authorizeEvent,
+    ...(authorizeConfirmed ? { authorizeConfirmed } : {}),
   })
   return { journal, local, store, mirror, root }
 }
 
 describe("independent authority journal", () => {
+  it("reads independently confirmed history after live permission expires without permitting another append", async () => {
+    let live = true
+    const history = vi.fn(async () => true)
+    const { journal, mirror } = await setup(
+      new Store(),
+      new Mirror(),
+      async () => live,
+      undefined,
+      history
+    )
+    const record = await journal.appendIntent(event)
+    live = false
+    expect(await journal.loadConfirmed()).toEqual([record])
+    expect(history).toHaveBeenCalledWith(record)
+    await expect(journal.appendIntent({ ...event, eventId: "command-2" })).rejects.toMatchObject({
+      code: "AUTHORITY_CONFLICT",
+    })
+    expect(mirror.applications).toBe(1)
+  })
+
+  it("does not treat unacknowledged mirrored history as independently confirmed permission", async () => {
+    let live = true
+    const history = vi.fn(async () => true)
+    const mirror = new Mirror()
+    mirror.loseAcknowledgement = true
+    const { journal } = await setup(new Store(), mirror, async () => live, undefined, history)
+    await expect(journal.appendIntent(event)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    live = false
+    await expect(journal.loadConfirmed()).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+    expect(history).not.toHaveBeenCalled()
+    await expect(journal.appendIntent(event)).rejects.toMatchObject({ code: "AUTHORITY_CONFLICT" })
+    expect(mirror.applications).toBe(1)
+  })
+
+  it("authenticates sealed records before calling the persisted history validator", async () => {
+    const history = vi.fn(async () => true)
+    const { journal, store } = await setup(
+      new Store(),
+      new Mirror(),
+      async () => true,
+      undefined,
+      history
+    )
+    await journal.appendIntent(event)
+    history.mockClear()
+    const key = [...store.objects.keys()].find((key) => key.includes("/records/"))!
+    store.objects.set(key, { bytes: Buffer.from("{}"), etag: '"changed"' })
+    await expect(journal.loadConfirmed()).rejects.toThrow()
+    expect(history).not.toHaveBeenCalled()
+  })
   it("does not reconstruct an observed ACK from matching local, object and mirror heads", async () => {
     const { journal, local, store, mirror } = await setup()
     mirror.loseAcknowledgement = true

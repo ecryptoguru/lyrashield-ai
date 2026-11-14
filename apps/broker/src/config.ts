@@ -1,3 +1,4 @@
+import { validateSupervisorAttemptProofPublicKey } from "@lyrashield/runtime-control"
 import { z } from "zod"
 import type { ScanPreparationCompiler } from "@lyrashield/db/src/scan-dispatch-command-descriptor"
 
@@ -30,6 +31,7 @@ const transportSchema = z.discriminatedUnion("kind", [
 
 export interface BrokerConfig {
   connectionString: string
+  lifecycleConnectionString?: string
   transport: z.infer<typeof transportSchema>
   controlToken: string
   admission: "closed" | "open"
@@ -40,6 +42,7 @@ export interface BrokerConfig {
    * committing a command bundle this installation cannot produce.
    */
   preparationAuthority?: ScanPreparationCompiler
+  stageOperation?: (operationId: string) => Promise<void>
   /**
    * Receipt settlement is installed only from a protected installation. Without
    * it the broker still serves dispatch authority, but every consume call is
@@ -52,8 +55,7 @@ export interface BrokerConfig {
     originalKeyHash: string
     wrapperKeyHash: string
     socketPath: string
-    originalSigningSecret: string
-    wrapperSigningSecret: string
+    attemptProofPublicKey: string
     controlToken: string
   }
 }
@@ -78,15 +80,25 @@ function transport(env: NodeJS.ProcessEnv): BrokerConfig["transport"] {
 }
 
 function receiptAuthority(env: NodeJS.ProcessEnv): BrokerConfig["receiptAuthority"] {
+  if (
+    env.LYRASHIELD_SUPERVISOR_SIGNING_SECRET ||
+    env.LYRASHIELD_SUPERVISOR_MIRROR_SIGNING_SECRET ||
+    env.LYRASHIELD_SUPERVISOR_ATTEMPT_PROOF_PRIVATE_KEY ||
+    env.LYRASHIELD_SUPERVISOR_RECEIPT_DATABASE_URL ||
+    env.LYRASHIELD_SUPERVISOR_PROOF_DATABASE_URL ||
+    env.LYRASHIELD_SUPERVISOR_CONTROL_TOKEN
+  )
+    throw new Error("Broker must not receive private supervisor credentials")
   const raw = env.LYRASHIELD_SUPERVISOR_JOURNAL_AUTHORITY_JSON?.trim()
   if (!raw) return undefined
   const source = protectedSourceSchema.safeParse(JSON.parse(raw))
   if (!source.success) throw new Error("Protected supervisor source configuration is invalid")
   return {
     ...source.data,
-    originalSigningSecret: required(env, "LYRASHIELD_SUPERVISOR_SIGNING_SECRET"),
-    wrapperSigningSecret: required(env, "LYRASHIELD_SUPERVISOR_MIRROR_SIGNING_SECRET"),
-    controlToken: required(env, "LYRASHIELD_SUPERVISOR_CONTROL_TOKEN"),
+    attemptProofPublicKey: validateSupervisorAttemptProofPublicKey(
+      required(env, "LYRASHIELD_SUPERVISOR_ATTEMPT_PROOF_PUBLIC_KEY")
+    ),
+    controlToken: required(env, "LYRASHIELD_SUPERVISOR_BROKER_CONTROL_TOKEN"),
   }
 }
 
@@ -109,6 +121,9 @@ export function loadBrokerConfig(env: NodeJS.ProcessEnv = process.env): BrokerCo
     throw new Error("LYRASHIELD_BROKER_CONTROL_TOKEN must be at least 32 characters")
   return {
     connectionString,
+    ...(env.LYRASHIELD_SCAN_START_DATABASE_URL?.trim()
+      ? { lifecycleConnectionString: env.LYRASHIELD_SCAN_START_DATABASE_URL.trim() }
+      : {}),
     transport: transport(env),
     controlToken,
     admission: env.LYRASHIELD_BROKER_ADMISSION?.trim() === "open" ? "open" : "closed",

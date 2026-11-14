@@ -15,7 +15,10 @@ import {
   verifyCurrentSource,
 } from "./paired-runtime-github.mjs"
 import { verifyIndependentSandboxInventory } from "./independent-sandbox-inventory.mjs"
-import { validateQualifiedFleetArchive } from "./paired-runtime-qualification.mjs"
+import {
+  readHeldBaselineArchive,
+  validateQualifiedFleetArchive,
+} from "./paired-runtime-qualification.mjs"
 import { verifyImageSources } from "./paired-runtime-cloud.mjs"
 import { requirePreparedRuntimeFleet } from "./prepared-runtime-fleet.mjs"
 import { canonicalJson } from "../../packages/runtime-control/src/canonical-json.ts"
@@ -123,6 +126,7 @@ const selectorSchema = z
     policy: sha,
     journal: sha,
     rollback: sha,
+    rollbackKind: z.enum(["qualified-fleet", "held-baseline"]).optional(),
     inventory: z
       .object({
         sandboxDigest: image,
@@ -137,6 +141,39 @@ const selectorSchema = z
       .strict(),
   })
   .strict()
+export const runtimeFleetEvidenceConfigurationSchema = selectorSchema.pick({
+  rollback: true,
+  rollbackKind: true,
+  inventory: true,
+})
+export const runtimeFleetEvidenceSchemas = Object.freeze({
+  native: nativeSchema,
+  migration: migrationSchema,
+  policy: policySchema,
+  journal: journalSchema,
+})
+
+export function validateRuntimeFleetEvidence(records, identity, preparedFleet) {
+  assert.deepEqual(Object.keys(records).sort(), Object.keys(runtimeFleetEvidenceSchemas).sort())
+  const parsed = Object.fromEntries(
+    Object.entries(runtimeFleetEvidenceSchemas).map(([name, schema]) => [
+      name,
+      schema.parse(records[name]),
+    ])
+  )
+  const fleet = parsed.native.fleet
+  requirePreparedRuntimeFleet(fleet, preparedFleet, identity)
+  const fleetHash = hash(canonicalJson(fleet))
+  for (const record of Object.values(parsed)) {
+    assert.equal(record.owner, identity.owner)
+    assert.equal(record.source, identity.source)
+    assert.equal(record.fleetSha256, fleetHash)
+  }
+  assert.equal(parsed.migration.migrationChecksum, fleet.migrationChecksum)
+  assert.equal(parsed.policy.runtimePolicyDigest, fleet.runtimePolicyDigest)
+  assert.equal(parsed.journal.postgresHeadHash, parsed.journal.r2HeadHash)
+  return parsed
+}
 const configuration = JSON.parse(
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- source-owned public signer configuration
   readFileSync(new URL("../qualification-issuer-key.json", import.meta.url), "utf8")
@@ -218,11 +255,18 @@ async function evidenceArtifact(deps, id, schema, identity, fleetHash) {
 
 // The rollback pair must be a different, qualified artifact set than the fleet
 // being issued, so recovery can never restore the same bytes.
-async function qualifiedRollbackArtifact(deps, selectorRollback, fleet, migration) {
-  const archived = await deps.readArtifact("qualified-fleet", selectorRollback)
+async function qualifiedRollbackArtifact(deps, selectorRollback, fleet, migration, kind) {
+  const archived = await deps.readArtifact(kind, selectorRollback)
   assert.equal(hash(archived.raw), selectorRollback)
   const rollback = JSON.parse(archived.raw)
-  validateQualifiedFleetArchive(rollback)
+  if (kind === "held-baseline") {
+    await readHeldBaselineArchive(selectorRollback, rollback, {
+      verifyArtifact: (recordKind, digest) =>
+        recordKind === kind && digest === selectorRollback
+          ? archived
+          : deps.readArtifact(recordKind, digest),
+    })
+  } else validateQualifiedFleetArchive(rollback)
   assert.equal(rollback.pair.owner, archived.owner)
   assert.equal(rollback.pair.productRevision, archived.source)
   assert.equal(rollback.pair.engineRevision, fleet.engineRevision)
@@ -313,8 +357,14 @@ export function createProtectedRuntimeFleetIssuer({
   })
   const evidence = (id, schema, identity, fleetHash) =>
     evidenceArtifact(deps, id, schema, identity, fleetHash)
-  const qualifiedRollback = (selectorRollback, fleet, migration) =>
-    qualifiedRollbackArtifact(deps, selectorRollback, fleet, migration)
+  const qualifiedRollback = (selector, fleet, migration) =>
+    qualifiedRollbackArtifact(
+      deps,
+      selector.rollback,
+      fleet,
+      migration,
+      selector.rollbackKind ?? "qualified-fleet"
+    )
 
   // Signs only bytes this process constructed. The remote signer never sees a
   // caller-supplied digest, and the returned signature is verified in place.
@@ -371,9 +421,11 @@ export function createProtectedRuntimeFleetIssuer({
         evidence(selector.policy, policySchema, authenticated.identity, fleetHash),
         evidence(selector.journal, journalSchema, authenticated.identity, fleetHash),
       ])
-      assert.equal(migration.migrationChecksum, fleet.migrationChecksum)
-      assert.equal(policy.runtimePolicyDigest, fleet.runtimePolicyDigest)
-      assert.equal(journal.postgresHeadHash, journal.r2HeadHash)
+      validateRuntimeFleetEvidence(
+        { native, migration, policy, journal },
+        authenticated.identity,
+        preparedFleet
+      )
 
       const inventory = await verifyInventory(selector.inventory)
       // The independent inventory must stay non-authoritative: it proves what
@@ -386,7 +438,7 @@ export function createProtectedRuntimeFleetIssuer({
       await verifyImages(fleet)
       await verifyControllers(fleet)
 
-      const rollback = await qualifiedRollback(selector.rollback, fleet, migration)
+      const rollback = await qualifiedRollback(selector, fleet, migration)
 
       const refreshed = await readIdentity()
       assert.equal(refreshed.identity.owner, authenticated.identity.owner)
@@ -455,8 +507,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       ["runtime-fleet-qualification-receipt.json", JSON.stringify(issued.receipt)],
       ["paired-witness.json", issued.witness],
     ])
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed internal output filenames above
       writeFileSync(path, body + "\n", { mode: 0o600, flag: "wx" })
     if (process.env.GITHUB_OUTPUT)
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- GitHub runner-owned step output file
       appendFileSync(
         process.env.GITHUB_OUTPUT,
         "runtime_fleet_qualification=" +

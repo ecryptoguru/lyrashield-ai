@@ -28,6 +28,7 @@
     "@lyrashield/integrations": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/myra": "workspace:*",
+    "@lyrashield/runtime-control": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "@sentry/node": "^10.75.2",

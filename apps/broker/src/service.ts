@@ -6,8 +6,16 @@ import {
   type StartPaidDispatchInput,
   type StopDispatchInput,
 } from "@lyrashield/db/src/scan-dispatch-authority-broker"
-import { createProtectedSupervisorReceiptAuthority } from "@lyrashield/db/src/scan-supervisor-receipt-source"
+import { createProtectedSupervisorAttemptProofAuthority } from "@lyrashield/db/src/scan-supervisor-receipt-source"
+import { scanDispatchWorkerReceiptCredential } from "@lyrashield/db/src/scan-dispatch-worker-assignment"
 import type { BrokerConfig } from "./config"
+import { createScanQueuePublicationVerifier } from "@lyrashield/db/src/scan-queue-publication-verifier"
+import type { QueuePublicationVerificationResult } from "@lyrashield/db/src/scan-queue-publication-verifier-schema"
+import {
+  nativeEngineResultInputSchema,
+  supervisorCommandResultSchema,
+  type NativeEngineResultChunk,
+} from "@lyrashield/runtime-control"
 
 export interface BrokerService {
   readonly admission: "closed" | "open"
@@ -18,6 +26,9 @@ export interface BrokerService {
   reconcile(input: ReconcileDispatchInput): Promise<unknown>
   consume(operationId: string): Promise<unknown>
   status(operationId: string): Promise<DispatchStatus>
+  verifyPublication?(input: unknown): Promise<QueuePublicationVerificationResult>
+  dispatchPrepared?(input: Omit<StartPaidDispatchInput, "executorKey">): Promise<unknown>
+  readResult?(input: unknown): Promise<NativeEngineResultChunk>
   close(): Promise<void>
 }
 
@@ -34,22 +45,28 @@ export function createBrokerService(config: BrokerConfig): BrokerService {
       Object.assign(new Error("Broker admission is closed"), { code: "ADMISSION_CLOSED" })
     )
   const authority = config.receiptAuthority
+  const source = authority
+    ? createProtectedSupervisorAttemptProofAuthority({
+        streamId: authority.streamId,
+        authorityEpochId: authority.authorityEpochId,
+        supervisorInstanceId: authority.supervisorInstanceId,
+        originalKeyHash: authority.originalKeyHash,
+        wrapperKeyHash: authority.wrapperKeyHash,
+        attemptProofPublicKey: authority.attemptProofPublicKey,
+        controlToken: authority.controlToken,
+        transport: { kind: "unix" as const, socketPath: authority.socketPath },
+      })
+    : undefined
   const broker = createScanDispatchAuthorityBroker({
     connectionString: config.connectionString,
-    ...(authority
+    ...(config.lifecycleConnectionString
+      ? { lifecycleConnectionString: config.lifecycleConnectionString }
+      : {}),
+    ...(source
       ? {
-          receiptAuthority: createProtectedSupervisorReceiptAuthority({
-            connectionString: config.connectionString,
-            streamId: authority.streamId,
-            authorityEpochId: authority.authorityEpochId,
-            supervisorInstanceId: authority.supervisorInstanceId,
-            originalSigningSecret: authority.originalSigningSecret,
-            originalKeyHash: authority.originalKeyHash,
-            wrapperSigningSecret: authority.wrapperSigningSecret,
-            wrapperKeyHash: authority.wrapperKeyHash,
-            controlToken: authority.controlToken,
-            transport: { kind: "unix" as const, socketPath: authority.socketPath },
-          }),
+          attemptProofAuthority: source,
+          consumeReceipts: (operationId: string) =>
+            source.consume(operationId, scanDispatchWorkerReceiptCredential(operationId)),
         }
       : {}),
     // Preparation is installed as one unit: the checked-intent contract and the
@@ -64,16 +81,88 @@ export function createBrokerService(config: BrokerConfig): BrokerService {
         }
       : {}),
   })
+  async function deliver<T>(
+    result: T,
+    input: { operationId: string }
+  ): Promise<T | { kind: "unknown"; operationId: string; reasonCode: "COMMIT_OUTCOME_UNKNOWN" }> {
+    if (
+      !result ||
+      typeof result !== "object" ||
+      !("kind" in result) ||
+      result.kind !== "committed" ||
+      !("commandId" in result)
+    )
+      return result
+    if (typeof result.commandId !== "string" || !source)
+      return {
+        kind: "unknown",
+        operationId: input.operationId,
+        reasonCode: "COMMIT_OUTCOME_UNKNOWN",
+      }
+    try {
+      const status = supervisorCommandResultSchema.parse(
+        await source.deliverCommand(
+          { operationId: input.operationId, commandId: result.commandId },
+          scanDispatchWorkerReceiptCredential(input.operationId)
+        )
+      )
+      if (
+        status.commandId !== result.commandId ||
+        ("attemptId" in result && status.attemptId !== result.attemptId) ||
+        !["PREPARED", "STARTED", "STOPPED", "NEVER_DISPATCHED"].includes(status.status)
+      )
+        return {
+          kind: "unknown",
+          operationId: input.operationId,
+          reasonCode: "COMMIT_OUTCOME_UNKNOWN",
+        }
+      await broker.consumeSupervisorReceipts(input.operationId)
+      return result
+    } catch {
+      return {
+        kind: "unknown",
+        operationId: input.operationId,
+        reasonCode: "COMMIT_OUTCOME_UNKNOWN",
+      }
+    }
+  }
+  const publication = createScanQueuePublicationVerifier(config.connectionString)
   return {
     admission,
-    prepare: (input) => (admission === "open" ? broker.prepare(input) : admissionClosed()),
-    startPaid: (input) => (admission === "open" ? broker.startPaid(input) : admissionClosed()),
-    startUnmetered: (input) =>
-      admission === "open" ? broker.startUnmetered(input) : admissionClosed(),
-    stop: (input) => broker.stop(input),
-    reconcile: (input) => broker.reconcile(input),
+    prepare: async (input) => {
+      if (admission !== "open") return admissionClosed()
+      await config.stageOperation?.(input.operationId)
+      return deliver(await broker.prepare(input), input)
+    },
+    startPaid: async (input) =>
+      admission === "open" ? deliver(await broker.startPaid(input), input) : admissionClosed(),
+    startUnmetered: async (input) =>
+      admission === "open" ? deliver(await broker.startUnmetered(input), input) : admissionClosed(),
+    stop: async (input) => deliver(await broker.stop(input), input),
+    reconcile: async (input) => deliver(await broker.reconcile(input), input),
     consume: (operationId) => broker.consumeSupervisorReceipts(operationId),
     status: (operationId) => broker.status(operationId),
-    close: () => broker.close(),
+    verifyPublication: (input) =>
+      admission === "open"
+        ? publication.verifyDispatch(input)
+        : Promise.resolve({ kind: "closed" }),
+    dispatchPrepared: async (input) =>
+      admission === "open"
+        ? deliver(await broker.dispatchPrepared(input), input)
+        : admissionClosed(),
+    readResult: (value) => {
+      const input = nativeEngineResultInputSchema.parse(value)
+      const workerCredential = scanDispatchWorkerReceiptCredential(input.operationId)
+      if (!source || !workerCredential)
+        return Promise.reject(
+          Object.assign(new Error("Worker result authority is unavailable"), {
+            code: "WORKER_GRANT_INVALID",
+          })
+        )
+      return source.readResult(input, workerCredential)
+    },
+    close: async () => {
+      await Promise.all([broker.close(), publication.close()])
+    },
   }
 }

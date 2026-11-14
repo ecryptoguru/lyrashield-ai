@@ -37,6 +37,7 @@ const attemptState = z
     startAcknowledged: z.array(executorKeySchema),
     nativeAckGuards: z.array(id),
     nativeCreateProofs: pair(executorKeySchema, resourceOwnershipSchema),
+    nativeRetirements: pair(executorKeySchema, resourceOwnershipSchema).optional(),
     nativeStartIntents: pair(
       executorKeySchema,
       supervisorJournalEventSchema.transform((event) => {

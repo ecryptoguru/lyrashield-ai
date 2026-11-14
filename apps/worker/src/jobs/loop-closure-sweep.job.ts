@@ -20,8 +20,13 @@ import {
   completeLoopClosure,
   LOOP_CLOSURE_MAX_ATTEMPTS,
   type LoopClosureReason,
+  withWorkspaceRLS,
 } from "@lyrashield/db"
-import { enqueueScan, assertScanWorkerAvailable } from "@lyrashield/integrations"
+import {
+  enqueueScan,
+  assertScanWorkerAvailable,
+  resolveRepositoryScanSource,
+} from "@lyrashield/integrations"
 import { assertScanAllowed } from "@lyrashield/billing"
 
 interface LoopClosureSweepResult {
@@ -64,6 +69,21 @@ export async function processLoopClosureSweep(
         },
         repoFullName: closure.repoFullName,
         assertRetestWorkerAvailable: assertScanWorkerAvailable,
+        resolveRetestSource: (target) =>
+          resolveRepositoryScanSource(target, {
+            readActiveConnection: () =>
+              withWorkspaceRLS(closure.workspaceId, (tx) =>
+                tx.integration.findFirst({
+                  where: {
+                    workspaceId: closure.workspaceId,
+                    type: "GITHUB",
+                    externalId: String(target.installationId),
+                    status: "active",
+                    deletedAt: null,
+                  },
+                })
+              ),
+          }),
       })
       if (outcome) {
         await enqueueScan({

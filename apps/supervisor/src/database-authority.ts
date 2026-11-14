@@ -1,7 +1,8 @@
 import pg from "pg"
 import { z } from "zod"
 import {
-  createInstalledExecutionAuthorityCapability,
+  createSupervisorExecutionAuthorityCapability,
+  ScanAuthorityContext,
   PostgresDurableScanAuthorityFence,
   type VerifyActionAuthority,
 } from "@lyrashield/runtime-control"
@@ -63,6 +64,7 @@ export function loadDatabaseSupervisorAuthority(
   const supervisorAuthority = createProtectedSupervisorReceiptAuthority({
     ...identity,
     connectionString,
+    attemptProofPublicKey: env.LYRASHIELD_SUPERVISOR_ATTEMPT_PROOF_PUBLIC_KEY,
     originalSigningSecret: config.signingSecret,
     wrapperSigningSecret: env.LYRASHIELD_SUPERVISOR_MIRROR_SIGNING_SECRET,
     controlToken: config.controlToken,
@@ -72,7 +74,7 @@ export function loadDatabaseSupervisorAuthority(
     approvedProviderPolicies: new Map(),
     supervisorAuthority,
   })
-  const installed = createInstalledExecutionAuthorityCapability()
+  const installed = createSupervisorExecutionAuthorityCapability()
   const verify: VerifyActionAuthority = async (connection, binding) => {
     const current = await verifyCurrent(connection, binding)
     const host = await installed.verifyAction(connection, binding)
@@ -91,12 +93,17 @@ export function loadDatabaseSupervisorAuthority(
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 10_000,
   })
+  const context = new ScanAuthorityContext()
   return {
     authorityFence: new PostgresDurableScanAuthorityFence(
       pool,
       verify,
-      createScanExecutionInvocationGuardWriter(verify)
+      createScanExecutionInvocationGuardWriter(verify),
+      context
     ),
+    context,
+    pool,
+    supervisorAuthority,
     close: () => pool.end(),
   }
 }

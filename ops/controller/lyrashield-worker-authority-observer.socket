@@ -1,0 +1,13 @@
+[Unit]
+Description=LyraShield worker authority observation socket
+
+[Socket]
+ListenStream=/run/lyrashield/control/worker-authority.sock
+SocketUser=root
+SocketGroup=lyrashield-worker
+SocketMode=0660
+DirectoryMode=0755
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

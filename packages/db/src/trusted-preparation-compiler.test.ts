@@ -9,6 +9,7 @@ import {
   buildPreparationStagingRecord,
   preparationStagingRecordSchema,
   trustedPreparationHostPolicySchema,
+  verifyPreparationStagingRecord,
 } from "./trusted-preparation-proof"
 
 const hash = "a".repeat(64)
@@ -392,5 +393,144 @@ describe("protected preparation compiler", () => {
         },
       })
     ).toThrow()
+  })
+})
+
+describe("qualified production preparation proof (signature fixture only)", () => {
+  function productionFixture() {
+    const f = fixture()
+    const policy = trustedPreparationHostPolicySchema.parse({
+      ...hostPolicy,
+      schema: "lyrashield-preparation-host-policy/2",
+      executionContext: { environment: "PRODUCTION" },
+    })
+    const installed = {
+      purpose: "production-installed" as const,
+      epochId: "epoch-one",
+      epoch: 1,
+      sourceRevision: revision,
+      runtimePolicyDigest: `sha256:${hash}`,
+      authorityDigest: `sha256:${hash}`,
+      supervisorInstanceId: "supervisor-one",
+      preparation: {
+        schema: "lyrashield-preparation-delegation/1" as const,
+        purpose: "scan-preparation" as const,
+        issuerKeyId: policy.issuerKeyId,
+        issuerKeyHash,
+        publicKey: publicKey.export({ format: "jwk" }),
+        preparationPolicyChecksum: sha256Hex(canonicalJson(policy)),
+        productRevision: revision,
+        workflow: ".github/workflows/issue-runtime-qualification.yml" as const,
+        authorityEpochId: "epoch-one",
+        epoch: 1,
+        targetTypes: ["REPO"] as ["REPO"],
+        scanWorkflows: ["REVIEW_TARGET", "REVIEW_CHANGES"] as ["REVIEW_TARGET", "REVIEW_CHANGES"],
+        issuedAt: new Date(Date.now() - 1000).toISOString(),
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        maxStagingLifetimeMs: 900000 as const,
+      },
+    }
+    const context = { environment: "PRODUCTION" as const, installed }
+    const record = buildPreparationStagingRecord(
+      f.authority,
+      policy,
+      preparationStagingRecordSchema.parse(f.unsigned).resources,
+      preparationStagingRecordSchema.parse(f.unsigned).observed,
+      context
+    )
+    const raw = canonicalJson(record)
+    const envelope = {
+      raw,
+      result: {
+        algorithm: "RS256",
+        keyId: policy.issuerKeyId,
+        signature: sign("RSA-SHA256", Buffer.from(raw), privateKey).toString("base64"),
+      },
+    }
+    return { ...f, policy, context, record, envelope }
+  }
+  it("requires an independently observed exact delegation and v2 proof", () => {
+    const f = productionFixture()
+    expect(f.record.schema).toBe("lyrashield-preparation-staging/2")
+    expect(
+      verifyPreparationStagingRecord(f.envelope, f.authority, f.policy, issuerPublicKey, f.context)
+        .record
+    ).toEqual(f.record)
+    expect(() =>
+      verifyPreparationStagingRecord(f.envelope, f.authority, f.policy, issuerPublicKey, {
+        environment: "PRODUCTION",
+      })
+    ).toThrow()
+    expect(() =>
+      verifyPreparationStagingRecord(
+        f.envelope,
+        f.authority,
+        f.policy,
+        issuerPublicKey,
+        executionContext
+      )
+    ).toThrow()
+  })
+  it("ignores a caller-supplied production observation callback", async () => {
+    const f = productionFixture()
+    let calls = 0
+    const compiler = createTrustedPreparationCompiler({
+      hostPolicy: f.policy,
+      issuerPublicKey,
+      readStagingRecord: async () => f.envelope,
+      readExecutionContext: async () => {
+        calls++
+        return f.context
+      },
+    })
+    await expect(compiler(f.authority)).rejects.toThrow("Installed execution authority unavailable")
+    expect(calls).toBe(0)
+    expect(compiler.verifyPreparedCommand).toBeTypeOf("function")
+  })
+  it.each(["policy", "key", "epoch", "expiry", "purpose"])(
+    "rejects an unqualified %s delegation",
+    (kind) => {
+      const f = productionFixture()
+      const delegation = { ...f.context.installed.preparation }
+      if (kind === "policy") delegation.preparationPolicyChecksum = "d".repeat(64)
+      if (kind === "key") delegation.issuerKeyHash = "d".repeat(64)
+      if (kind === "epoch") delegation.epoch = 2
+      if (kind === "expiry") delegation.expiresAt = new Date(Date.now() - 1).toISOString()
+      if (kind === "purpose") Object.assign(delegation, { purpose: "runtime-qualification" })
+      expect(() =>
+        verifyPreparationStagingRecord(f.envelope, f.authority, f.policy, issuerPublicKey, {
+          ...f.context,
+          installed: { ...f.context.installed, preparation: delegation },
+        })
+      ).toThrow()
+    }
+  )
+  it("never lets the dedicated signer authorize another workflow or revision", () => {
+    const f = productionFixture()
+    for (const authority of [
+      {
+        ...f.authority,
+        executionPlan: {
+          ...f.authority.executionPlan,
+          workflow: "AUTHENTICATED_ASSESSMENT" as const,
+        },
+      },
+      {
+        ...f.authority,
+        executionPlan: {
+          ...f.authority.executionPlan,
+          source: { ...f.authority.executionPlan.source!, revision: "d".repeat(40) },
+        },
+      },
+    ])
+      expect(() =>
+        buildPreparationStagingRecord(
+          authority,
+          f.policy,
+          f.record.resources,
+          f.record.observed,
+          f.context
+        )
+      ).toThrow()
   })
 })

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const systemScanFindUnique = vi.hoisted(() => vi.fn())
+const scopedScanFindFirst = vi.hoisted(() => vi.fn())
 const updateScanStatusMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@lyrashield/db", async () => {
@@ -9,7 +9,10 @@ vi.mock("@lyrashield/db", async () => {
     "@lyrashield/db/src/scan-execution-plan"
   )
   return {
-    getSystemPrisma: () => ({ scan: { findUnique: systemScanFindUnique } }),
+    withWorkspaceRLS: (
+      workspaceId: string,
+      work: (tx: { scan: { findFirst: typeof scopedScanFindFirst } }) => unknown
+    ) => work({ scan: { findFirst: scopedScanFindFirst } }),
     updateUnclaimedScanStatus: updateScanStatusMock,
     verifyStoredScanExecutionPlan: planModule.verifyStoredScanExecutionPlan,
   }
@@ -71,7 +74,7 @@ describe("verifyScanJobAuthority", () => {
   })
 
   it("rejects a queue spoof where the BullMQ job id differs from the scan id", async () => {
-    systemScanFindUnique.mockResolvedValue(storedScan())
+    scopedScanFindFirst.mockResolvedValue(storedScan())
     const result = await verifyScanJobAuthority(makeJob({ id: "forged-job-id" }))
     expect(result).toEqual({
       ok: false,
@@ -84,17 +87,18 @@ describe("verifyScanJobAuthority", () => {
   })
 
   it("rejects a payload that does not match the stored scan record", async () => {
-    systemScanFindUnique.mockResolvedValue(storedScan())
+    scopedScanFindFirst.mockResolvedValue(storedScan())
     const result = await verifyScanJobAuthority(makeJob({ data: { goal: "DIFFERENT_GOAL" } }))
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.result.errorCategory).toBe("INVALID_JOB")
   })
 
-  it("reads the stored plan through the privileged scan row", async () => {
-    systemScanFindUnique.mockResolvedValue(storedScan())
+  it("reads the stored plan through the exact tenant-scoped scan row", async () => {
+    scopedScanFindFirst.mockResolvedValue(storedScan())
     await verifyScanJobAuthority(makeJob())
-    expect(systemScanFindUnique).toHaveBeenCalledWith(
+    expect(scopedScanFindFirst).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: { id: "scan-1", workspaceId: "ws-1" },
         select: expect.objectContaining({
           executionPlan: true,
           executionPlanHash: true,
@@ -104,7 +108,7 @@ describe("verifyScanJobAuthority", () => {
   })
 
   it("drains a legacy row with a null plan unchanged", async () => {
-    systemScanFindUnique.mockResolvedValue(storedScan())
+    scopedScanFindFirst.mockResolvedValue(storedScan())
     const result = await verifyScanJobAuthority(makeJob())
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.executionPlan).toBeNull()
@@ -112,7 +116,7 @@ describe("verifyScanJobAuthority", () => {
 
   it("accepts a stored plan whose hash verifies", async () => {
     const { plan, hash } = storedPlanFor("QUICK")
-    systemScanFindUnique.mockResolvedValue(
+    scopedScanFindFirst.mockResolvedValue(
       storedScan({ mode: "QUICK", executionPlan: plan, executionPlanHash: hash })
     )
     const result = await verifyScanJobAuthority(makeJob({ data: { mode: "QUICK" } }))
@@ -123,7 +127,7 @@ describe("verifyScanJobAuthority", () => {
   it("fails closed on a plan hash mismatch and marks the scan FAILED", async () => {
     const { plan } = storedPlanFor("QUICK")
     const tampered = { ...plan, capabilities: [...plan.capabilities, "extra_cap"] }
-    systemScanFindUnique.mockResolvedValue(
+    scopedScanFindFirst.mockResolvedValue(
       storedScan({
         mode: "QUICK",
         executionPlan: tampered,
@@ -143,7 +147,7 @@ describe("verifyScanJobAuthority", () => {
 
   it("fails closed on an unsupported plan version", async () => {
     const { plan } = storedPlanFor("QUICK")
-    systemScanFindUnique.mockResolvedValue(
+    scopedScanFindFirst.mockResolvedValue(
       storedScan({
         mode: "QUICK",
         executionPlan: { ...plan, version: "lyrashield-scan-plan/2.0.0" },
@@ -156,7 +160,7 @@ describe("verifyScanJobAuthority", () => {
   })
 
   it("fails closed on an inconsistent scope/workflow contract", async () => {
-    systemScanFindUnique.mockResolvedValue(
+    scopedScanFindFirst.mockResolvedValue(
       storedScan({
         mode: "QUICK",
         executionPlan: {
@@ -185,7 +189,7 @@ describe("verifyScanJobAuthority", () => {
 
   it("fails closed when the plan is stored without its hash", async () => {
     const { plan } = storedPlanFor("QUICK")
-    systemScanFindUnique.mockResolvedValue(
+    scopedScanFindFirst.mockResolvedValue(
       storedScan({ mode: "QUICK", executionPlan: plan, executionPlanHash: null })
     )
     const result = await verifyScanJobAuthority(makeJob({ data: { mode: "QUICK" } }))
@@ -195,11 +199,33 @@ describe("verifyScanJobAuthority", () => {
 
   it("fails closed when the recorded plan depth disagrees with the stored mode", async () => {
     const { plan, hash } = storedPlanFor("QUICK")
-    systemScanFindUnique.mockResolvedValue(
+    scopedScanFindFirst.mockResolvedValue(
       storedScan({ mode: "STANDARD", executionPlan: plan, executionPlanHash: hash })
     )
     const result = await verifyScanJobAuthority(makeJob({ data: { mode: "STANDARD" } }))
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.result.errorCategory).toBe("SCAN_PLAN_MISMATCH")
+  })
+  it("rejects foreign workspace reads without mutating that workspace", async () => {
+    scopedScanFindFirst.mockResolvedValue(storedScan({ workspaceId: "foreign-workspace" }))
+    expect(await verifyScanJobAuthority(makeJob())).toMatchObject({
+      ok: false,
+      result: { errorCategory: "INVALID_JOB" },
+    })
+    expect(scopedScanFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "scan-1", workspaceId: "ws-1" } })
+    )
+    expect(updateScanStatusMock).not.toHaveBeenCalled()
+    scopedScanFindFirst.mockResolvedValue(null)
+    expect(
+      await verifyScanJobAuthority(makeJob({ data: { workspaceId: "foreign-workspace" } }))
+    ).toMatchObject({ ok: false })
+    expect(updateScanStatusMock).not.toHaveBeenCalled()
+  })
+  it("rejects malformed tenant identifiers before any database lookup", async () => {
+    expect(
+      await verifyScanJobAuthority(makeJob({ data: { workspaceId: "../foreign" } }))
+    ).toMatchObject({ ok: false })
+    expect(scopedScanFindFirst).not.toHaveBeenCalled()
   })
 })

@@ -99,6 +99,7 @@ export class SupervisorOperations {
         assertActive()
         checkStop()
         const planned = await this.recordExecutorCreationIntent(attempt, command, spec)
+        await nativeInvocation?.planCreate?.(planned)
         assertActive()
         checkStop()
         const ownership = await this.ctx.options.executor.create(command.executorKey, spec, {
@@ -252,6 +253,22 @@ export class SupervisorOperations {
         continue
       }
       if (inspection.state !== "PRESENT") {
+        if (attempt.nativeStartIntents?.get(planned.executorKey)?.phase === "EXECUTOR_CREATE") {
+          const retirement = nativeRetirementEvidence({
+            journal: this.ctx.options.journal,
+            supervisorInstanceId: this.ctx.options.supervisorInstanceId,
+            nowIso: this.ctx.nowIso,
+            apply: this.ctx.apply,
+            attempt,
+            stop: command,
+            ownership: planned,
+          })
+          const stopped = await this.ctx.options.executor
+            .stop(planned, undefined, retirement)
+            .catch(() => ({ state: "UNKNOWN" as const }))
+          if (stopped.state !== "ABSENT") resourceUnresolved = true
+          continue
+        }
         createUnresolved = true
         continue
       }
@@ -261,6 +278,22 @@ export class SupervisorOperations {
         continue
       }
       const owned = inspection.ownership
+      if (attempt.nativeStartIntents?.get(planned.executorKey)?.phase === "EXECUTOR_CREATE") {
+        const retirement = nativeRetirementEvidence({
+          journal: this.ctx.options.journal,
+          supervisorInstanceId: this.ctx.options.supervisorInstanceId,
+          nowIso: this.ctx.nowIso,
+          apply: this.ctx.apply,
+          attempt,
+          stop: command,
+          ownership: owned,
+        })
+        const stopped = await this.ctx.options.executor
+          .stop(owned, undefined, retirement)
+          .catch(() => ({ state: "UNKNOWN" as const }))
+        if (stopped.state !== "ABSENT") resourceUnresolved = true
+        continue
+      }
       const boundRecord = await this.ctx.options.journal.append({
         type: "resource_bound",
         supervisorInstanceId: this.ctx.options.supervisorInstanceId,
@@ -270,14 +303,26 @@ export class SupervisorOperations {
         ownership: owned,
       })
       this.ctx.applyResource(boundRecord)
-      const stopped = await this.ctx.options.executor.stop(owned).catch(() => ({
-        state: "UNKNOWN" as const,
-        detail: "planned executor teardown failed",
-      }))
+      const retirement = nativeRetirementEvidence({
+        journal: this.ctx.options.journal,
+        supervisorInstanceId: this.ctx.options.supervisorInstanceId,
+        nowIso: this.ctx.nowIso,
+        apply: this.ctx.apply,
+        attempt,
+        stop: command,
+        ownership: owned,
+      })
+      const stopped = await this.ctx.options.executor
+        .stop(owned, undefined, retirement)
+        .catch(() => ({
+          state: "UNKNOWN" as const,
+          detail: "planned executor teardown failed",
+        }))
       if (stopped.state !== "ABSENT") {
         resourceUnresolved = true
       }
     }
+    createUnresolved = this.ctx.hasUnresolvedExecutorEffect(attempt)
     const revocationUnresolved = await revocationOutcome
     const nativeGuardUnresolved = (attempt.nativeStartIntents?.size ?? 0) > 0
     if (revocationUnresolved || createUnresolved || resourceUnresolved || nativeGuardUnresolved) {
@@ -305,6 +350,25 @@ export class SupervisorOperations {
       this.ctx.options.admission !== "open" ||
       attempt.status === "STOPPING" ||
       attempt.status === "UNKNOWN"
+    const retainedStop = [...this.ctx.commands.values()]
+      .map((state) => state.request)
+      .reverse()
+      .find(
+        (request): request is StopCommand =>
+          request?.type === "STOP" && request.attemptId === command.attemptId
+      )
+    const retirementFor = (ownership: ResourceOwnership) =>
+      retainedStop
+        ? nativeRetirementEvidence({
+            journal: this.ctx.options.journal,
+            supervisorInstanceId: this.ctx.options.supervisorInstanceId,
+            nowIso: this.ctx.nowIso,
+            apply: this.ctx.apply,
+            attempt,
+            stop: retainedStop,
+            ownership,
+          })
+        : undefined
     const revocationOutcome = stopRequested
       ? this.revokeAllKnownOrPotentialGrants(attempt, command.commandId).then(
           () => false,
@@ -375,14 +439,23 @@ export class SupervisorOperations {
           this.ctx.applyResource(record)
         }
         if (stopRequested) {
-          const stopped = await this.ctx.options.executor.stop(owned).catch(() => ({
-            state: "UNKNOWN" as const,
-            detail: "resource teardown failed",
-          }))
+          const stopped = await this.ctx.options.executor
+            .stop(owned, undefined, retirementFor(owned))
+            .catch(() => ({
+              state: "UNKNOWN" as const,
+              detail: "resource teardown failed",
+            }))
           if (stopped.state !== "ABSENT") {
             resourceUnresolved = true
           }
         }
+      } else if (stopRequested && retirementFor(candidate)) {
+        // A previous STOP may have removed the container before its ACK was
+        // received. Reuse only that stored STOP's actual root removal proof.
+        const stopped = await this.ctx.options.executor
+          .stop(candidate, undefined, retirementFor(candidate))
+          .catch(() => ({ state: "UNKNOWN" as const }))
+        if (stopped.state !== "ABSENT") resourceUnresolved = true
       } else if (planned && !current) {
         if (!stopRequested) {
           await this.ctx.appendAttemptStatus(attempt, "UNKNOWN", command.commandId)
@@ -392,8 +465,14 @@ export class SupervisorOperations {
       }
     }
     if (stopRequested) {
+      createUnresolved = this.ctx.hasUnresolvedExecutorEffect(attempt)
       const revocationUnresolved = await revocationOutcome
-      if (revocationUnresolved || createUnresolved || resourceUnresolved) {
+      if (
+        revocationUnresolved ||
+        createUnresolved ||
+        resourceUnresolved ||
+        (attempt.nativeStartIntents?.size ?? 0) > 0
+      ) {
         return this.ctx.appendTerminal(
           command,
           "UNKNOWN",
@@ -414,7 +493,8 @@ export class SupervisorOperations {
       // A create intent alone is not dispatch. NEVER_DISPATCHED stays honest
       // only when no resource was ever bound and every planned executor was
       // inspected ABSENT in this reconcile pass.
-      const anyDispatch = attempt.resources.size > 0 || observedPresent
+      const anyDispatch =
+        attempt.resources.size > 0 || observedPresent || (attempt.nativeRetirements?.size ?? 0) > 0
       const status = anyDispatch ? "STOPPED" : "NEVER_DISPATCHED"
       await this.ctx.appendAttemptStatus(attempt, status, command.commandId)
       return this.ctx.appendTerminal(command, status)

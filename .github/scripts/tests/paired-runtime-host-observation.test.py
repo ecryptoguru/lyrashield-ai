@@ -1,4 +1,6 @@
 import base64
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 import importlib.util
 import json
 from pathlib import Path
@@ -14,6 +16,43 @@ spec.loader.exec_module(module)
 
 
 class RuntimeObservationTest(unittest.TestCase):
+    def test_retained_cleanup_preserves_exact_running_worker_security(self):
+        reference = "ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:" + "a" * 64
+        image = {"Id": "sha256:" + "b" * 64, "Config": {"Cmd": ["worker"]}}
+        identity = {"uid": 12004, "gid": 12004, "environment": {}, "credentialFiles": {}, "processCommand": ["worker"]}
+        container = {
+            "Image": image["Id"],
+            "Config": {"Image": reference, "User": "12004:12004", "Cmd": ["worker"]},
+            "HostConfig": {"ReadonlyRootfs": True, "Privileged": False, "CapDrop": ["ALL"], "SecurityOpt": ["no-new-privileges"]},
+            "State": {"Running": True, "Pid": 213, "Health": {"Status": "unhealthy"}},
+            "NetworkSettings": {"Networks": {"lyrashield-runtime-fixture": {}}},
+        }
+        for health in ("unhealthy", "starting"):
+            container["State"]["Health"]["Status"] = health
+            module.verify_container(container, image, reference, identity, "lyrashield-runtime-fixture", retained_cleanup=True)
+            with self.assertRaises(ValueError):
+                module.verify_container(container, image, reference, identity, "lyrashield-runtime-fixture")
+        mutations = (
+            ("State", "Running", False), ("State", "Paused", True),
+            ("State", "Restarting", True), ("State", "Health", {}),
+            ("State", "Health", {"Status": "unknown"}),
+            ("HostConfig", "Privileged", True), ("HostConfig", "GroupAdd", ["12002"]),
+            ("HostConfig", "ReadonlyRootfs", False), ("HostConfig", "CapAdd", ["SYS_ADMIN"]),
+            ("Config", "User", "0:0"), ("Config", "Image", reference.replace("a", "c")),
+        )
+        for section, field, value in mutations:
+            changed = deepcopy(container)
+            changed[section][field] = value
+            with self.subTest(section=section, field=field), self.assertRaises(ValueError):
+                module.verify_container(changed, image, reference, identity, "lyrashield-runtime-fixture", retained_cleanup=True)
+        authority = {"schema": "lyrashield-installed-runtime-authority/1", "purpose": "launch-qualified-controller"}
+        for role in ("broker", "supervisor", "provider-gateway"):
+            with self.subTest(role=role), self.assertRaises(ValueError):
+                module.component(role, {}, authority, retained_cleanup=True)
+        for untrusted in ({}, {**authority, "purpose": "disposable-linux-native-tests"}):
+            with self.assertRaises(ValueError):
+                module.component("worker", {}, untrusted, retained_cleanup=True)
+
     def test_supervisor_socket_group_is_not_shared_with_other_roles(self):
         roles = {
             "broker": {"uid": 12001, "gid": 12001},
@@ -296,6 +335,8 @@ class RuntimeObservationTest(unittest.TestCase):
             root = Path(directory)
             policy = {
                 "schema": "lyrashield-runtime-host-policy/1",
+                "network": "lyrashield-runtime-fixture",
+                "components": {},
                 "journalSealControl": control,
             }
             policy_raw = module.canonical(policy).encode()
@@ -346,6 +387,78 @@ class RuntimeObservationTest(unittest.TestCase):
                 (root / "runtime-authority.json").write_bytes(raw)
                 with self.assertRaises(ValueError):
                     module.load_seal_gate_configuration(source, self.pin)
+
+    @unittest.skipUnless(__import__("os").geteuid() == 0, "root fixture runs in disposable Linux")
+    def test_v2_preparation_delegation_binds_dedicated_key_policy_source_and_scope(self):
+        with tempfile.TemporaryDirectory(dir="/run") as directory:
+            root = Path(directory)
+            (root / "control").mkdir(mode=0o700)
+            private = root / "control/preparation-grant-key.pem"
+            public = root / "control/preparation-public-key.pem"
+            subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:3072", "-out", str(private)], check=True, stderr=subprocess.DEVNULL)
+            public.write_bytes(subprocess.run(["openssl", "pkey", "-in", str(private), "-pubout"], check=True, capture_output=True).stdout)
+            modulus = subprocess.run(["openssl", "rsa", "-in", str(private), "-modulus", "-noout"], check=True, capture_output=True, text=True).stdout.strip().split("=")[1]
+            jwk = {"kty": "RSA", "n": base64.urlsafe_b64encode(bytes.fromhex(modulus)).decode().rstrip("="), "e": "AQAB"}
+            key_hash = module.checksum(module.public_der({"algorithm": "RS256", "publicKey": jwk}))[7:]
+            envelope, _ = self.envelope()
+            authority = json.loads(json.loads(envelope)["raw"])
+            preparation = {
+                "schema": "lyrashield-preparation-host-policy/2", "executionContext": {"environment": "PRODUCTION"},
+                "issuerKeyId": "https://fixture.example/keys/preparation", "issuerKeyHash": key_hash,
+                "authorityEpochId": "epoch-2", "productRevision": "a" * 40, "engineRevision": "a" * 40,
+                "network": "lyrashield-runtime-fixture",
+                "engineImage": "ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@" + authority["workerDigest"],
+                "sandboxImage": "ghcr.io/ecryptoguru/lyrashield-sandbox@" + authority["sandboxDigest"],
+            }
+            policy_path = root / "preparation-host-policy.json"
+            policy_path.write_bytes(module.canonical(preparation).encode())
+            for path in (private, public, policy_path):
+                path.chmod(0o400)
+            now = datetime.now(timezone.utc)
+            delegation = {"schema": "lyrashield-preparation-delegation/1", "purpose": "scan-preparation",
+                "issuerKeyId": preparation["issuerKeyId"], "issuerKeyHash": key_hash, "publicKey": jwk,
+                "preparationPolicyChecksum": module.checksum(policy_path.read_bytes())[7:], "productRevision": "a" * 40,
+                "workflow": ".github/workflows/issue-runtime-qualification.yml", "authorityEpochId": "epoch-2", "epoch": 2,
+                "targetTypes": ["REPO"], "scanWorkflows": ["REVIEW_TARGET", "REVIEW_CHANGES"],
+                "issuedAt": now.isoformat(), "expiresAt": (now + timedelta(hours=1)).isoformat(), "maxStagingLifetimeMs": 900000}
+            github_private = subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048"], check=True, capture_output=True).stdout
+            github_public = subprocess.run(["openssl", "pkey", "-pubout", "-outform", "DER"], input=github_private, check=True, capture_output=True).stdout
+            github_path = root / "control/preparation-github.env"
+            github_path.write_text("GITHUB_APP_ID=123\nGITHUB_APP_PRIVATE_KEY=" + github_private.decode().strip().replace("\n", "\\n") + "\n")
+            github_path.chmod(0o400)
+            evidence_path = root / "control/preparation-evidence.env"
+            evidence_path.write_text("S3_ENDPOINT=https://storage.fixture.invalid\nS3_BUCKET=fixture\nS3_ACCESS_KEY=fixture-access\nS3_SECRET_KEY=fixture-secret\nLYRASHIELD_EVIDENCE_KEK_ACTIVE_REF=kms://fixture/evidence/1\nLYRASHIELD_EVIDENCE_KEK_KEYRING={}\n")
+            evidence_path.chmod(0o400)
+            policy = {"schema": "lyrashield-runtime-host-policy/2", "network": preparation["network"],
+                "components": {"broker": {"environment": {"LYRASHIELD_PREPARATION_GITHUB_APP_ID": "123",
+                    "LYRASHIELD_PREPARATION_GITHUB_KEY_SHA256": module.checksum(github_public)[7:],
+                    "LYRASHIELD_PREPARATION_EVIDENCE_CONFIG_SHA256": module.checksum(evidence_path.read_bytes())[7:]}}},
+                "journalSealControl": {}, "preparation": delegation}
+            with patch.object(module, "ROOT", root):
+                self.assertEqual(module.verify_preparation_delegation(policy, authority, self.pin), delegation)
+                for field, value in (("purpose", "runtime-qualification"), ("epoch", 3), ("productRevision", "b" * 40),
+                    ("targetTypes", ["WEB_APP"]), ("scanWorkflows", ["AUTHENTICATED_ASSESSMENT"]),
+                    ("preparationPolicyChecksum", "0" * 64), ("issuerKeyHash", "0" * 64),
+                    ("expiresAt", (now + timedelta(days=2)).isoformat())):
+                    changed = {**policy, "preparation": {**delegation, field: value}}
+                    with self.subTest(field=field), self.assertRaises(ValueError):
+                        module.verify_preparation_delegation(changed, authority, self.pin)
+                changed_environment = {**policy["components"]["broker"]["environment"], "LYRASHIELD_PREPARATION_GITHUB_KEY_SHA256": "0" * 64}
+                with self.assertRaises(ValueError):
+                    module.verify_preparation_delegation({**policy, "components": {"broker": {"environment": changed_environment}}}, authority, self.pin)
+                evidence_path.chmod(0o600)
+                with self.assertRaises(ValueError):
+                    module.verify_preparation_delegation(policy, authority, self.pin)
+                evidence_path.chmod(0o400)
+                public.chmod(0o600)
+                with self.assertRaises(ValueError):
+                    module.verify_preparation_delegation(policy, authority, self.pin)
+                public.chmod(0o400)
+                policy_path.chmod(0o600)
+                policy_path.write_bytes(module.canonical({**preparation, "network": "other"}).encode())
+                policy_path.chmod(0o400)
+                with self.assertRaises(ValueError):
+                    module.verify_preparation_delegation(policy, authority, self.pin)
 
     def test_private_root_files_reject_symlinks_hardlinks_permissions_and_size(self):
         import os

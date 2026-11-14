@@ -7,6 +7,7 @@ export {
 } from "./authority-fence"
 export type { AuthorityAction, ScanAuthorityFence, VerifyActionAuthority } from "./authority-fence"
 export { PostgresDurableScanAuthorityFence } from "./authority-invocation-fence"
+export { ScanAuthorityContext } from "./authority-context"
 export type { ScanInvocationGuardWriter } from "./authority-invocation-fence"
 export {
   computeEvidenceDigest,
@@ -16,6 +17,21 @@ export {
   toBrokerReceiptType,
 } from "./broker-receipt"
 export { canonicalJson, sha256Hex } from "./canonical-json"
+export {
+  supervisorAttemptProofInputSchema,
+  supervisorAttemptProofSchema,
+  signSupervisorAttemptProof,
+  supervisorAttemptProofPublicKey,
+  validateSupervisorAttemptProofPublicKey,
+  verifySupervisorAttemptProof,
+} from "./attempt-proof"
+export type { SupervisorAttemptProofInput, SupervisorAttemptProof } from "./attempt-proof"
+export { readSourceTree } from "./source-tree"
+export {
+  preparationDelegationSchema,
+  requireCurrentPreparationDelegation,
+} from "./preparation-delegation"
+export type { PreparationDelegation } from "./preparation-delegation"
 export { sandboxToolExecDescriptorSchema, sandboxToolRequestSchema } from "./sandbox-tool-protocol"
 export type { SandboxToolExecDescriptor, SandboxToolRequest } from "./sandbox-tool-protocol"
 export { executorResourceDescriptorSchema } from "./executor-resource-descriptor"
@@ -58,7 +74,11 @@ export {
   journalSealPinSchema,
 } from "./protected-journal-seal-pin-store"
 export { createInstalledJournalSealPinStore } from "./installed-journal-seal-pin-store"
-export { createInstalledExecutionAuthorityCapability } from "./installed-execution-authority"
+export {
+  createInstalledExecutionAuthorityCapability,
+  observeInstalledExecutionAuthority,
+  installedExecutionAuthoritySchema,
+} from "./installed-execution-authority"
 export type {
   InstalledExecutionAuthority,
   InstalledExecutionAuthorityCapability,
@@ -99,6 +119,7 @@ export type {
   StoredObject,
 } from "./independent-journal"
 export { R2ConditionalObjectStore } from "./r2-store"
+export { createConfiguredJournalStore } from "./configured-journal-store"
 export { PostgresAuthorityMirror } from "./postgres-mirror"
 export type {
   AuthoritySqlClient,
@@ -162,3 +183,21 @@ export type {
   SupervisorPort,
   SupervisorReceipt,
 } from "./protocol"
+
+export { createSupervisorExecutionAuthorityCapability } from "./disposable-installed-authority"
+
+export { nativeRemovalProofSchema, parseNativeRemovalProof } from "./native-removal-proof"
+
+export { deriveSupervisorToolJournalIdentity } from "./supervisor-tool-identity"
+export {
+  nativeEngineResultChunkSchema,
+  nativeEngineResultInputSchema,
+  NATIVE_ENGINE_RESULT_MAX_BYTES,
+  NATIVE_ENGINE_RESULT_CHUNK_BYTES,
+  type NativeEngineResultChunk,
+} from "./native-engine-result"
+
+export {
+  sandboxToolRetirementProofSchema,
+  parseSandboxToolRetirementProof,
+} from "./sandbox-tool-retirement"

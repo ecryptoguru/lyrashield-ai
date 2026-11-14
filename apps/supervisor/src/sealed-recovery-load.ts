@@ -19,7 +19,8 @@ interface RecoveryLoadOptions {
 export function decodeSealedAttempts(snapshot: SealedRecoverySnapshot): Map<string, AttemptState> {
   const attempts = new Map<string, AttemptState>()
   for (const { id, state } of snapshot.attempts) {
-    const { nativeAckGuards, nativeCreateProofs, nativeStartIntents, ...rest } = state
+    const { nativeAckGuards, nativeCreateProofs, nativeRetirements, nativeStartIntents, ...rest } =
+      state
     attempts.set(id, {
       ...rest,
       plans: new Map(state.plans),
@@ -31,6 +32,7 @@ export function decodeSealedAttempts(snapshot: SealedRecoverySnapshot): Map<stri
       startAcknowledged: new Set(state.startAcknowledged),
       nativeAckGuards: new Set(nativeAckGuards),
       nativeCreateProofs: new Map(nativeCreateProofs),
+      nativeRetirements: new Map(nativeRetirements ?? []),
       nativeStartIntents: new Map(nativeStartIntents),
       createdExecutors: new Set(state.createdExecutors),
     })

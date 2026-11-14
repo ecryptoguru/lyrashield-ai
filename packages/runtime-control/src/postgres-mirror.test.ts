@@ -13,6 +13,34 @@ function connection() {
 }
 
 describe("PostgreSQL authority mirror deadlines and transport failures", () => {
+  it("bounds the narrow installed stream check and destroys a late query connection", async () => {
+    vi.useFakeTimers()
+    let resolve!: (value: { rows: { matched: boolean }[] }) => void
+    const active = {
+      query: vi.fn(async (text: string): Promise<{ rows: Record<string, unknown>[] }> =>
+        text.includes("scan_supervisor_journal_stream_matches")
+          ? new Promise((value) => {
+              resolve = value
+            })
+          : { rows: [] }
+      ),
+      release: vi.fn(),
+    }
+    const mirror = new PostgresAuthorityMirror(
+      { query: active.query, connect: async () => active },
+      "epoch-1",
+      "supervisor-1"
+    )
+    const result = mirror
+      .verifySupervisorStreamBinding("stream-1", "a".repeat(64), "b".repeat(64))
+      .catch((error) => error)
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(await result).toMatchObject({ message: expect.stringContaining("timeout") })
+    expect(active.release).toHaveBeenCalledWith(true)
+    resolve({ rows: [{ matched: true }] })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(active.query.mock.calls.flat()).not.toContain("COMMIT")
+  })
   it("expires connection acquisition and discards a late connection without SQL", async () => {
     vi.useFakeTimers()
     let resolve!: (value: AuthoritySqlConnection) => void

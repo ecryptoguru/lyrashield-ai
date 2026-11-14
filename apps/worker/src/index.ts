@@ -20,6 +20,11 @@ import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
 import { FIX_GENERATE_QUEUE_NAME, type FixGenerateJobData } from "@lyrashield/integrations"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processWorkerScanJob } from "./jobs/scan-job-processor"
+import {
+  workerAuthorityStartup,
+  legacyWorkerLifecycleEnabled,
+  initializeWorkerAuthorityStartup,
+} from "./worker-authority-startup"
 import { processWebhookTrackRetry } from "./jobs/webhook-track-retry.job"
 import { processQueuedFixGenerateJob, type FixGenerateJobResult } from "./jobs/fix-generate.job"
 import { startScheduleRunner } from "./schedules"
@@ -172,6 +177,14 @@ async function startOperationalHealthMonitoring(
 }
 
 export async function refreshWorkerReadiness(): Promise<void> {
+  if (
+    workerAuthorityStartup.kind === "closed" ||
+    (workerAuthorityStartup.kind === "broker" &&
+      !(await workerAuthorityStartup.adapter.isCurrent()))
+  ) {
+    await removeWorkerReadiness()
+    throw new Error("Worker authority is unavailable")
+  }
   await writeFile(readinessPath, new Date().toISOString(), { mode: 0o600 })
 }
 
@@ -394,17 +407,41 @@ async function assertWorkerStartupResources(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  assertWorkerStartupProvenance()
+  await initializeWorkerAuthorityStartup()
+  if (
+    workerAuthorityStartup.kind === "closed" ||
+    (workerAuthorityStartup.kind === "broker" &&
+      !(await workerAuthorityStartup.adapter.isCurrent()))
+  ) {
+    await removeWorkerReadiness()
+    if (workerAuthorityStartup.kind === "broker") {
+      await workerAuthorityStartup.adapter.reconcileRetained().catch(() => {})
+      reconciliationTimer = setInterval(() => {
+        if (workerAuthorityStartup.kind === "broker")
+          void workerAuthorityStartup.adapter.reconcileRetained().catch(() => {})
+      }, 5 * 60_000)
+    }
+    logger.warn("Worker authority is closed; scan admission and claims remain disabled")
+    // Remain observable as a live closed role without registering readiness,
+    // starting consumers, connecting native executors or exposing provider keys.
+    heartbeatTimer = setInterval(() => {
+      void removeWorkerReadiness().catch(() => {})
+    }, SCAN_WORKER_HEARTBEAT_MS)
+    return
+  }
   assertConfiguredWorkerDbPoolCapacity()
   await initSentry()
   // Gate readiness BEFORE the worker can claim anything: missing or malformed
   // provenance throws, main() rejects, and the process exits without ever
   // writing the readiness marker.
-  assertWorkerStartupProvenance()
   logger.info("LyraShield worker starting", { redisConfigured: Boolean(env.REDIS_URL) })
   assertEvidenceStorageConfigured()
-  assertRepositoryScanRuntimeConfigured()
-  await assertEngineTempRootReady()
-  await assertWorkerStartupResources()
+  if (legacyWorkerLifecycleEnabled()) {
+    assertRepositoryScanRuntimeConfigured()
+    await assertEngineTempRootReady()
+    await assertWorkerStartupResources()
+  }
 
   configureColdDatabaseEpochFailureHandler(() => {
     void shutdown("COLD_WORKER_AUTHORITY_LOST", 1)
@@ -445,10 +482,14 @@ async function main(): Promise<void> {
   )
 
   await worker.waitUntilReady()
-  const scanWorkerHeartbeat = createWorkerHeartbeatController(
-    () => registerRelayAwareWorker(workerId),
-    refreshWorkerReadiness
-  )
+  const scanWorkerHeartbeat = createWorkerHeartbeatController(async () => {
+    if (
+      workerAuthorityStartup.kind === "broker" &&
+      !(await workerAuthorityStartup.adapter.isCurrent())
+    )
+      throw new Error("Worker authority is unavailable")
+    await registerRelayAwareWorker(workerId)
+  }, refreshWorkerReadiness)
   workerHeartbeatController = scanWorkerHeartbeat
   worker.on("completed", (job, result) => {
     logger.info("Job completed", { jobId: job.id, result })
@@ -563,6 +604,8 @@ async function main(): Promise<void> {
         error: error instanceof Error ? error.message : String(error),
       })
     })
+  if (workerAuthorityStartup.kind === "broker")
+    await workerAuthorityStartup.adapter.reconcileRetained()
   const startupReconciliation = await reconcileScanQueue()
   let lastReconciliationAtMs = Date.now()
   await startOperationalHealthMonitoring(startupReconciliation)
@@ -575,6 +618,12 @@ async function main(): Promise<void> {
       .catch((error) => {
         logger.warn("Artifact deletion outbox drain failed", {
           error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    if (workerAuthorityStartup.kind === "broker")
+      void workerAuthorityStartup.adapter.reconcileRetained().catch((error) => {
+        logger.warn("Native result reconciliation retained", {
+          errorType: error instanceof Error ? error.name : "UNKNOWN",
         })
       })
     void reconcileScanQueueIfNeeded(lastReconciliationAtMs, now)
@@ -612,7 +661,7 @@ async function main(): Promise<void> {
         })
       })
   }, RECONCILIATION_INTERVAL_MS)
-  if (env.LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED === "1") {
+  if (legacyWorkerLifecycleEnabled() && env.LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED === "1") {
     const reap = async () => {
       const result = await reapStaleScanResources({
         minimumAgeMs: env.LYRASHIELD_STALE_RESOURCE_MIN_AGE_MINUTES * 60_000,
@@ -666,6 +715,10 @@ async function main(): Promise<void> {
           error: readinessError instanceof Error ? readinessError.message : String(readinessError),
         })
       })
+      if (workerAuthorityStartup.kind === "broker") {
+        await worker?.pause(true).catch(() => {})
+        await workerAuthorityStartup.adapter.reconcileRetained().catch(() => {})
+      }
     })
   }, SCAN_WORKER_HEARTBEAT_MS)
 

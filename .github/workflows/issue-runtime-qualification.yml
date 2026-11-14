@@ -23,6 +23,11 @@ on:
         type: string
         required: false
         default: ""
+      runtime_fleet_configuration:
+        description: "Independent rollback and inventory selectors; current-run evidence comes only from immutable native observations"
+        type: string
+        required: false
+        default: ""
     outputs:
       runtime_fleet_qualification:
         description: "Signed exact-artifact release qualification envelope"
@@ -65,7 +70,7 @@ jobs:
         with:
           node-version: "24"
       - name: Prepare checksum-pinned protected Linux verifier
-        if: inputs.fresh_sandbox_publication != '' || inputs.fresh_sandbox_inventory != '' || inputs.runtime_fleet_evidence != ''
+        if: inputs.fresh_sandbox_publication != '' || inputs.fresh_sandbox_inventory != '' || inputs.runtime_fleet_evidence != '' || inputs.runtime_fleet_configuration != ''
         run: bash .github/scripts/prepare-qualification-verifier.sh
       - name: Authenticate and managed-sign held sandbox publication
         if: inputs.fresh_sandbox_publication != ''
@@ -93,16 +98,76 @@ jobs:
           path: sandbox-inventory-record.json
           if-no-files-found: error
           retention-days: 7
-      - name: Authenticate and managed-sign the exact-artifact release record
-        id: fleet
-        if: inputs.runtime_fleet_evidence != ''
+      - name: Witness immutable native runtime observations
+        if: inputs.runtime_fleet_configuration != ''
+        id: evidence-witnesses
         env:
           GH_TOKEN: ${{ github.token }}
-          RUNTIME_FLEET_EVIDENCE: ${{ inputs.runtime_fleet_evidence }}
+          RUNTIME_FLEET_CONFIGURATION: ${{ inputs.runtime_fleet_configuration }}
+          PREPARED_RUNTIME_FLEET: ${{ inputs.prepared_fleet }}
+        run: node .github/scripts/runtime-fleet-evidence-transport.mjs witness
+      - name: Upload native evidence witness
+        if: inputs.runtime_fleet_configuration != ''
+        id: native-witness
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.evidence-witnesses.outputs.native_artifact_name }}
+          path: ${{ runner.temp }}/lyrashield-runtime-evidence-witnesses/native/paired-witness.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload migration evidence witness
+        if: inputs.runtime_fleet_configuration != ''
+        id: migration-witness
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.evidence-witnesses.outputs.migration_artifact_name }}
+          path: ${{ runner.temp }}/lyrashield-runtime-evidence-witnesses/migration/paired-witness.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload policy evidence witness
+        if: inputs.runtime_fleet_configuration != ''
+        id: policy-witness
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.evidence-witnesses.outputs.policy_artifact_name }}
+          path: ${{ runner.temp }}/lyrashield-runtime-evidence-witnesses/policy/paired-witness.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload journal evidence witness
+        if: inputs.runtime_fleet_configuration != ''
+        id: journal-witness
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.evidence-witnesses.outputs.journal_artifact_name }}
+          path: ${{ runner.temp }}/lyrashield-runtime-evidence-witnesses/journal/paired-witness.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Authenticate the uploaded current-run evidence selectors
+        if: inputs.runtime_fleet_configuration != ''
+        id: evidence-selectors
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNTIME_FLEET_CONFIGURATION: ${{ inputs.runtime_fleet_configuration }}
+          PREPARED_RUNTIME_FLEET: ${{ inputs.prepared_fleet }}
+          NATIVE_DIGEST: ${{ steps.evidence-witnesses.outputs.native_digest }}
+          MIGRATION_DIGEST: ${{ steps.evidence-witnesses.outputs.migration_digest }}
+          POLICY_DIGEST: ${{ steps.evidence-witnesses.outputs.policy_digest }}
+          JOURNAL_DIGEST: ${{ steps.evidence-witnesses.outputs.journal_digest }}
+          NATIVE_ARTIFACT_ID: ${{ steps.native-witness.outputs.artifact-id }}
+          MIGRATION_ARTIFACT_ID: ${{ steps.migration-witness.outputs.artifact-id }}
+          POLICY_ARTIFACT_ID: ${{ steps.policy-witness.outputs.artifact-id }}
+          JOURNAL_ARTIFACT_ID: ${{ steps.journal-witness.outputs.artifact-id }}
+        run: node .github/scripts/runtime-fleet-evidence-transport.mjs locate
+      - name: Authenticate and managed-sign the exact-artifact release record
+        id: fleet
+        if: inputs.runtime_fleet_evidence != '' || inputs.runtime_fleet_configuration != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNTIME_FLEET_EVIDENCE: ${{ steps.evidence-selectors.outputs.runtime_fleet_evidence || inputs.runtime_fleet_evidence }}
           PREPARED_RUNTIME_FLEET: ${{ inputs.prepared_fleet }}
         run: node .github/scripts/issue-runtime-fleet-qualification.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: inputs.runtime_fleet_evidence != ''
+        if: inputs.runtime_fleet_evidence != '' || inputs.runtime_fleet_configuration != ''
         with:
           name: runtime-fleet-qualification-${{ github.run_id }}-${{ github.run_attempt }}
           path: |

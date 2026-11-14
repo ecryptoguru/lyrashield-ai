@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Owns a disposable network-none PostgreSQL fixture; never accepts a DB URL.
 set -euo pipefail
-if [[ "$#" -gt 1 ]]; then echo 'Usage: scan-dispatch-authority-pg.sh [--admission-only|--preparation-only|--receipts-only|--actions-only|--context-only]' >&2; exit 1; fi
+if [[ "$#" -gt 1 ]]; then echo 'Usage: scan-dispatch-authority-pg.sh [--admission-only|--outbox-only|--preparation-only|--receipts-only|--journal-only|--actions-only|--native-origin-only|--source-only|--context-only]' >&2; exit 1; fi
 case "${1:-}" in
   '') test_files=(packages/db/src/scan-dispatch-authority-broker.postgres.test.ts packages/db/src/scan-dispatch-admission.postgres.test.ts packages/db/src/scan-queue-outbox.postgres.test.ts packages/db/src/scan-preparation-authority.postgres.test.ts packages/db/src/scan-policy-authority.postgres.test.ts packages/db/src/scan-dispatch-command-descriptor.postgres.test.ts) ;;
   --admission-only) test_files=(packages/db/src/scan-dispatch-admission.postgres.test.ts) ;;
   --actions-only) test_files=(packages/db/src/scan-execution-action-authority.postgres.test.ts) ;;
+  --native-origin-only) test_files=(packages/db/src/scan-native-origin-authority-reader.postgres.test.ts) ;;
+  --source-only) test_files=(packages/db/src/scan-preparation-source-reader.postgres.test.ts) ;;
   --receipts-only) test_files=(packages/db/src/scan-supervisor-receipt-ingestion.postgres.test.ts) ;;
+  --journal-only) test_files=(packages/runtime-control/src/installed-supervisor-journal.postgres.test.ts) ;;
   --preparation-only) test_files=(packages/db/src/scan-preparation-authority.postgres.test.ts packages/db/src/scan-policy-authority.postgres.test.ts packages/db/src/scan-dispatch-command-descriptor.postgres.test.ts) ;;
+  --outbox-only) test_files=(packages/db/src/scan-queue-outbox.postgres.test.ts) ;;
   --context-only) test_files=(packages/db/src/disposable-execution-context.postgres.test.ts) ;;
-  *) echo 'Usage: scan-dispatch-authority-pg.sh [--admission-only|--preparation-only|--receipts-only|--actions-only|--context-only]' >&2; exit 1 ;;
+  *) echo 'Usage: scan-dispatch-authority-pg.sh [--admission-only|--outbox-only|--preparation-only|--receipts-only|--journal-only|--actions-only|--native-origin-only|--source-only|--context-only]' >&2; exit 1 ;;
 esac
 repo_root=$(cd "$(dirname "$0")/../../../.." && pwd)
 cd "$repo_root"
@@ -123,7 +127,7 @@ pnpm db:generate
 mkdir "$dir/migrations"
 for migration in "$repo_root"/packages/db/prisma/migrations/*; do
   case "$(basename "$migration")" in
-    20261111130000_scan_preparation_authority_fence|20261113140000_scan_dispatch_command_descriptor|20261113150000_supervisor_receipt_ingestion|20261113163000_scan_execution_action_authority|20261113170000_supervisor_execution_receipts|20261113181000_supervisor_native_invocation_resolution|20261113200000_supervisor_preparation_completion|20261114010000_scope_invocation_guard_to_workspace) continue ;;
+    20261111130000_scan_preparation_authority_fence|20261113140000_scan_dispatch_command_descriptor|20261113150000_supervisor_receipt_ingestion|20261113163000_scan_execution_action_authority|20261113170000_supervisor_execution_receipts|20261113181000_supervisor_native_invocation_resolution|20261113200000_supervisor_preparation_completion|20261114010000_scope_invocation_guard_to_workspace|20261114020000_supervisor_journal_stream_binding|20261114120000_scan_dispatch_worker_assignment|20261114133000_scan_dispatch_lifecycle_commands|20261114150000_scan_native_guard_backend|20261114150000_scan_sandbox_tool_authority|20261114160000_scan_native_origin_authority_reader|20261114170000_scan_dispatch_lifecycle_proof_acceptance|20261114170000_scan_preparation_source_reader|20261114183000_scan_native_retirement_proof|20261114184000_scan_native_retained_authority_reader|20261114184500_scan_installed_worker_grant_reader|20261114185000_scan_dispatch_cleanup_invocation_fence|20261114185500_scan_native_tool_retirement_reader|20261114200000_scan_worker_result_observation_reader|20261114210000_scan_worker_retained_cleanup_reader) continue ;;
   esac
   if [[ -d "$migration" ]]; then
     mkdir "$dir/migrations/$(basename "$migration")"
@@ -282,6 +286,36 @@ if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.
 fi
 # Prisma first sends an SSL negotiation frame; fault injection is complete.
 # Restore the transparent owned relay for schema verification.
+if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -q -At -U postgres -d lyrashield_test -c "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_execution_invocation_pending' AND position('workspace_id' in p.prosrc)>0")" == '0' ]]; then
+  docker exec -i -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -1 -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$repo_root/packages/db/prisma/migrations/20261114010000_scope_invocation_guard_to_workspace/migration.sql" >/dev/null
+fi
+if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -q -At -U postgres -d lyrashield_test -c "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_supervisor_journal_stream_matches'")" == '0' ]]; then
+  docker exec -i -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$repo_root/packages/db/prisma/migrations/20261114020000_supervisor_journal_stream_binding/migration.sql" >/dev/null
+fi
+if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -q -At -U postgres -d lyrashield_test -c "SELECT count(*) FROM information_schema.tables WHERE table_name='ScanDispatchWorkerAssignment'")" == '0' ]]; then
+  docker exec -i -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$repo_root/packages/db/prisma/migrations/20261114120000_scan_dispatch_worker_assignment/migration.sql" >/dev/null
+fi
+# These depend on the action/receipt tables created by the legacy fixture stage.
+for migration_check in \
+  "20261114133000_scan_dispatch_lifecycle_commands|SELECT count(*) FROM information_schema.columns WHERE table_name='ScanDispatchOutbox' AND column_name='executorKey'" \
+  "20261114150000_scan_native_guard_backend|SELECT count(*) FROM information_schema.columns WHERE table_name='ScanExecutionInvocationGuard' AND column_name='nativeBackendPid'" \
+  "20261114150000_scan_sandbox_tool_authority|SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_execution_action_intent_guard' AND position('sandbox tool original ownership unavailable' in p.prosrc)>0" \
+  "20261114160000_scan_native_origin_authority_reader|SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_native_executor_origin_gate_held'" \
+  "20261114170000_scan_dispatch_lifecycle_proof_acceptance|SELECT count(*) FROM information_schema.tables WHERE table_name='ScanDispatchLifecycleProof'" \
+  "20261114170000_scan_preparation_source_reader|SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='require_scan_preparation_source_role'" \
+  "20261114183000_scan_native_retirement_proof|SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_native_retirement_guard'" \
+  "20261114184000_scan_native_retained_authority_reader|SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='read_scan_native_retained_guard'" \
+  "20261114184500_scan_installed_worker_grant_reader|SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='read_scan_installed_worker_grant'" \
+  "20261114185000_scan_dispatch_cleanup_invocation_fence|SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_dispatch_cleanup_invocation_fence'" \
+  "20261114185500_scan_native_tool_retirement_reader|SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='read_scan_native_pending_tool_guards'" \
+  "20261114200000_scan_worker_result_observation_reader|SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='read_scan_installed_worker_operations'" \
+  "20261114210000_scan_worker_retained_cleanup_reader|SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='read_scan_installed_worker_cleanup_operations'"; do
+  late_migration=${migration_check%%|*}
+  existence_query=${migration_check#*|}
+  if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -q -At -U postgres -d lyrashield_test -c "$existence_query")" == '0' ]]; then
+    docker exec -i -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -1 -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$repo_root/packages/db/prisma/migrations/$late_migration/migration.sql" >/dev/null
+  fi
+done
 kill "$relay_pid" 2>/dev/null || true
 wait "$relay_pid" 2>/dev/null || true
 python3 "$repo_root/ops/prototypes/dispatch-plan-test/relay.py" "$container" "$dir/schema-port" "$dir/stop-relay" >"$dir/schema-relay.out" 2>"$dir/schema-relay.err" &
@@ -294,7 +328,7 @@ done
 port=$(cat "$dir/schema-port")
 [[ "$port" =~ ^[0-9]+$ ]] || { echo 'Fixture schema port unavailable' >&2; exit 1; }
 fixture_url="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test"
-for applied_migration in 20261111130000_scan_preparation_authority_fence 20261113140000_scan_dispatch_command_descriptor 20261113150000_supervisor_receipt_ingestion 20261113163000_scan_execution_action_authority 20261113170000_supervisor_execution_receipts 20261113181000_supervisor_native_invocation_resolution 20261113200000_supervisor_preparation_completion; do
+for applied_migration in 20261111130000_scan_preparation_authority_fence 20261113140000_scan_dispatch_command_descriptor 20261113150000_supervisor_receipt_ingestion 20261113163000_scan_execution_action_authority 20261113170000_supervisor_execution_receipts 20261113181000_supervisor_native_invocation_resolution 20261113200000_supervisor_preparation_completion 20261114010000_scope_invocation_guard_to_workspace 20261114020000_supervisor_journal_stream_binding 20261114120000_scan_dispatch_worker_assignment 20261114133000_scan_dispatch_lifecycle_commands 20261114150000_scan_native_guard_backend 20261114150000_scan_sandbox_tool_authority 20261114160000_scan_native_origin_authority_reader 20261114170000_scan_dispatch_lifecycle_proof_acceptance 20261114170000_scan_preparation_source_reader 20261114183000_scan_native_retirement_proof 20261114184000_scan_native_retained_authority_reader 20261114184500_scan_installed_worker_grant_reader 20261114185000_scan_dispatch_cleanup_invocation_fence 20261114185500_scan_native_tool_retirement_reader 20261114200000_scan_worker_result_observation_reader 20261114210000_scan_worker_retained_cleanup_reader; do
   DATABASE_URL="$fixture_url" DATABASE_DIRECT_URL="$fixture_url" pnpm --filter @lyrashield/db exec prisma migrate resolve --applied "$applied_migration"
 done
 # The repository prisma.config.ts prefers DATABASE_DIRECT_URL, which a developer
@@ -305,7 +339,9 @@ DATABASE_URL="$fixture_url" DATABASE_DIRECT_URL="$fixture_url" pnpm --filter @ly
 
 # Epoch closure uses an independent clone after all source fixture clients end;
 # it cannot close the shared epoch used by another suite or depend on file order.
-if [[ "${1:-}" != '--admission-only' ]]; then
+# Native-origin tests intentionally retain unresolved guards; epoch fixtures own
+# a separate qualification and must not rewrite those recovery obligations.
+if [[ "${1:-}" != '--admission-only' && "${1:-}" != '--native-origin-only' ]]; then
   docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test -c 'CREATE DATABASE lyrashield_epoch_test TEMPLATE lyrashield_test' >/dev/null
   TZ=UTC BETTER_AUTH_SECRET=fixture-only-secret-32-characters-minimum BETTER_AUTH_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_epoch_test" DATABASE_DIRECT_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_epoch_test" DISPATCH_PREPARATION_BROKER_PASSWORD="$preparation_password" DISPATCH_PREPARATION_BROKER_DATABASE_URL="postgresql://dispatch_prepare_broker:${preparation_password}@127.0.0.1:${port}/lyrashield_epoch_test" DISPATCH_AUTHORITY_REVOKER_PASSWORD="$revoker_password" DISPATCH_AUTHORITY_REVOKER_DATABASE_URL="postgresql://dispatch_authority_revoker:${revoker_password}@127.0.0.1:${port}/lyrashield_epoch_test" REDIS_URL="redis://outbox-publisher:${redis_publisher_password}@127.0.0.1:${redis_port}/0" LYRASHIELD_TEST_DB_DISPOSABLE=1 SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST=1 pnpm exec vitest run packages/db/src/scan-preparation-epoch.postgres.test.ts
 fi

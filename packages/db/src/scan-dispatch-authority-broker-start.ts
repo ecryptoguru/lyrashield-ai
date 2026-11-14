@@ -1,5 +1,6 @@
 import { createId } from "@paralleldrive/cuid2"
 import type pg from "pg"
+import { canonicalJson, sha256Hex, type SupervisorAttemptProof } from "@lyrashield/runtime-control"
 import {
   ScanDispatchAuthorityError,
   commandDigest,
@@ -47,7 +48,8 @@ type StartPaidAttemptRow = {
 
 async function loadStartPaidAttempt(
   client: pg.PoolClient,
-  input: StartPaidDispatchInput
+  input: StartPaidDispatchInput,
+  stage = false
 ): Promise<StartPaidAttemptRow> {
   const attempt = await client.query<StartPaidAttemptRow>(
     `SELECT a."attemptId", a."scanId", a."operationId", a."maxBudgetUsd"::text AS "maxBudgetUsd",
@@ -56,7 +58,7 @@ async function loadStartPaidAttempt(
      FROM "ScanDispatchAttempt" a
      JOIN "Scan" s ON s."id" = a."scanId"
      WHERE a."operationId"=$1 AND a."attemptId"=$2
-     FOR UPDATE OF a, s`,
+     FOR UPDATE OF ${stage ? "s" : "a, s"}`,
     [input.operationId, input.attemptId]
   )
   const attemptRow = attempt.rows[0]
@@ -91,7 +93,8 @@ async function readStartPaidReplay(
 async function checkStartPaidPreparation(
   client: pg.PoolClient,
   operation: LockedOperation,
-  input: StartPaidDispatchInput
+  input: StartPaidDispatchInput,
+  stage = false
 ): Promise<void> {
   if (operation.state !== "PREPARED")
     throw new ScanDispatchAuthorityError(
@@ -99,7 +102,7 @@ async function checkStartPaidPreparation(
       `Paid start requires PREPARED, found ${operation.state}`
     )
   const physical = await client.query<{ state: string }>(
-    'SELECT "state"::text AS state FROM "ScanPhysicalExecution" WHERE "attemptId"=$1 FOR UPDATE',
+    `SELECT "state"::text AS state FROM "ScanPhysicalExecution" WHERE "attemptId"=$1 ${stage ? "" : "FOR UPDATE"}`,
     [input.attemptId]
   )
   if (physical.rows[0]?.state !== "PREPARING")
@@ -109,7 +112,7 @@ async function checkStartPaidPreparation(
     )
   const preparation = await client.query<{ status: string }>(
     `SELECT "status"::text AS status FROM "ScanDispatchOutbox"
-     WHERE "operationId"=$1 AND "attemptId"=$2 AND "commandType"='PREPARE' FOR UPDATE`,
+     WHERE "operationId"=$1 AND "attemptId"=$2 AND "commandType"='PREPARE' ${stage ? "" : "FOR UPDATE"}`,
     [input.operationId, input.attemptId]
   )
   if (preparation.rows[0]?.status !== "COMPLETED")
@@ -170,11 +173,17 @@ async function writeStartPaidRecords(
   attemptRow: StartPaidAttemptRow,
   funding: StartPaidFunding,
   maxBudgetUsd: number,
-  maxRuntimeMs: number
+  maxRuntimeMs: number,
+  stageProof?: SupervisorAttemptProof
 ): Promise<{ state: "START_PENDING"; attemptId: string; startId: string; commandId: string }> {
+  if (stageProof && maxRuntimeMs !== attemptRow.maxRuntimeMs)
+    throw new ScanDispatchAuthorityError(
+      "CAPACITY_NOT_READY",
+      "Funding no longer matches the immutable prepared runtime"
+    )
   const startId = createId()
   const billableClaimEventId = createId()
-  const commandId = createId()
+  const commandId = stageProof?.command.commandId ?? createId()
   const fundingDigest = valueDigest("dispatch-funding/1", {
     scanId: attemptRow.scanId,
     accountId: funding.accountId,
@@ -214,8 +223,8 @@ async function writeStartPaidRecords(
   await client.query(
     `INSERT INTO "ScanDispatchStart" (
       "startId","operationId","attemptId","kind","maxBudgetUsd","maxRuntimeMs",
-      "policyDigest","fundingDigest","billableClaimEventId","providerGrantDigest","createdAt"
-    ) VALUES ($1,$2,$3,'PAID',$4::numeric,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP)`,
+      "policyDigest","fundingDigest","billableClaimEventId","providerGrantDigest","createdAt","authorityProofInputJson","authorityProofChecksum"
+    ) VALUES ($1,$2,$3,'PAID',$4::numeric,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP,$10,$11)`,
     [
       startId,
       input.operationId,
@@ -226,20 +235,23 @@ async function writeStartPaidRecords(
       fundingDigest,
       billableClaimEventId,
       providerGrantDigest,
+      stageProof ? canonicalJson(stageProof) : null,
+      stageProof ? sha256Hex(canonicalJson(stageProof)) : null,
     ]
   )
-  await client.query(
-    `INSERT INTO "ScanDispatchOutbox" (
+  if (!stageProof)
+    await client.query(
+      `INSERT INTO "ScanDispatchOutbox" (
       "id","operationId","attemptId","commandType","sequence","commandDigest","status",
       "attempts","availableAt","createdAt","updatedAt"
     ) VALUES ($1,$2,$3,'START_PAID',2,$4,'PENDING',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-    [
-      commandId,
-      input.operationId,
-      input.attemptId,
-      commandDigest("START_PAID", input.operationId, input.attemptId),
-    ]
-  )
+      [
+        commandId,
+        input.operationId,
+        input.attemptId,
+        commandDigest("START_PAID", input.operationId, input.attemptId),
+      ]
+    )
   await client.query(
     'UPDATE "ScanDispatchOperation" SET "state"=\'START_PENDING\', "updatedAt"=CURRENT_TIMESTAMP WHERE "operationId"=$1',
     [input.operationId]
@@ -255,7 +267,22 @@ export async function startPaidDispatch(
     const outcome = await ctx.transaction(input.operationId, async (client) => {
       const operation = await ctx.lockOperation(client, input)
       await checkStartPaidGrant(client, input)
-      const attemptRow = await loadStartPaidAttempt(client, input)
+      const attemptRow = await loadStartPaidAttempt(client, input, Boolean(ctx.stageProof))
+      if (ctx.stageProof) {
+        const existing = (
+          await client.query<{ startId: string }>(
+            `SELECT "startId" FROM "ScanDispatchStart" WHERE "operationId"=$1 AND "attemptId"=$2 AND kind='PAID' AND "authorityProofInputJson" IS NOT NULL`,
+            [input.operationId, input.attemptId]
+          )
+        ).rows[0]
+        if (existing)
+          return {
+            state: "START_PENDING" as const,
+            attemptId: input.attemptId,
+            startId: existing.startId,
+            commandId: ctx.stageProof.command.commandId,
+          }
+      }
       const replay = await readStartPaidReplay(client, input)
       if (replay)
         return {
@@ -264,7 +291,7 @@ export async function startPaidDispatch(
           startId: replay.startId,
           commandId: replay.commandId,
         }
-      await checkStartPaidPreparation(client, operation, input)
+      await checkStartPaidPreparation(client, operation, input, Boolean(ctx.stageProof))
       const { funding, maxBudgetUsd, maxRuntimeMs } = await loadStartPaidFunding(client, attemptRow)
       return await writeStartPaidRecords(
         client,
@@ -272,7 +299,8 @@ export async function startPaidDispatch(
         attemptRow,
         funding,
         maxBudgetUsd,
-        maxRuntimeMs
+        maxRuntimeMs,
+        ctx.stageProof
       )
     })
     if (outcome.kind === "unknown") return outcome

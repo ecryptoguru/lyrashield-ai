@@ -37,7 +37,12 @@ import {
   enqueueScanJob,
   ScanWorkerUnavailableError,
 } from "../../../lib/queue"
-import { getBranchRefSha, getDefaultBranch, getMergeBaseSha } from "@lyrashield/integrations"
+import {
+  getBranchRefSha,
+  getDefaultBranch,
+  getMergeBaseSha,
+  resolveRepositoryScanSource,
+} from "@lyrashield/integrations"
 import {
   checkFreeUrlScanRateLimit,
   checkScanCreateRateLimit,
@@ -531,27 +536,33 @@ async function post(request: Request) {
           workflow: data.workflow,
         })
       }
-    } else if (target.type === "REPO" && target.installationId) {
-      // Pin the head revision when the authorized integration can resolve it.
-      // REVIEW_TARGET keeps provenance honestly absent when the repository is
-      // unreachable rather than failing scan admission on a resolver outage.
-      const installationId = Number(target.installationId)
-      const repoOwner = target.repoOwner ?? target.repoFullName?.split("/")[0]
-      const repoName = target.repoName ?? target.repoFullName?.split("/")[1]
-      if (repoOwner && repoName) {
-        try {
-          const branch =
-            target.branch ?? (await getDefaultBranch(installationId, repoOwner, repoName))
-          planSource = {
-            revision: await resolveRepoRevision(installationId, repoOwner, repoName, branch),
-          }
-        } catch (resolveErr) {
-          logger.warn("Head revision resolution failed; plan records no source pin", {
-            workspaceId,
-            targetId: data.targetId,
-            error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr),
-          })
-        }
+    } else if (target.type === "REPO") {
+      try {
+        planSource = await resolveRepositoryScanSource(target, {
+          signal: request.signal,
+          readActiveConnection: () =>
+            prisma.integration.findFirst({
+              where: {
+                workspaceId,
+                type: "GITHUB",
+                externalId: String(target.installationId),
+                status: "active",
+                deletedAt: null,
+              },
+            }),
+        })
+      } catch {
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "ref_unresolved",
+          code: "SCAN_REF_UNRESOLVED",
+          message: "Could not resolve the repository to an immutable revision.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
     }
 

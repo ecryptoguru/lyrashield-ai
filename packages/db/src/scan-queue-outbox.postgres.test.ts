@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomBytes, randomUUID } from "node:crypto"
 import pg from "pg"
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest"
 import { PrismaClient } from "./generated/prisma"
@@ -19,6 +19,8 @@ import {
 } from "../scripts/tests/scan-preparation-fixture"
 import { getScanQueue } from "../../integrations/src/queue"
 import type { ScanFocus } from "@lyrashield/types"
+import { withScanDispatchWorkerCredential } from "./scan-dispatch-worker-assignment"
+import { createScanQueuePublicationVerifier } from "./scan-queue-publication-verifier"
 
 // Hoisting runs this guard before imports can construct a client from ambient
 // env. Bind the fixture's privileged DATABASE_URL role to its restricted
@@ -36,6 +38,11 @@ const enabled =
   process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1"
 let owner: PrismaClient
 let runtime: pg.Pool
+let maintenance: pg.Pool
+let fixtureDatabase: string | undefined
+let workerGrant: { id: string; authorityEpochId: string; instanceId: string }
+let workerBrokerUrl: string
+const workerCredential = randomBytes(32).toString("hex")
 const queueWorker = queueFixtureWorker()
 
 async function fixture(focus?: ScanFocus, shadow = false, legacy = false) {
@@ -120,6 +127,27 @@ describe.skipIf(!enabled)("closed outbox dispatcher with restricted PostgreSQL a
       redisUrl.username !== "outbox-publisher"
     )
       throw new Error("requires the owned disposable PostgreSQL/Redis fixture")
+    await queueWorker.open()
+    const sqlOwner = new pg.Pool({ connectionString: ownerUrl.href })
+    try {
+      await applyPreparationFixtureMigration(sqlOwner)
+      await installPreparationFixtureRole(sqlOwner)
+    } finally {
+      await sqlOwner.end()
+    }
+    const maintenanceUrl = new URL(ownerUrl.href)
+    maintenanceUrl.pathname = "/postgres"
+    maintenance = new pg.Pool({ connectionString: maintenanceUrl.href, max: 1 })
+    const createdDatabase = `lyrashield_queue_assignment_test_${randomBytes(6).toString("hex")}`
+    // Names are generated here after the disposable-pair guard; no caller SQL input.
+    await maintenance.query(`CREATE DATABASE "${createdDatabase}" TEMPLATE lyrashield_test`)
+    fixtureDatabase = createdDatabase
+    await maintenance.query(`REVOKE TEMPORARY ON DATABASE "${fixtureDatabase}" FROM PUBLIC`)
+    ownerUrl.pathname = `/${fixtureDatabase}`
+    runtimeUrl.pathname = ownerUrl.pathname
+    const brokerUrl = new URL(process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!)
+    brokerUrl.pathname = ownerUrl.pathname
+    workerBrokerUrl = brokerUrl.href
     owner = new PrismaClient({
       adapter: createBoundedPgAdapter(ownerUrl.href, "db:test:queue-outbox"),
     })
@@ -131,19 +159,36 @@ describe.skipIf(!enabled)("closed outbox dispatcher with restricted PostgreSQL a
     })
     runtime.on("error", () => undefined)
     runtime.on("connect", (client) => client.on("error", () => undefined))
-    await queueWorker.open()
-    const sqlOwner = new pg.Pool({ connectionString: ownerUrl.href })
-    try {
-      await applyPreparationFixtureMigration(sqlOwner)
-      await installPreparationFixtureRole(sqlOwner)
-    } finally {
-      await sqlOwner.end()
-    }
-  })
+    // Historical source fixtures use many grants. Their copied epochs close
+    // only inside this owned clone; the launch publisher receives one new grant.
+    await owner.scanAuthorityEpoch.updateMany({
+      where: { isOpen: true },
+      data: { isOpen: false, openKey: null, closedAt: new Date() },
+    })
+    const highest = await owner.scanAuthorityEpoch.aggregate({ _max: { epoch: true } })
+    const epoch = await owner.scanAuthorityEpoch.create({
+      data: {
+        epoch: (highest._max.epoch ?? 0) + 1,
+        isOpen: true,
+        openKey: "open",
+        openedAt: new Date(),
+      },
+    })
+    workerGrant = await owner.scanWorkerInstanceGrant.create({
+      data: {
+        authorityEpochId: epoch.id,
+        instanceId: randomUUID(),
+        credentialHash: createHash("sha256").update(workerCredential).digest("hex"),
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    })
+  }, 60000)
   afterAll(async () => {
     await queueWorker.close()
     await runtime?.end()
     await owner?.$disconnect()
+    if (fixtureDatabase) await maintenance.query(`DROP DATABASE "${fixtureDatabase}"`)
+    await maintenance?.end()
   })
 
   it("publishes exact admitted focus once and retains an immutable positive receipt", async () => {
@@ -155,11 +200,57 @@ describe.skipIf(!enabled)("closed outbox dispatcher with restricted PostgreSQL a
     expect(publish).toHaveBeenCalledTimes(1)
     const row = await owner.scanQueueOutbox.findUniqueOrThrow({ where: { scanId: scan.id } })
     expect(row).toMatchObject({ state: "PUBLISHED", attempts: 1 })
+    expect(
+      await owner.scanDispatchWorkerAssignment.findUniqueOrThrow({
+        where: { operationId: scope.operationId },
+      })
+    ).toMatchObject({
+      workspaceId: scope.workspaceId,
+      workerGrantId: workerGrant.id,
+      authorityEpochId: workerGrant.authorityEpochId,
+    })
     expect(JSON.parse(row.payloadInputJson!).focus).toBe("payments")
     expect(row.publicationReceiptChecksum).toBe(scanQueueDigest(row.publicationReceiptInputJson!))
     expect(
       (await service.verifyDispatch(scope, (await fixtureQueueTransport.read(scan.id))!)).kind
     ).toBe("published")
+    const reader = createScanQueuePublicationVerifier(workerBrokerUrl)
+    const snapshot = (await fixtureQueueTransport.read(scan.id))!
+    const verify = (credential: string, input = { ...scope, snapshot }) =>
+      withScanDispatchWorkerCredential(credential, { operationId: scope.operationId }, () =>
+        reader.verifyDispatch(input)
+      )
+    try {
+      expect(await verify(workerCredential)).toEqual({
+        kind: "published",
+        row: {
+          operationId: scope.operationId,
+          id: scan.id,
+          workspaceId: scope.workspaceId,
+          executionPlanHash: scan.executionPlanHash,
+          requestDigest: (
+            await owner.scanDispatchOperation.findUniqueOrThrow({
+              where: { operationId: scope.operationId },
+            })
+          ).requestDigest,
+          payloadInputJson: row.payloadInputJson,
+        },
+      })
+      await expect(verify(randomBytes(32).toString("hex"))).rejects.toMatchObject({
+        code: "WORKER_GRANT_INVALID",
+      })
+      await expect(
+        verify(workerCredential, { ...scope, workspaceId: "foreign-workspace", snapshot })
+      ).rejects.toMatchObject({ code: "WORKER_GRANT_INVALID" })
+      expect(
+        await verify(workerCredential, { ...scope, snapshot: { ...snapshot, id: "foreign-scan" } })
+      ).toEqual({ kind: "closed" })
+      expect(await owner.scanQueueOutbox.findUniqueOrThrow({ where: { scanId: scan.id } })).toEqual(
+        row
+      )
+    } finally {
+      await reader.close()
+    }
     await expect(
       owner.scanQueueOutbox.update({
         where: { scanId: scan.id },
@@ -172,6 +263,41 @@ describe.skipIf(!enabled)("closed outbox dispatcher with restricted PostgreSQL a
         data: { publicationReceiptInputJson: row.publicationReceiptInputJson + " " },
       })
     ).rejects.toThrow()
+  })
+  it("binds pre-attempt status to the assigned credential and never leaks another operation", async () => {
+    const { scope } = await fixture()
+    expect((await dispatcher().dispatch(scope)).kind).toBe("published")
+    const broker = createScanDispatchAuthorityBroker({ connectionString: workerBrokerUrl })
+    try {
+      expect(
+        await withScanDispatchWorkerCredential(
+          workerCredential,
+          { operationId: scope.operationId },
+          () => broker.status(scope.operationId)
+        )
+      ).toMatchObject({ kind: "available", operationId: scope.operationId, attemptId: null })
+      await expect(
+        withScanDispatchWorkerCredential(
+          randomBytes(32).toString("hex"),
+          { operationId: scope.operationId },
+          () => broker.status(scope.operationId)
+        )
+      ).rejects.toMatchObject({ code: "WORKER_GRANT_INVALID" })
+      const other = await fixture()
+      await expect(
+        withScanDispatchWorkerCredential(workerCredential, { operationId: scope.operationId }, () =>
+          broker.status(other.scope.operationId)
+        )
+      ).rejects.toMatchObject({ code: "WORKER_GRANT_INVALID" })
+      await expect(
+        owner.scanDispatchWorkerAssignment.update({
+          where: { operationId: scope.operationId },
+          data: { workerGrantId: "another-grant" },
+        })
+      ).rejects.toThrow()
+    } finally {
+      await broker.close()
+    }
   })
   it("serializes concurrent publishers and never increments another lease for a duplicate", async () => {
     const { scan, scope } = await fixture()
@@ -186,6 +312,49 @@ describe.skipIf(!enabled)("closed outbox dispatcher with restricted PostgreSQL a
     expect(
       (await owner.scanQueueOutbox.findUniqueOrThrow({ where: { scanId: scan.id } })).attempts
     ).toBe(1)
+  })
+  it("refuses ambiguous live worker grants before publishing or assigning", async () => {
+    const { scan, scope } = await fixture()
+    const extra = await owner.scanWorkerInstanceGrant.create({
+      data: {
+        authorityEpochId: workerGrant.authorityEpochId,
+        instanceId: randomUUID(),
+        credentialHash: createHash("sha256").update(randomBytes(32)).digest("hex"),
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    })
+    const publish = vi.fn(fixtureQueueTransport.publish)
+    try {
+      expect((await dispatcher({ ...fixtureQueueTransport, publish }).dispatch(scope)).kind).toBe(
+        "unknown"
+      )
+      expect(publish).not.toHaveBeenCalled()
+      expect(
+        await owner.scanDispatchWorkerAssignment.count({
+          where: { operationId: scope.operationId },
+        })
+      ).toBe(0)
+      expect(
+        await owner.scanQueueOutbox.findUniqueOrThrow({ where: { scanId: scan.id } })
+      ).toMatchObject({ state: "PENDING", attempts: 0 })
+    } finally {
+      await owner.$executeRaw`UPDATE "ScanWorkerInstanceGrant" SET "revokedAt"=clock_timestamp(), "updatedAt"=clock_timestamp() WHERE id=${extra.id}`
+    }
+  })
+
+  it("keeps credential hashes and native worker verification private from the publisher", async () => {
+    await expect(
+      runtime.query('SELECT "credentialHash" FROM "ScanWorkerInstanceGrant"')
+    ).rejects.toMatchObject({ code: "42501" })
+    await expect(
+      runtime.query("SELECT * FROM app.require_scan_dispatch_worker($1,$2)", [
+        "operation-unknown",
+        createHash("sha256").update(workerCredential).digest("hex"),
+      ])
+    ).rejects.toMatchObject({ code: "42501" })
+    await expect(
+      runtime.query('SELECT * FROM "ScanDispatchWorkerAssignment"')
+    ).rejects.toMatchObject({ code: "42501" })
   })
   it("keeps shadow and legacy-null rows unavailable without enqueue or backfill", async () => {
     const publish = vi.fn(fixtureQueueTransport.publish)
@@ -297,16 +466,9 @@ describe.skipIf(!enabled)("closed outbox dispatcher with restricted PostgreSQL a
     await owner.billingAccount.create({
       data: { accountId: scan.createdById, status: "active", currentPlan: "PRO" },
     })
-    const grant = await owner.scanWorkerInstanceGrant.create({
-      data: {
-        authorityEpochId: "authority-shared-open-epoch",
-        instanceId: randomUUID(),
-        credentialHash: "a".repeat(64),
-        expiresAt: new Date(Date.now() + 3600000),
-      },
-    })
+    const grant = workerGrant
     const broker = createScanDispatchAuthorityBroker({
-      connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
+      connectionString: workerBrokerUrl,
       preparationAuthority: "checked-intent-v1",
       compilePreparation: fixturePreparationCompiler,
     })
@@ -338,7 +500,20 @@ describe.skipIf(!enabled)("closed outbox dispatcher with restricted PostgreSQL a
         where: { scanId: scan.id },
         data: { state: "RESERVED", fundedMinutes: 2, poolMinutes: 2, runtimeLimitMs: 60000 },
       })
-      expect((await broker.prepare(prepare)).kind).toBe("committed")
+      expect(
+        (
+          await withScanDispatchWorkerCredential(
+            workerCredential,
+            {
+              operationId: prepare.operationId,
+              workerGrantId: prepare.workerGrantId,
+              workerInstanceId: prepare.workerInstanceId,
+              authorityEpochId: prepare.authorityEpochId,
+            },
+            () => broker.prepare(prepare)
+          )
+        ).kind
+      ).toBe("committed")
       expect(
         await owner.scanDispatchAttempt.findUnique({ where: { operationId: scope.operationId } })
       ).toMatchObject({ focusDigest: scanQueueDigest(JSON.stringify("payments")) })
