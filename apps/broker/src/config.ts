@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { ScanPreparationCompiler } from "@lyrashield/db/src/scan-dispatch-command-descriptor"
 
 const identity = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{2,191}$/)
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
@@ -32,6 +33,14 @@ export interface BrokerConfig {
   transport: z.infer<typeof transportSchema>
   controlToken: string
   admission: "closed" | "open"
+  /**
+   * Checked preparation intent. The compiler is installed by trusted startup
+   * code from verified host policy, never from a request field. Without it the
+   * broker serves status and STOP only, and every prepare call is refused with
+   * PREPARATION_AUTHORITY_CLOSED rather than committing a command bundle this
+   * installation cannot produce.
+   */
+  preparationAuthority?: ScanPreparationCompiler
   /**
    * Receipt settlement is installed only from a protected installation. Without
    * it the broker still serves dispatch authority, but every consume call is
@@ -97,5 +106,6 @@ export function loadBrokerConfig(env: NodeJS.ProcessEnv = process.env): BrokerCo
     controlToken,
     admission: env.LYRASHIELD_BROKER_ADMISSION?.trim() === "open" ? "open" : "closed",
     receiptAuthority: receiptAuthority(env),
+    preparationAuthority: undefined,
   }
 }

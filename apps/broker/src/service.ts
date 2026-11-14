@@ -47,6 +47,17 @@ export function createBrokerService(config: BrokerConfig): BrokerService {
           }),
         }
       : {}),
+    // Preparation is installed as one unit: the checked-intent contract and the
+    // compiler that turns a transaction-verified scan into a checksum-bound
+    // command. Installing one without the other would let PREPARE commit a
+    // descriptor no executor can run, so an absent compiler leaves the whole
+    // authority closed and prepare fails with PREPARATION_AUTHORITY_CLOSED.
+    ...(config.preparationAuthority
+      ? {
+          preparationAuthority: "checked-intent-v1" as const,
+          compilePreparation: config.preparationAuthority,
+        }
+      : {}),
   })
   return {
     admission: config.admission,

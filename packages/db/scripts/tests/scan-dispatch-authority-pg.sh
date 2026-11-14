@@ -293,11 +293,15 @@ for _ in {1..100}; do
 done
 port=$(cat "$dir/schema-port")
 [[ "$port" =~ ^[0-9]+$ ]] || { echo 'Fixture schema port unavailable' >&2; exit 1; }
+fixture_url="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test"
 for applied_migration in 20261111130000_scan_preparation_authority_fence 20261113140000_scan_dispatch_command_descriptor 20261113150000_supervisor_receipt_ingestion 20261113163000_scan_execution_action_authority 20261113170000_supervisor_execution_receipts 20261113181000_supervisor_native_invocation_resolution 20261113200000_supervisor_preparation_completion; do
-  DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" pnpm --filter @lyrashield/db exec prisma migrate resolve --applied "$applied_migration"
+  DATABASE_URL="$fixture_url" DATABASE_DIRECT_URL="$fixture_url" pnpm --filter @lyrashield/db exec prisma migrate resolve --applied "$applied_migration"
 done
-DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" SHADOW_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_authority_shadow" pnpm --filter @lyrashield/db exec prisma migrate diff --exit-code --from-migrations prisma/migrations --to-schema prisma/schema.prisma
-DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" pnpm --filter @lyrashield/db exec prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
+# The repository prisma.config.ts prefers DATABASE_DIRECT_URL, which a developer
+# .env may point at a different server. Pin both to the fixture so final Prisma
+# validation checks the database the suite actually migrated.
+DATABASE_URL="$fixture_url" DATABASE_DIRECT_URL="$fixture_url" SHADOW_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_authority_shadow" pnpm --filter @lyrashield/db exec prisma migrate diff --exit-code --from-migrations prisma/migrations --to-schema prisma/schema.prisma
+DATABASE_URL="$fixture_url" DATABASE_DIRECT_URL="$fixture_url" pnpm --filter @lyrashield/db exec prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
 
 # Epoch closure uses an independent clone after all source fixture clients end;
 # it cannot close the shared epoch used by another suite or depend on file order.
