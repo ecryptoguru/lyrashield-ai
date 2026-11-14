@@ -75,7 +75,10 @@ assert.match(
 assert.match(build, /inputs\.held_recovery_original_run_id == ''/)
 assert.match(preparedImages, /inputs\.held_recovery_original_run_id != ''/)
 assert.match(preparedImages, /verify-webhook-recovery-candidate\.mjs/)
-assert.match(resolvedImages, /needs:\s*\[build, resolve-prepared-images\]/)
+assert.match(
+  resolvedImages,
+  /needs:\s*\[build, resolve-prepared-images, preflight-compatible-baseline\]/
+)
 assert.match(
   resolvedImages,
   /\[ "\$BUILD_RESULT" = success \] && \[ "\$PREPARED_RESULT" = skipped \]/

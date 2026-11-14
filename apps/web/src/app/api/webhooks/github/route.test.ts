@@ -13,6 +13,7 @@ const systemPrisma = {
 }
 const prisma = { auditLog: { create: vi.fn() } }
 const handleMerged = vi.fn()
+const resolveSource = vi.fn()
 const assertScanAllowed = vi.fn()
 const assertScanWorkerAvailable = vi.fn()
 const enqueueScanJob = vi.fn()
@@ -37,6 +38,7 @@ vi.mock("@lyrashield/billing", () => ({ assertScanAllowed }))
 vi.mock("@/lib/queue", () => ({ assertScanWorkerAvailable, enqueueScanJob }))
 vi.mock("@lyrashield/integrations", () => ({
   verifyWebhookSignature,
+  resolveRepositoryScanSource: resolveSource,
   // The route imports enqueueScanJob via @/lib/queue, which re-exports
   // `enqueueScan` AS `enqueueScanJob` from this package — so the mock must
   // define the ORIGINAL export name.
@@ -211,6 +213,54 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     assertScanAllowed.mockResolvedValue({ allowed: true })
     assertScanWorkerAvailable.mockResolvedValue(undefined)
     enqueueScanJob.mockResolvedValue("job-1")
+  })
+
+  it("pins an automatic retest through the stored target and matching active integration", async () => {
+    const target = {
+      id: "target-1",
+      workspaceId: "workspace-1",
+      type: "REPO",
+      installationId: "42",
+      branch: "current-branch",
+    }
+    resolveSource.mockImplementationOnce(async (_target, options) => {
+      await options.readActiveConnection()
+      return { revision: "d".repeat(40) }
+    })
+    handleMerged.mockImplementationOnce(async (options) => {
+      expect(await options.resolveRetestSource(target)).toEqual({ revision: "d".repeat(40) })
+      return null
+    })
+    expect((await POST(pullRequestRequest() as never)).status).toBe(200)
+    expect(resolveSource).toHaveBeenCalledWith(
+      target,
+      expect.objectContaining({ readActiveConnection: expect.any(Function) })
+    )
+    expect(systemPrisma.integration.findFirst).toHaveBeenLastCalledWith({
+      where: {
+        workspaceId: "workspace-1",
+        type: "GITHUB",
+        externalId: "42",
+        status: "active",
+        deletedAt: null,
+      },
+    })
+  })
+
+  it("persists a worker retry when the repository source is temporarily unavailable", async () => {
+    handleMerged.mockRejectedValueOnce(
+      Object.assign(new Error("Repository unavailable"), { code: "SCAN_REF_UNRESOLVED" })
+    )
+    expect((await POST(pullRequestRequest() as never)).status).toBe(200)
+    expect(recordDeferredLoopClosure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        prNumber: 7,
+        reason: "UNEXPECTED_ERROR",
+      })
+    )
+    expect(systemPrisma.webhookEvent.deleteMany).not.toHaveBeenCalled()
+    expect(enqueueScanJob).not.toHaveBeenCalled()
   })
 
   it("carries deterministic recovery proof only after signature verification", async () => {

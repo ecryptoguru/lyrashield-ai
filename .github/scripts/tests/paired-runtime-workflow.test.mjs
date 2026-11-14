@@ -757,7 +757,7 @@ test("deploy workflows expose an opt-in protected digest and run read-only prefl
   assert.doesNotMatch(JSON.stringify([deploy, runtime]), /PAIRED_COMMAND|arbitrary command/)
   assert.deepEqual(production.jobs["deploy-azure"].needs, ["routing", "qualify-runtime"])
   assert.equal(
-    production.jobs["qualify-runtime"].with.runtime_fleet_evidence,
+    production.jobs["qualify-runtime"].with.runtime_fleet_configuration,
     "${{ vars.LYRASHIELD_RUNTIME_FLEET_EVIDENCE }}"
   )
   assert.equal(production.jobs["deploy-azure"].with.cold_release, true)

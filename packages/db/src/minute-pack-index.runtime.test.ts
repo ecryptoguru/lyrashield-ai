@@ -1,10 +1,23 @@
 import { randomUUID } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { Client } from "pg"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 // The Vitest disposable-service guard validates DATABASE_URL before discovering
 // runtime suites. A unique schema keeps this DDL away from migrated product rows.
+// Hoisting runs the disposable-pair guard before this client can connect, so a
+// run without the opt-in fails closed instead of falling back to ambient PG* or
+// default local credentials. One database serves both roles here.
+await vi.hoisted(async () => {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1") return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({
+    ...process.env,
+    RLS_RUNTIME_DATABASE_URL: process.env.DATABASE_URL,
+  })
+})
+
 const client = new Client({ connectionString: process.env.DATABASE_URL })
 const schema = `index_recovery_${randomUUID().replaceAll("-", "")}`
 const sql = readFileSync(

@@ -30,6 +30,8 @@ import type {
 export { supervisorJournalEventSchema } from "./journal-events"
 export type { SupervisorJournalEvent } from "./journal-events"
 import { applyJournalRecord } from "./journal-state"
+import { supervisorJournalEventSchema } from "./journal-events"
+import { applyNativeInvocationAck } from "./native-ack-state"
 import { restoreJournalState } from "./restore-state"
 import { loadServiceState, recoverServiceState, retryInitialization } from "./service-recovery"
 import { readSupervisorAttempt, readSupervisorContainers } from "./supervisor-resources"
@@ -274,6 +276,47 @@ export class SupervisorService {
     return readSupervisorAttempt(this.attempts, attemptId)
   }
 
+  /** Protected tool composition supplies an already fenced native fact; no HTTP event mutation exists. */
+  async recordSandboxNativeStart(input: unknown): Promise<JournalRecord<SupervisorJournalEvent>> {
+    await this.initialize()
+    const event = supervisorJournalEventSchema.parse(input)
+    if (
+      !this.options.authorityFence ||
+      event.type !== "native_invocation_ack" ||
+      (event.nativeOperation !== "SANDBOX_TOOL_START_ACK" &&
+        event.nativeOperation !== "SANDBOX_TOOL_MUTATION_ACK") ||
+      event.supervisorInstanceId !== this.options.supervisorInstanceId
+    )
+      throw new RuntimeControlError("JOURNAL_INTEGRITY", "Sandbox native fact is unavailable", 503)
+    const attempt = this.attempts.get(event.attemptId),
+      command = this.commands.get(event.commandId)
+    if (!attempt || !command)
+      throw new RuntimeControlError(
+        "JOURNAL_INTEGRITY",
+        "Sandbox native attempt is unavailable",
+        503
+      )
+    // Validate without changing state before the independently authenticated append.
+    applyNativeInvocationAck(
+      event,
+      attempt.receipt,
+      new Map([
+        [event.attemptId, { ...attempt, nativeAckGuards: new Set(attempt.nativeAckGuards) }],
+      ]),
+      new Map([[event.commandId, command]])
+    )
+    // A tool already holds the native gate. Joining the service queue here could
+    // deadlock behind a lifecycle command waiting for that same gate.
+    const record = await this.options.journal.append(event)
+    try {
+      this.apply(record)
+    } catch (error) {
+      this.initialized = null
+      throw error
+    }
+    return record
+  }
+
   async listOwnedContainers(scanId?: string): Promise<
     Array<{
       attemptId: string
@@ -310,21 +353,6 @@ export class SupervisorService {
     }
     if (Date.parse(attempt.binding.expiresAt) <= (this.options.now?.() ?? new Date()).getTime()) {
       return this.terminal(command, "REJECTED", "attempt authorization has expired")
-    }
-    if (
-      command.type === "START_PAID" &&
-      [...this.commands.values()].some(
-        (state) =>
-          state.request &&
-          state.request.type === "START_PAID" &&
-          commandAttemptId(state.request) === command.attemptId
-      )
-    ) {
-      return this.terminal(
-        command,
-        "REJECTED",
-        "a paid start command already exists for this attempt"
-      )
     }
     const plan = attempt.plans.get(command.executorKey)
     if (!plan)
@@ -384,8 +412,6 @@ export class SupervisorService {
         executorKey: command.executorKey,
       })
       this.apply(createAcknowledged)
-      this.abortIfStopAccepted(command.attemptId)
-      await this.operations.recordExecutorStartIntent(attempt, command)
       this.abortIfStopAccepted(command.attemptId)
       const started = await startFencedExecutor({
         service: this.options,
@@ -478,8 +504,9 @@ export class SupervisorService {
   private hasUnresolvedExecutorEffect(attempt: AttemptState): boolean {
     return [...attempt.planned.keys()].some(
       (key) =>
-        !attempt.createAcknowledged.has(key) ||
-        (attempt.startPlanned.has(key) && !attempt.startAcknowledged.has(key))
+        !attempt.nativeRetirements?.has(key) &&
+        (!attempt.createAcknowledged.has(key) ||
+          (attempt.startPlanned.has(key) && !attempt.startAcknowledged.has(key)))
     )
   }
 

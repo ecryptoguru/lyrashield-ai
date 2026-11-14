@@ -14,6 +14,16 @@ vi.mock("@lyrashield/config", async (original) => {
 })
 import { grantMonthlyPool } from "../../billing/src/usage/grants"
 import { getUsageBalance } from "../../billing/src/usage/balance"
+
+// Hoisting runs this guard before imports can construct the runtime client.
+await vi.hoisted(async () => {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1" && process.env.RLS_RUNTIME_DATABASE_URL) {
+    const { assertDisposableDatabasePair } =
+      await import("../../../.github/scripts/vitest-database-env.mjs")
+    assertDisposableDatabasePair(process.env)
+  }
+})
+
 const owner = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 })

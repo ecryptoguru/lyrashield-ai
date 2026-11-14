@@ -16,6 +16,7 @@ with open(port_file, "x", encoding="ascii") as output:
     output.write(str(listener.getsockname()[1]))
 fired = threading.Event()
 projection_fired = threading.Event()
+stage_fired = threading.Event()
 delayed = threading.Event()
 live_delayed = threading.Event()
 live_stalled = threading.Event()
@@ -72,7 +73,7 @@ def relay(connection):
         process.stdin.write(startup_header + startup)
         process.stdin.flush()
 
-        transaction = {"begin": False, "attempt_insert": False, "receipt_insert": False, "liveness": False}
+        transaction = {"begin": False, "attempt_insert": False, "receipt_insert": False, "stage_insert": False, "liveness": False}
         transaction_lock = threading.Lock()
 
         def to_database():
@@ -93,12 +94,14 @@ def relay(connection):
                     normalized = sql.upper()
                     with transaction_lock:
                         if normalized.lstrip().startswith(b"BEGIN"):
-                            transaction.update(begin=True, attempt_insert=False, receipt_insert=False)
+                            transaction.update(begin=True, attempt_insert=False, receipt_insert=False, stage_insert=False)
                         elif transaction["begin"] and normalized.lstrip().startswith(b"INSERT"):
                             if b'"SCANDISPATCHATTEMPT"' in normalized or (fields.get(b"user") == b"dispatch_receipt_consumer" and b'"SCANSUPERVISORJOURNALRECORD"' in normalized):
                                 transaction["attempt_insert"] = True
                             if fields.get(b"user") == b"dispatch_receipt_consumer" and b'"SCANSUPERVISORRECEIPT"' in normalized:
                                 transaction["receipt_insert"] = True
+                            if fields.get(b"user") == b"dispatch_start_stage" and b'"SCANDISPATCHSTART"' in normalized:
+                                transaction["stage_insert"] = True
                     with transaction_lock:
                         if not transaction["begin"] and b"CLOCK_TIMESTAMP()" in normalized and normalized.endswith(b" AS LIVE"):
                             transaction["liveness"] = True
@@ -138,6 +141,16 @@ def relay(connection):
             if header[:1] == b"C" and body == b"COMMIT\x00":
                 with transaction_lock:
                     matches = target and transaction["begin"] and transaction["attempt_insert"]
+                    stage_matches = transaction["begin"] and transaction["stage_insert"]
+                if stage_matches and os.path.isfile(arm + ".stage"):
+                    with fired_lock:
+                        drop_stage = not stage_fired.is_set()
+                        if drop_stage:
+                            stage_fired.set()
+                    if drop_stage:
+                        with open(marker + ".stage", "x", encoding="ascii") as output:
+                            output.write("dispatch-billing-stage-commit-response-dropped\n")
+                        return
                 if target and transaction["receipt_insert"] and os.path.isfile(arm + ".projection"):
                     with fired_lock:
                         should_drop_projection = not projection_fired.is_set()
@@ -169,7 +182,7 @@ def relay(connection):
                     time.sleep(10.2)
             if header[:1] == b"C" and body in (b"COMMIT\x00", b"ROLLBACK\x00"):
                 with transaction_lock:
-                    transaction.update(begin=False, attempt_insert=False)
+                    transaction.update(begin=False, attempt_insert=False, stage_insert=False)
             connection.sendall(header + body)
     except (EOFError, OSError, ValueError):
         pass
