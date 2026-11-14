@@ -17,6 +17,7 @@ import {
 import { verifyIndependentSandboxInventory } from "./independent-sandbox-inventory.mjs"
 import { validateQualifiedFleetArchive } from "./paired-runtime-qualification.mjs"
 import { verifyImageSources } from "./paired-runtime-cloud.mjs"
+import { requirePreparedRuntimeFleet } from "./prepared-runtime-fleet.mjs"
 import { canonicalJson } from "../../packages/runtime-control/src/canonical-json.ts"
 import {
   runtimeQualificationKeyId,
@@ -234,7 +235,20 @@ async function qualifiedRollbackArtifact(deps, selectorRollback, fleet, migratio
 
 // Builds the canonical record from authenticated evidence only. Every
 // assertion here is a provenance or identity binding; nothing is defaulted.
-function buildRecord({ selector, authenticated, source, native, fleet, fleetHash, journal, migration, policy, inventory, rollback, clock }) {
+function buildRecord({
+  selector,
+  authenticated,
+  source,
+  native,
+  fleet,
+  fleetHash,
+  journal,
+  migration,
+  policy,
+  inventory,
+  rollback,
+  clock,
+}) {
   const [runId, attempt] = source.owner.split(":")
   return {
     kind: "runtime-fleet-qualification",
@@ -271,6 +285,7 @@ function buildRecord({ selector, authenticated, source, native, fleet, fleetHash
 }
 
 export function createProtectedRuntimeFleetIssuer({
+  preparedFleet,
   readIdentity = readQualificationIssuerToken,
   readSource = verifyCurrentSource,
   readArtifact = (kind, digest) => verifiedArtifact(kind, digest, issuerWorkflow),
@@ -346,6 +361,7 @@ export function createProtectedRuntimeFleetIssuer({
         fleetHash = hash(canonicalJson(fleet))
       assert.equal(native.fleetSha256, fleetHash)
       assert.equal(fleet.productRevision, source.source)
+      requirePreparedRuntimeFleet(fleet, preparedFleet, authenticated.identity)
       assert.equal(native.sourceTree, tree())
 
       // Authenticated evidence is cross-bound to the same fleet before any
@@ -420,7 +436,14 @@ export function issueRuntimeFleetQualification() {
     typeof selector === "string" && selector.length > 0 && Buffer.byteLength(selector) <= 4096,
     "Authenticated native fleet evidence selectors unavailable"
   )
-  return createProtectedRuntimeFleetIssuer().issue(JSON.parse(selector))
+  const prepared = process.env.PREPARED_RUNTIME_FLEET
+  assert.ok(
+    typeof prepared === "string" && prepared.length > 0 && Buffer.byteLength(prepared) <= 4096,
+    "Same-run prepared runtime fleet unavailable"
+  )
+  return createProtectedRuntimeFleetIssuer({ preparedFleet: JSON.parse(prepared) }).issue(
+    JSON.parse(selector)
+  )
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

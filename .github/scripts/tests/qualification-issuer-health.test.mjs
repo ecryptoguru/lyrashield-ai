@@ -72,7 +72,12 @@ test("isolated issuer verifies optional publication before fixed health signing,
   const input = "fresh_sandbox_publication"
   const inventory = "fresh_sandbox_inventory"
   const fleet = "runtime_fleet_evidence"
-  assert.deepEqual(Object.keys(issuer.on.workflow_call.inputs), [input, inventory, fleet])
+  assert.deepEqual(Object.keys(issuer.on.workflow_call.inputs), [
+    input,
+    inventory,
+    fleet,
+    "prepared_fleet",
+  ])
   assert.deepEqual(Object.keys(caller.on.workflow_dispatch.inputs), [input, inventory])
   for (const definition of [
     issuer.on.workflow_call.inputs[input],
@@ -80,6 +85,7 @@ test("isolated issuer verifies optional publication before fixed health signing,
     issuer.on.workflow_call.inputs[inventory],
     caller.on.workflow_dispatch.inputs[inventory],
     issuer.on.workflow_call.inputs[fleet],
+    issuer.on.workflow_call.inputs.prepared_fleet,
   ]) {
     assert.equal(definition.type, "string")
     assert.equal(definition.required, false)

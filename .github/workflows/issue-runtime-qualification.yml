@@ -18,6 +18,11 @@ on:
         type: string
         required: false
         default: ""
+      prepared_fleet:
+        description: "Exact same-run image tuple, required for automated release issuance"
+        type: string
+        required: false
+        default: ""
     outputs:
       runtime_fleet_qualification:
         description: "Signed exact-artifact release qualification envelope"
@@ -94,6 +99,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUNTIME_FLEET_EVIDENCE: ${{ inputs.runtime_fleet_evidence }}
+          PREPARED_RUNTIME_FLEET: ${{ inputs.prepared_fleet }}
         run: node .github/scripts/issue-runtime-fleet-qualification.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: inputs.runtime_fleet_evidence != ''

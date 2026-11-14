@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createHash } from "node:crypto"
-import { createProtectedRuntimeFleetIssuer } from "../issue-runtime-fleet-qualification.mjs"
+import {
+  createProtectedRuntimeFleetIssuer,
+  issueRuntimeFleetQualification,
+} from "../issue-runtime-fleet-qualification.mjs"
 import { canonicalJson } from "../../../packages/runtime-control/src/canonical-json.ts"
 import { runtimeQualificationKeyId } from "../../../packages/security/src/sandbox-publication-record.ts"
 
@@ -156,6 +159,17 @@ const inventory = {
   engineRevision: engine,
 }
 const common = {
+  preparedFleet: {
+    productRevision: fleet.productRevision,
+    engineRevision: fleet.engineRevision,
+    runId: "42",
+    runAttempt: "1",
+    ...Object.fromEntries(
+      Object.entries(fleet).filter(
+        ([field]) => field.endsWith("Digest") && field !== "runtimePolicyDigest"
+      )
+    ),
+  },
   readIdentity: async () => identity,
   readSource: async () => ({ owner: "42:1", source }),
   readArtifact: async (kind, id) => {
@@ -222,6 +236,9 @@ test("rejects unauthenticated or non-held evidence before any credential exchang
       { verifyInventory: async () => ({ ...inventory, runtimeAuthorityVerified: true }) },
     ],
     ["source tree", { tree: () => "f".repeat(40) }],
+    ["missing preparation", { preparedFleet: undefined }],
+    ["different worker", { preparedFleet: { ...common.preparedFleet, workerDigest: digest("0") } }],
+    ["different run", { preparedFleet: { ...common.preparedFleet, runId: "43" } }],
   ]) {
     const calls = []
     await assert.rejects(
@@ -298,4 +315,29 @@ test("stops at signing failure and always logs out without emitting a record", a
     }).issue(selector)
   )
   assert.deepEqual(calls, ["login", "keyvault", "logout"])
+})
+
+test("production entry point rejects missing or malformed preparation before authentication", () => {
+  const savedSelector = process.env.RUNTIME_FLEET_EVIDENCE
+  const savedPrepared = process.env.PREPARED_RUNTIME_FLEET
+  try {
+    process.env.RUNTIME_FLEET_EVIDENCE = JSON.stringify(selector)
+    delete process.env.PREPARED_RUNTIME_FLEET
+    assert.throws(
+      () => issueRuntimeFleetQualification(),
+      /Same-run prepared runtime fleet unavailable/
+    )
+    process.env.PREPARED_RUNTIME_FLEET = "x".repeat(4097)
+    assert.throws(
+      () => issueRuntimeFleetQualification(),
+      /Same-run prepared runtime fleet unavailable/
+    )
+    process.env.PREPARED_RUNTIME_FLEET = "{"
+    assert.throws(() => issueRuntimeFleetQualification(), SyntaxError)
+  } finally {
+    if (savedSelector === undefined) delete process.env.RUNTIME_FLEET_EVIDENCE
+    else process.env.RUNTIME_FLEET_EVIDENCE = savedSelector
+    if (savedPrepared === undefined) delete process.env.PREPARED_RUNTIME_FLEET
+    else process.env.PREPARED_RUNTIME_FLEET = savedPrepared
+  }
 })
