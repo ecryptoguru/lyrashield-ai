@@ -14,6 +14,20 @@ import {
   readHistoricalExpenseEvidence,
 } from "../../../apps/worker/src/operations/historical-failed-expense-evidence"
 
+// Hoisting runs this guard before imports can construct a client from ambient
+// env. This harness uses one database for both roles, so bind DATABASE_URL to
+// both sides of the shared disposable-pair guard and reject a conflicting
+// DATABASE_DIRECT_URL before the client connects.
+await vi.hoisted(async () => {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1") return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({
+    ...process.env,
+    RLS_RUNTIME_DATABASE_URL: process.env.DATABASE_URL,
+  })
+})
+
 const { scanId, workspaceId, eventId, productRevision } = HISTORICAL_FAILED_EXPENSE
 const metadata = {
   engineReportedCostUsd: 0.567612455,

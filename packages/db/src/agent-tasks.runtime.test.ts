@@ -15,6 +15,15 @@ import { PrismaPg } from "@prisma/adapter-pg"
  * Skips loudly when RLS_RUNTIME_DATABASE_URL is not configured.
  */
 
+// Hoisting runs this guard before imports can construct the runtime client.
+await vi.hoisted(async () => {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1" && process.env.RLS_RUNTIME_DATABASE_URL) {
+    const { assertDisposableDatabasePair } =
+      await import("../../../.github/scripts/vitest-database-env.mjs")
+    assertDisposableDatabasePair(process.env)
+  }
+})
+
 vi.mock("@lyrashield/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/config")>()
   return {

@@ -19,6 +19,17 @@ import {
 import { getScanQueue } from "../../integrations/src/queue"
 import type { ScanFocus } from "@lyrashield/types"
 
+// Hoisting runs this guard before imports can construct a client from ambient
+// env. Bind the fixture's privileged DATABASE_URL role to its restricted
+// queue-outbox publisher role through the shared disposable-pair guard.
+await vi.hoisted(async () => {
+  const runtime = process.env.QUEUE_OUTBOX_DATABASE_URL
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1" || !runtime) return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({ ...process.env, RLS_RUNTIME_DATABASE_URL: runtime })
+})
+
 const enabled =
   process.env.SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST === "1" &&
   process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1"

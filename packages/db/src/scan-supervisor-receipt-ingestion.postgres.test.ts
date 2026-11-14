@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises"
 import pg from "pg"
 import { canonicalJson } from "@lyrashield/runtime-control"
-import { beforeAll, afterAll, describe, it, expect } from "vitest"
+import { beforeAll, afterAll, describe, it, expect, vi } from "vitest"
 import { authenticateRetainedSupervisorAuthoritySource } from "./scan-supervisor-authority-source-verifier"
 import {
   createDisposableSupervisorCommandHistoryReader,
@@ -22,6 +22,18 @@ import {
   nativePreparationJournal,
 } from "../scripts/tests/supervisor-native-fixture"
 import { installReceiptRole, receiptJournal } from "../scripts/tests/supervisor-receipt-fixture"
+
+// Hoisting runs this guard before imports can construct a client from ambient
+// env. Bind the fixture's privileged DATABASE_URL role to its restricted
+// preparation broker role through the shared disposable-pair guard.
+await vi.hoisted(async () => {
+  const runtime = process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1" || !runtime) return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({ ...process.env, RLS_RUNTIME_DATABASE_URL: runtime })
+})
+
 const enabled =
   process.env.SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST === "1" &&
   process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1"
