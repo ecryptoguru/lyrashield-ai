@@ -1,6 +1,14 @@
-import { describe, expect, it } from "vitest"
-import { canonicalJson, sha256Hex, type AuthorityAction } from "@lyrashield/runtime-control"
-import { parseProviderActionIntent } from "./scan-execution-action-intent"
+import { describe, expect, it, vi } from "vitest"
+import {
+  canonicalJson,
+  sha256Hex,
+  type AuthorityAction,
+  type AuthoritySqlConnection,
+} from "@lyrashield/runtime-control"
+import {
+  createScanExecutionActionAuthorityVerifier,
+  parseProviderActionIntent,
+} from "./scan-execution-action-intent"
 
 function fixture() {
   const request = {
@@ -92,5 +100,33 @@ describe("exact protected provider action evidence", () => {
     expect(() => parseProviderActionIntent(f.input, new Map())).toThrow()
     f.input.binding.actionChecksum = "b".repeat(64)
     expect(() => parseProviderActionIntent(f.input, f.policies)).toThrow()
+  })
+})
+
+describe("sandbox tool authority", () => {
+  it("fails closed even with a bound workspace and the preparation gate held", async () => {
+    const rows = [
+      [{ workspaceId: "workspace-original", accountId: "account", userId: "user" }],
+      [],
+      [{ held: true }],
+    ]
+    const query = vi
+      .fn<AuthoritySqlConnection["query"]>()
+      .mockImplementation(async () => ({ rows: rows.shift() ?? [] }))
+    const connection = { query, release: vi.fn() }
+    const verify = createScanExecutionActionAuthorityVerifier({
+      approvedProviderPolicies: new Map(),
+    })
+    const { binding } = fixture().input
+
+    await expect(
+      verify(connection, {
+        ...binding,
+        phase: "SANDBOX_TOOL",
+        commandId: "prepare-original",
+        executorKey: "sandbox",
+      })
+    ).rejects.toThrow("Current scan execution action authority is unavailable")
+    expect(query).toHaveBeenCalledTimes(3)
   })
 })
