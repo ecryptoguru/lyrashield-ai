@@ -145,6 +145,17 @@ done
 out=$(run_classify $'.github/scripts/tests/test-promote-worker-vm.sh')
 assert_eq "Deployment test only: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
+# Protected controller host assets must participate in runtime release routing.
+for path in \
+  ops/controller/authority-observer.py \
+  ops/controller/lyrashield-authority-observer.service \
+  ops/controller/lyrashield-authority-observer.socket; do
+  out=$(run_classify "$path")
+  assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+  assert_eq "$path: ops tests" "true" "$(get_field "$out" "ops-tests")"
+  assert_eq "$path: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
+done
+
 # --- Test 6c: every script and workflow the Azure rollout executes routes to Azure deploy ---
 # Exact-path coverage for the runtime reusable workflow, the rollout/preflight
 # helpers, the webhook-claims cutover scripts (host wrapper and VM payload), the

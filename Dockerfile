@@ -252,7 +252,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=workspace-builder --chown=lyrashield:lyrashield /app/packages/db/package.json ./packages/db/package.json
 COPY --chown=lyrashield:lyrashield ops/controller/health.mjs /opt/lyrashield-controller/health.mjs
 
-RUN mkdir -p /run/lyrashield && chown lyrashield:lyrashield /run/lyrashield && chmod 750 /run/lyrashield
+RUN mkdir -p /run/lyrashield /opt/lyrashield-runtime && \
+    chown lyrashield:lyrashield /run/lyrashield && \
+    chmod 750 /run/lyrashield && chmod 755 /opt/lyrashield-runtime
 
 USER lyrashield
 CMD ["./node_modules/.bin/tsx", "src/index.ts"]

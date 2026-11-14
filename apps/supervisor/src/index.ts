@@ -1,12 +1,14 @@
 import { createServer } from "node:http"
 import { SignedJournal, listenPrivateControlServer } from "@lyrashield/runtime-control"
 import { loadSupervisorConfig } from "./config"
+import { loadDatabaseSupervisorAuthority } from "./database-authority"
 import { DockerRuntimeExecutor, LinuxProcessExecutor } from "./executor"
 import { createSupervisorHandler } from "./http"
 import { ProviderGatewayClient } from "./provider-client"
 import { SupervisorService, supervisorJournalEventSchema } from "./service"
 
 const config = loadSupervisorConfig()
+const authority = loadDatabaseSupervisorAuthority(config)
 const journal = new SignedJournal(config.journalPath, config.signingSecret, (value) =>
   supervisorJournalEventSchema.parse(value)
 )
@@ -44,6 +46,7 @@ const service = new SupervisorService({
   signingSecret: config.signingSecret,
   supervisorInstanceId: config.supervisorInstanceId,
   admission: config.admission,
+  ...(authority ? { authorityFence: authority.authorityFence } : {}),
 })
 await service.initialize()
 const server = createServer(
@@ -77,7 +80,7 @@ const shutdown = () => {
   })
   void (async () => {
     await Promise.all([service.drain(), closed])
-    await journal.close()
+    await Promise.all([journal.close(), authority?.close()])
     clearTimeout(deadline)
     process.exit(0)
   })().catch(() => process.exit(1))
