@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { Client } from "pg"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { findMismatchedGateEvidence } from "./gate-reader-evidence"
 import { loadVerifiedAssessedScans } from "./gate-assessed-scan-evidence"
 import { loadBoundedGateVerdicts, MAX_GATE_VERDICT_BYTES } from "./gate-verdict-read"
