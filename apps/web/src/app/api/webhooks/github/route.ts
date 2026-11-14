@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
 import { getSystemPrisma, prisma } from "@lyrashield/db"
-import { verifyWebhookSignature } from "@lyrashield/integrations"
+import { verifyWebhookSignature, resolveRepositoryScanSource } from "@lyrashield/integrations"
 import { enqueueScanJob, assertScanWorkerAvailable } from "@/lib/queue"
 import { assertScanAllowed } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
@@ -280,6 +280,19 @@ async function handleMergedFixPullRequest(
           }
         : {}),
       assertRetestWorkerAvailable: assertScanWorkerAvailable,
+      resolveRetestSource: (target) =>
+        resolveRepositoryScanSource(target, {
+          readActiveConnection: () =>
+            systemPrisma.integration.findFirst({
+              where: {
+                workspaceId,
+                type: "GITHUB",
+                externalId: String(target.installationId),
+                status: "active",
+                deletedAt: null,
+              },
+            }),
+        }),
     })
     if (outcome) {
       // The retest scan exists but is not queued yet — packages/db
@@ -315,7 +328,11 @@ async function handleMergedFixPullRequest(
     // Only genuinely unexpected errors still rethrow.
     const { recordDeferredLoopClosure, classifyLoopClosureError } = await import("@lyrashield/db")
     const reason = classifyLoopClosureError(loopErr)
-    if (reason !== "UNEXPECTED_ERROR") {
+    const sourceUnavailable =
+      loopErr instanceof Error &&
+      (loopErr.message === "SCAN_REF_UNRESOLVED" ||
+        ("code" in loopErr && loopErr.code === "SCAN_REF_UNRESOLVED"))
+    if (reason !== "UNEXPECTED_ERROR" || sourceUnavailable) {
       try {
         await recordDeferredLoopClosure({
           workspaceId,

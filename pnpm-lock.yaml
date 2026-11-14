@@ -153,9 +153,18 @@ importers:
       '@lyrashield/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@lyrashield/evidence-storage':
+        specifier: workspace:*
+        version: link:../../packages/evidence-storage
+      '@lyrashield/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@lyrashield/runtime-control':
         specifier: workspace:*
         version: link:../../packages/runtime-control
+      '@lyrashield/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       pg:
         specifier: ^8.23.0
         version: 8.23.0
@@ -169,6 +178,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -396,6 +408,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -578,6 +593,9 @@ importers:
       '@lyrashield/myra':
         specifier: workspace:*
         version: link:../../packages/myra
+      '@lyrashield/runtime-control':
+        specifier: workspace:*
+        version: link:../../packages/runtime-control
       '@lyrashield/security':
         specifier: workspace:*
         version: link:../../packages/security

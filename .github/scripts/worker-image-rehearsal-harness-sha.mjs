@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { readFileSync } from "node:fs"
+import { readFileSync, statSync } from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 
@@ -41,15 +41,27 @@ export const WORKER_IMAGE_REHEARSAL_HARNESS_FILES = [
 export function workerImageRehearsalHarnessSha(repositoryRoot = process.cwd()) {
   const hash = createHash("sha256")
   for (const file of WORKER_IMAGE_REHEARSAL_HARNESS_FILES) {
-    const contents = readFileSync(path.join(repositoryRoot, file))
+    // A pinned file deleted in the working tree is recorded as absent rather
+    // than crashing the release gate; every file that is present is still
+    // hashed in full, so an active pin can never be silently dropped.
+    const contents = readPinnedFile(path.join(repositoryRoot, file))
     hash.update(file)
     hash.update("\0")
-    hash.update(String(contents.length))
+    hash.update(contents === undefined ? "absent" : String(contents.length))
     hash.update("\0")
-    hash.update(contents)
+    if (contents !== undefined) hash.update(contents)
     hash.update("\0")
   }
   return `sha256:${hash.digest("hex")}`
+}
+
+function readPinnedFile(file) {
+  try {
+    if (!statSync(file).isFile()) return undefined
+    return readFileSync(file)
+  } catch {
+    return undefined
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

@@ -1,6 +1,8 @@
 import { timingSafeEqual } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { z } from "zod"
+import { queuePublicationVerificationInputSchema } from "@lyrashield/db/src/scan-queue-publication-verifier-schema"
+import { withScanDispatchWorkerCredential } from "@lyrashield/db/src/scan-dispatch-worker-assignment"
 import type { BrokerService } from "./service"
 
 const MAX_REQUEST_BYTES = 64 * 1024
@@ -32,7 +34,14 @@ const ROUTES = [
   { method: "POST", pattern: /^\/operations\/([^/]+)\/start-unmetered$/, action: "startUnmetered" },
   { method: "POST", pattern: /^\/operations\/([^/]+)\/stop$/, action: "stop" },
   { method: "POST", pattern: /^\/operations\/([^/]+)\/reconcile$/, action: "reconcile" },
+  { method: "POST", pattern: /^\/operations\/([^/]+)\/dispatch$/, action: "dispatch" },
+  { method: "POST", pattern: /^\/operations\/([^/]+)\/result$/, action: "result" },
   { method: "POST", pattern: /^\/operations\/([^/]+)\/consume$/, action: "consume" },
+  {
+    method: "POST",
+    pattern: /^\/operations\/([^/]+)\/verify-publication$/,
+    action: "verifyPublication",
+  },
   { method: "GET", pattern: /^\/operations\/([^/]+)$/, action: "status" },
 ] as const
 
@@ -96,7 +105,17 @@ function failure(error: unknown): { status: number; code: string } {
   const named = typeof code === "string" ? code : "BROKER_REJECTED"
   if (named === "SUPERVISOR_CONSUMER_NOT_INSTALLED") return { status: 503, code: named }
   if (CLIENT_ERRORS.has(named)) return { status: 409, code: named }
-  if (named === "DATABASE_REJECTED" || named === "PREPARATION_AUTHORITY_BUSY")
+  // Expected unavailable-authority conditions: the installation simply is not
+  // open (for example PREPARATION_AUTHORITY_CLOSED) or cannot compile the
+  // command from installed policy. These are 503, not 500: they describe a
+  // closed capability, never an internal fault.
+  if (
+    named === "ADMISSION_CLOSED" ||
+    named === "DATABASE_REJECTED" ||
+    named === "PREPARATION_AUTHORITY_BUSY" ||
+    named === "PREPARATION_AUTHORITY_UNAVAILABLE" ||
+    named === "PREPARATION_AUTHORITY_CLOSED"
+  )
     return { status: 503, code: named }
   return { status: 500, code: named }
 }
@@ -108,22 +127,83 @@ export function createBrokerHandler(service: BrokerService, controlToken: string
     // sibling controller images expose the same shape.
     if (request.method === "GET" && path === "/healthz")
       return send(response, 200, { status: "ok", admission: service.admission })
-    if (!authorized(request, controlToken)) return send(response, 401, { error: "UNAUTHORIZED" })
+    const controlAuthorized = authorized(request, controlToken)
+    const header = request.headers.authorization
+    const workerCredential =
+      !controlAuthorized && typeof header === "string" && header.startsWith("Bearer ")
+        ? header.slice(7)
+        : undefined
+    if (!controlAuthorized && !workerCredential)
+      return send(response, 401, { error: "UNAUTHORIZED" })
     const route = ROUTES.find(
       (candidate) => candidate.method === request.method && candidate.pattern.test(path)
     )
     if (!route) return send(response, 404, { error: "NOT_FOUND" })
+    if (!controlAuthorized && (route.action === "startPaid" || route.action === "startUnmetered"))
+      return send(response, 403, { error: "CONTROL_AUTHORITY_REQUIRED" })
+    if (controlAuthorized && (route.action === "dispatch" || route.action === "result"))
+      return send(response, 403, { error: "WORKER_AUTHORITY_REQUIRED" })
     const operationId = route.pattern.exec(path)?.[1]
     if (operationId !== undefined && !identity.safeParse(operationId).success)
       return send(response, 400, { error: "INVALID_OPERATION_ID" })
+    const invoke = <T>(
+      scope: Parameters<typeof withScanDispatchWorkerCredential>[1],
+      action: () => Promise<T>
+    ) =>
+      controlAuthorized
+        ? action()
+        : withScanDispatchWorkerCredential(workerCredential!, scope, action)
     try {
+      if (route.action === "result") {
+        if (!operationId || !service.readResult) return send(response, 404, { error: "NOT_FOUND" })
+        const input = z
+          .object({
+            attemptId: identity,
+            offset: z
+              .number()
+              .int()
+              .nonnegative()
+              .safe()
+              .max(96 * 1024 * 1024),
+          })
+          .strict()
+          .safeParse(await readJson(request))
+        if (!input.success) return send(response, 400, { error: "INVALID_REQUEST" })
+        return send(
+          response,
+          200,
+          await invoke({ operationId, attemptId: input.data.attemptId }, () =>
+            service.readResult!({ operationId, ...input.data })
+          )
+        )
+      }
       if (route.action === "status") {
         if (operationId === undefined) return send(response, 400, { error: "INVALID_OPERATION_ID" })
-        return send(response, 200, await service.status(operationId))
+        return send(response, 200, await invoke({ operationId }, () => service.status(operationId)))
       }
       if (route.action === "consume") {
         if (operationId === undefined) return send(response, 400, { error: "INVALID_OPERATION_ID" })
-        return send(response, 200, await service.consume(operationId))
+        return send(
+          response,
+          200,
+          await invoke({ operationId }, () => service.consume(operationId))
+        )
+      }
+      if (route.action === "verifyPublication") {
+        if (!operationId || !service.verifyPublication)
+          return send(response, 404, { error: "NOT_FOUND" })
+        const parsed = queuePublicationVerificationInputSchema.safeParse(await readJson(request))
+        if (
+          !parsed.success ||
+          parsed.data.operationId !== operationId ||
+          Buffer.byteLength(JSON.stringify(parsed.data)) > 8192
+        )
+          return send(response, 400, { error: "INVALID_REQUEST" })
+        return send(
+          response,
+          200,
+          await invoke({ operationId }, () => service.verifyPublication!(parsed.data))
+        )
       }
       if (route.action === "prepare") {
         const parsed = prepareSchema.safeParse(await readJson(request))
@@ -135,7 +215,15 @@ export function createBrokerHandler(service: BrokerService, controlToken: string
         return send(
           response,
           200,
-          await service.prepare({ ...rest, operationId: bodyId, expiresAt })
+          await invoke(
+            {
+              operationId: bodyId,
+              workerGrantId: rest.workerGrantId,
+              workerInstanceId: rest.workerInstanceId,
+              authorityEpochId: rest.authorityEpochId,
+            },
+            () => service.prepare({ ...rest, operationId: bodyId, expiresAt })
+          )
         )
       }
       // Every remaining route carries its operation in the path.
@@ -143,16 +231,34 @@ export function createBrokerHandler(service: BrokerService, controlToken: string
       if (route.action === "stop") {
         const parsed = stopSchema.safeParse(await readJson(request))
         if (!parsed.success) return send(response, 400, { error: "INVALID_REQUEST" })
-        return send(response, 200, await service.stop({ ...parsed.data, operationId }))
+        const scope = {
+          attemptId: parsed.data.attemptId,
+          workerGrantId: parsed.data.workerGrantId,
+          workerInstanceId: parsed.data.workerInstanceId,
+          authorityEpochId: parsed.data.authorityEpochId,
+        }
+        return send(
+          response,
+          200,
+          await invoke({ ...scope, operationId }, () =>
+            service.stop({ ...parsed.data, operationId })
+          )
+        )
       }
       const parsed = attemptSchema.safeParse(await readJson(request))
       if (!parsed.success) return send(response, 400, { error: "INVALID_REQUEST" })
       const input = { ...parsed.data, operationId }
+      if (route.action === "dispatch") {
+        if (!service.dispatchPrepared) return send(response, 404, { error: "NOT_FOUND" })
+        return send(response, 200, await invoke(input, () => service.dispatchPrepared!(input)))
+      }
       if (route.action === "startPaid") return send(response, 200, await service.startPaid(input))
       if (route.action === "startUnmetered")
         return send(response, 200, await service.startUnmetered(input))
-      return send(response, 200, await service.reconcile(input))
+      return send(response, 200, await invoke(input, () => service.reconcile(input)))
     } catch (error) {
+      if (!controlAuthorized && (error as { code?: string })?.code === "WORKER_GRANT_INVALID")
+        return send(response, 401, { error: "UNAUTHORIZED" })
       const mapped = failure(error)
       return send(response, mapped.status, { error: mapped.code })
     }

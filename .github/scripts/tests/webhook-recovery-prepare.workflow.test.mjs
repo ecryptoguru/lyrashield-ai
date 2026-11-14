@@ -5,8 +5,9 @@ import test from "node:test"
 const workflow = readFileSync(".github/workflows/prepare-worker-recovery-candidate.yml", "utf8")
 const dockerfile = readFileSync("Dockerfile", "utf8")
 
-test("preparation is manual and binds dispatch to exact current main", () => {
-  assert.match(workflow, /on:\n  workflow_dispatch:/)
+test("preparation binds manual and reusable calls to exact current main", () => {
+  assert.match(workflow, /^  workflow_dispatch:/m)
+  assert.match(workflow, /^  workflow_call:/m)
   assert.doesNotMatch(workflow, /^  (?:pull_request|push|schedule):/m)
   assert.match(workflow, /test "\$DISPATCH_REF" = refs\/heads\/main/)
   assert.match(workflow, /test "\$SOURCE_SHA" = "\$DISPATCH_SHA"/)
@@ -53,7 +54,10 @@ test("receipt is published only after exact-digest worker rehearsal succeeds", (
   assert.match(workflow, /"schemaVersion": 2/)
   assert.match(workflow, /"sourceSha": os\.environ\["SOURCE_SHA"\]/)
   assert.match(workflow, /"runAttempt": int\(os\.environ\["GITHUB_RUN_ATTEMPT"\]\)/)
-  assert.match(workflow, /REHEARSAL_HARNESS_SHA: \$\{\{ needs\.rehearse\.outputs\.rehearsal_harness_sha \}\}/)
+  assert.match(
+    workflow,
+    /REHEARSAL_HARNESS_SHA: \$\{\{ needs\.rehearse\.outputs\.rehearsal_harness_sha \}\}/
+  )
   assert.match(workflow, /"harnessSha": os\.environ\["REHEARSAL_HARNESS_SHA"\]/)
   assert.match(workflow, /"harnessRevision": os\.environ\["REHEARSAL_HARNESS_REVISION"\]/)
   assert.match(workflow, /name: webhook-recovery-candidate-\$\{\{ inputs\.source_sha \}\}/)
@@ -63,7 +67,10 @@ test("receipt is published only after exact-digest worker rehearsal succeeds", (
 
 test("exact-image rehearsal verifies runtime TLS without a source overlay", () => {
   const rehearsal = readFileSync(".github/workflows/verify-webhook-worker-image.yml", "utf8")
-  assert.match(rehearsal, /value: \$\{\{ jobs\.verify-worker-image\.outputs\.rehearsal_harness_sha \}\}/)
+  assert.match(
+    rehearsal,
+    /value: \$\{\{ jobs\.verify-worker-image\.outputs\.rehearsal_harness_sha \}\}/
+  )
   assert.match(rehearsal, /node \.github\/scripts\/worker-image-rehearsal-harness-sha\.mjs/)
   const step = rehearsal.indexOf(
     "- name: Verify runtime and system TLS using the exact worker image"

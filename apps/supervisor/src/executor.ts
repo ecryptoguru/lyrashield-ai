@@ -10,7 +10,7 @@ import type {
   ResourceOwnership,
 } from "@lyrashield/runtime-control"
 import { isWithin } from "./policy"
-import { providerEnvironment } from "./provider-environment"
+import { containerCreateCommand } from "./container-create-command"
 import { loadProtectedResourceInstallation } from "./protected-resource-installation"
 import { verifyProtectedContainer } from "./protected-container-verification"
 
@@ -26,6 +26,7 @@ export interface ExecutorContext {
   // committed invocation guard. It is never derived from a tool request.
   nativeInvocation?: {
     requestId: string
+    planCreate?: (ownership: ResourceOwnership) => Promise<void>
     acknowledge: (fact: {
       operation: "CONTAINER_CREATE_ACK" | "CONTAINER_START_ACK"
       nativeRequestId: string
@@ -58,9 +59,11 @@ export interface RuntimeExecutor {
 }
 
 export interface NativeRetirement {
+  acknowledgeTools?: (proofs: readonly unknown[]) => Promise<void>
   acknowledge: (fact: {
     ownership: ResourceOwnership
     inspection: ResourceInspection
+    nativeRemovalProof?: unknown
   }) => Promise<void>
 }
 
@@ -152,40 +155,9 @@ export class DockerRuntimeExecutor implements RuntimeExecutor {
       context.assertActive()
       return inspection.ownership
     }
-    const name = `lyrashield-supervisor-${ownership.slice(4, 36)}`
-    const args = [
-      "create",
-      "--pull=never",
-      "--name",
-      name,
-      "--label",
-      `lyrashield.supervisor.attempt=${context.attemptId}`,
-      "--label",
-      `lyrashield.supervisor.ownership=${ownership}`,
-      "--network",
-      spec.network,
-      "--cpus",
-      String(spec.cpus),
-      "--memory",
-      `${spec.memoryMb}m`,
-      "--pids-limit",
-      String(spec.pidsLimit),
-      "--cap-drop",
-      "ALL",
-      "--security-opt",
-      "no-new-privileges",
-      "--init",
-    ]
-    if (spec.readOnly) args.push("--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=256m")
-    for (const [keyName, value] of Object.entries(spec.env).sort(([left], [right]) =>
-      left.localeCompare(right)
-    )) {
-      args.push("--env", `${keyName}=${value}`)
-    }
-    if (installed) args.push(...installed.args)
-    const provider = providerEnvironment(spec, context)
-    args.push(...provider.args)
-    args.push(spec.image, ...spec.argv)
+    const compiled = containerCreateCommand(key, spec, context, installed)
+    const args = compiled.args
+    const provider = { env: compiled.providerEnv }
     let stdout: string
     context.assertActive()
     try {

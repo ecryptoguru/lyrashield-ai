@@ -1,3 +1,5 @@
+import { attachScanWorkerErrorHandlers } from "./scan-worker-events"
+import { startWebhookTrackRetryWorker } from "./webhook-track-retry-worker"
 import {
   assertColdDatabaseEpoch,
   configureColdDatabaseEpochFailureHandler,
@@ -13,14 +15,16 @@ import {
   closeAiResultCacheRedis,
   unregisterScanWorker,
   SCAN_WORKER_HEARTBEAT_MS,
-  WEBHOOK_TRACK_RETRY_QUEUE_NAME,
   type WebhookTrackRetryJobData,
 } from "@lyrashield/integrations"
-import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
 import { FIX_GENERATE_QUEUE_NAME, type FixGenerateJobData } from "@lyrashield/integrations"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processWorkerScanJob } from "./jobs/scan-job-processor"
-import { processWebhookTrackRetry } from "./jobs/webhook-track-retry.job"
+import {
+  workerAuthorityStartup,
+  legacyWorkerLifecycleEnabled,
+  initializeWorkerAuthorityStartup,
+} from "./worker-authority-startup"
 import { processQueuedFixGenerateJob, type FixGenerateJobResult } from "./jobs/fix-generate.job"
 import { startScheduleRunner } from "./schedules"
 import { startBillingJobsScheduler } from "./billing-jobs-scheduler"
@@ -33,7 +37,6 @@ import {
   terminateActiveEngineProcesses,
 } from "./engine/runner"
 import {
-  reconcileFailedQueueJob,
   reconcileScanQueue,
   reconcileScanQueueIfNeeded,
   type QueueReconciliationResult,
@@ -172,6 +175,14 @@ async function startOperationalHealthMonitoring(
 }
 
 export async function refreshWorkerReadiness(): Promise<void> {
+  if (
+    workerAuthorityStartup.kind === "closed" ||
+    (workerAuthorityStartup.kind === "broker" &&
+      !(await workerAuthorityStartup.adapter.isCurrent()))
+  ) {
+    await removeWorkerReadiness()
+    throw new Error("Worker authority is unavailable")
+  }
   await writeFile(readinessPath, new Date().toISOString(), { mode: 0o600 })
 }
 
@@ -394,17 +405,41 @@ async function assertWorkerStartupResources(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  assertWorkerStartupProvenance()
+  await initializeWorkerAuthorityStartup()
+  if (
+    workerAuthorityStartup.kind === "closed" ||
+    (workerAuthorityStartup.kind === "broker" &&
+      !(await workerAuthorityStartup.adapter.isCurrent()))
+  ) {
+    await removeWorkerReadiness()
+    if (workerAuthorityStartup.kind === "broker") {
+      await workerAuthorityStartup.adapter.reconcileRetained().catch(() => {})
+      reconciliationTimer = setInterval(() => {
+        if (workerAuthorityStartup.kind === "broker")
+          void workerAuthorityStartup.adapter.reconcileRetained().catch(() => {})
+      }, 5 * 60_000)
+    }
+    logger.warn("Worker authority is closed; scan admission and claims remain disabled")
+    // Remain observable as a live closed role without registering readiness,
+    // starting consumers, connecting native executors or exposing provider keys.
+    heartbeatTimer = setInterval(() => {
+      void removeWorkerReadiness().catch(() => {})
+    }, SCAN_WORKER_HEARTBEAT_MS)
+    return
+  }
   assertConfiguredWorkerDbPoolCapacity()
   await initSentry()
   // Gate readiness BEFORE the worker can claim anything: missing or malformed
   // provenance throws, main() rejects, and the process exits without ever
   // writing the readiness marker.
-  assertWorkerStartupProvenance()
   logger.info("LyraShield worker starting", { redisConfigured: Boolean(env.REDIS_URL) })
   assertEvidenceStorageConfigured()
-  assertRepositoryScanRuntimeConfigured()
-  await assertEngineTempRootReady()
-  await assertWorkerStartupResources()
+  if (legacyWorkerLifecycleEnabled()) {
+    assertRepositoryScanRuntimeConfigured()
+    await assertEngineTempRootReady()
+    await assertWorkerStartupResources()
+  }
 
   configureColdDatabaseEpochFailureHandler(() => {
     void shutdown("COLD_WORKER_AUTHORITY_LOST", 1)
@@ -445,71 +480,28 @@ async function main(): Promise<void> {
   )
 
   await worker.waitUntilReady()
-  const scanWorkerHeartbeat = createWorkerHeartbeatController(
-    () => registerRelayAwareWorker(workerId),
-    refreshWorkerReadiness
-  )
+  const scanWorkerHeartbeat = createWorkerHeartbeatController(async () => {
+    if (
+      workerAuthorityStartup.kind === "broker" &&
+      !(await workerAuthorityStartup.adapter.isCurrent())
+    )
+      throw new Error("Worker authority is unavailable")
+    await registerRelayAwareWorker(workerId)
+  }, refreshWorkerReadiness)
   workerHeartbeatController = scanWorkerHeartbeat
   worker.on("completed", (job, result) => {
     logger.info("Job completed", { jobId: job.id, result })
     void scanWorkerHeartbeat.heartbeat().catch(() => {})
   })
-  worker.on("failed", (job, error) => {
-    logger.error("Job failed in queue", { jobId: job?.id, reason: error.message })
-    if (job?.id) {
-      void reconcileFailedQueueJob(job.id, error.message, job.attemptsMade, job.opts.attempts ?? 1)
-    }
-  })
+  attachScanWorkerErrorHandlers(worker)
 
-  worker.on("error", (error) => {
-    logger.error("Worker error", { error: error.message, stack: error.stack })
-  })
-
-  // Webhook required-track retries (findings 12 / 18A). Separate BullMQ queue
-  // + worker sharing the same connection options; the processor delegates to
-  // the shared executor in @lyrashield/billing via injected handlers.
-  webhookTrackRetryWorker = new Worker<WebhookTrackRetryJobData, void>(
-    WEBHOOK_TRACK_RETRY_QUEUE_NAME,
-    async (job) => {
-      const result = await processWebhookTrackRetry(job, { dispatchAffiliate })
-      logger.info("Webhook track retry processed", {
-        jobId: job.id,
-        webhookEventId: job.data.webhookEventId,
-        track: job.data.track,
-        outcome: result.outcome,
-        retryRepresented: result.retryRepresented,
-      })
-    },
-    {
-      connection: {
-        url: env.REDIS_URL || "redis://localhost:6379",
-        maxRetriesPerRequest: null,
-      },
-      concurrency: WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY,
-      autorun: false,
-      // Keep instant job pickup while avoiding BullMQ's five-second idle poll,
-      // which alone exceeds a 500,000-command monthly managed Redis budget.
-      drainDelay: MANAGED_REDIS_DRAIN_DELAY_SECONDS,
-      stalledInterval: MANAGED_REDIS_STALLED_INTERVAL_MS,
+  await startWebhookTrackRetryWorker(
+    MANAGED_REDIS_DRAIN_DELAY_SECONDS,
+    MANAGED_REDIS_STALLED_INTERVAL_MS,
+    (created) => {
+      webhookTrackRetryWorker = created
     }
   )
-  await webhookTrackRetryWorker.waitUntilReady()
-  webhookTrackRetryWorker.on("failed", (job, error) => {
-    logger.error("Webhook track retry job failed in queue", {
-      jobId: job?.id,
-      webhookEventId: job?.data?.webhookEventId,
-      track: job?.data?.track,
-      reason: error.message,
-    })
-  })
-  webhookTrackRetryWorker.on("error", (error) => {
-    logger.error("Webhook track retry worker error", { error: error.message })
-  })
-  webhookTrackRetryWorker.run().catch((error) => {
-    logger.error("Webhook track retry worker stopped unexpectedly", {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  })
 
   // WP3 fix-PR producer: assembles a validated patch from a finding's
   // engine-emitted structured fix and stores it for the approval-bound PR flow.
@@ -563,6 +555,8 @@ async function main(): Promise<void> {
         error: error instanceof Error ? error.message : String(error),
       })
     })
+  if (workerAuthorityStartup.kind === "broker")
+    await workerAuthorityStartup.adapter.reconcileRetained()
   const startupReconciliation = await reconcileScanQueue()
   let lastReconciliationAtMs = Date.now()
   await startOperationalHealthMonitoring(startupReconciliation)
@@ -575,6 +569,12 @@ async function main(): Promise<void> {
       .catch((error) => {
         logger.warn("Artifact deletion outbox drain failed", {
           error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    if (workerAuthorityStartup.kind === "broker")
+      void workerAuthorityStartup.adapter.reconcileRetained().catch((error) => {
+        logger.warn("Native result reconciliation retained", {
+          errorType: error instanceof Error ? error.name : "UNKNOWN",
         })
       })
     void reconcileScanQueueIfNeeded(lastReconciliationAtMs, now)
@@ -612,7 +612,7 @@ async function main(): Promise<void> {
         })
       })
   }, RECONCILIATION_INTERVAL_MS)
-  if (env.LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED === "1") {
+  if (legacyWorkerLifecycleEnabled() && env.LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED === "1") {
     const reap = async () => {
       const result = await reapStaleScanResources({
         minimumAgeMs: env.LYRASHIELD_STALE_RESOURCE_MIN_AGE_MINUTES * 60_000,
@@ -666,6 +666,10 @@ async function main(): Promise<void> {
           error: readinessError instanceof Error ? readinessError.message : String(readinessError),
         })
       })
+      if (workerAuthorityStartup.kind === "broker") {
+        await worker?.pause(true).catch(() => {})
+        await workerAuthorityStartup.adapter.reconcileRetained().catch(() => {})
+      }
     })
   }, SCAN_WORKER_HEARTBEAT_MS)
 

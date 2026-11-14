@@ -1,6 +1,6 @@
 import type { Job } from "bullmq"
 import {
-  getSystemPrisma,
+  withWorkspaceRLS,
   updateUnclaimedScanStatus,
   verifyStoredScanExecutionPlan,
   type ScanStatus,
@@ -116,7 +116,11 @@ export async function verifyScanJobAuthority(
   // enqueueScan() uses scanId as the BullMQ job ID. Reject any alternate ID
   // before loading or mutating the canonical scan so duplicate/forged jobs
   // cannot execute provider work under another queue identity.
-  if (String(job.id) !== scanId) {
+  if (
+    job.id !== scanId ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/.test(scanId) ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/.test(claimedWorkspaceId)
+  ) {
     logger.warn("Scan job ID does not match scan ID", { jobId: job.id, scanId })
     return {
       ok: false,
@@ -130,15 +134,17 @@ export async function verifyScanJobAuthority(
 
   logger.info("Processing scan job", { scanId, targetId, mode, jobId: job.id })
 
-  // Do not trust the workspaceId from the queue payload. Load the scan record
-  // with a privileged client and verify the claimed tenant matches the stored
-  // tenant; otherwise a forged job could read or mutate another workspace.
+  // The claimed tenant is only a scoped lookup key. No system credentials or
+  // cross-workspace row may enter execution; the returned immutable row must
+  // still match every job field before account/plan checks can authorize work.
   let scanRecord: StoredScanAuthority | null
   try {
-    scanRecord = await getSystemPrisma().scan.findUnique({
-      where: { id: scanId },
-      select: storedScanAuthoritySelect,
-    })
+    scanRecord = await withWorkspaceRLS(claimedWorkspaceId, (tx) =>
+      tx.scan.findFirst({
+        where: { id: scanId, workspaceId: claimedWorkspaceId },
+        select: storedScanAuthoritySelect,
+      })
+    )
   } catch (err) {
     throw new Error("Failed to verify scan authority", { cause: err })
   }
@@ -151,7 +157,11 @@ export async function verifyScanJobAuthority(
     scanRecord.mode !== mode ||
     scanRecord.policyId !== (policyId ?? null)
   ) {
-    if (scanRecord && options.recordFailure !== false) {
+    if (
+      scanRecord &&
+      scanRecord.workspaceId === claimedWorkspaceId &&
+      options.recordFailure !== false
+    ) {
       await recordAuthorityFailure(
         scanId,
         scanRecord.workspaceId,

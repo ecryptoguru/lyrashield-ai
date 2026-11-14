@@ -60,6 +60,66 @@ export function applyNativeInvocationAck(
   const attempt = attempts.get(event.attemptId)
   const command = commands.get(event.commandId)
   const request = command?.request
+  if (
+    event.nativeOperation === "SANDBOX_TOOL_START_ACK" ||
+    event.nativeOperation === "SANDBOX_TOOL_MUTATION_ACK"
+  ) {
+    const sandbox = attempt?.resources.get("sandbox")
+    if (
+      !attempt ||
+      !request ||
+      request.type !== "PREPARE" ||
+      !sandbox ||
+      event.executorKey !== "sandbox" ||
+      event.operationId !== attempt.binding.operationId ||
+      event.authorityEpochId !== attempt.binding.authorityEpochId ||
+      event.commandInputChecksum !== commandRequestHash(request) ||
+      event.nativeRequestId !== event.guardId ||
+      !event.requestId ||
+      (event.nativeOperation === "SANDBOX_TOOL_START_ACK"
+        ? !event.execId
+        : event.nativeMutationId !== event.guardId ||
+          !event.nativeTargets ||
+          !event.nativeReceiptSha256) ||
+      event.inspection.state !== "PRESENT" ||
+      (event.nativeOperation === "SANDBOX_TOOL_START_ACK"
+        ? event.inspection.running !== true
+        : typeof event.inspection.running !== "boolean") ||
+      canonicalJson(event.ownership) !== canonicalJson(sandbox) ||
+      canonicalJson(event.inspection.ownership) !== canonicalJson(sandbox) ||
+      attempt.nativeAckGuards?.has(event.guardId)
+    )
+      throw new RuntimeControlError(
+        "JOURNAL_INTEGRITY",
+        "sandbox invocation acknowledgement differs",
+        500
+      )
+    const binding = {
+      phase: "SANDBOX_TOOL",
+      operationId: attempt.binding.operationId,
+      attemptId: attempt.binding.attemptId,
+      scanId: attempt.binding.scanId,
+      workspaceId: attempt.binding.workspaceId,
+      authorityEpochId: attempt.binding.authorityEpochId,
+      authorityRevision: attempt.binding.authorityRevision,
+      authorityChecksum: sha256Hex(
+        canonicalJson({
+          attempt: request.attempt,
+          executors: request.executors,
+          provider: request.provider ?? null,
+        })
+      ),
+      actionChecksum: event.actionChecksum,
+      commandId: request.commandId,
+      executorKey: "sandbox",
+      requestId: event.requestId,
+    }
+    if (sha256Hex(canonicalJson(binding)) !== event.bindingInputChecksum)
+      throw new RuntimeControlError("JOURNAL_INTEGRITY", "sandbox invocation binding differs", 500)
+    attempt.nativeAckGuards ??= new Set()
+    attempt.nativeAckGuards.add(event.guardId)
+    return
+  }
   const phase =
     event.nativeOperation === "CONTAINER_CREATE_ACK" ? "EXECUTOR_CREATE" : "EXECUTOR_START"
   const planned = attempt?.planned.get(event.executorKey)
@@ -115,7 +175,8 @@ export function applyNativeInvocationAck(
   if (phase === "EXECUTOR_CREATE") {
     attempt.nativeCreateProofs ??= new Map()
     attempt.nativeCreateProofs.set(event.executorKey, event.ownership)
-  } else attempt.nativeStartIntents?.delete(event.executorKey)
+  }
+  attempt.nativeStartIntents?.delete(event.executorKey)
   attempt.receipt = receipt
   command.receipt = receipt
 }

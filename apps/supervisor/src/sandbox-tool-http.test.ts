@@ -8,7 +8,11 @@ import type {
 } from "@lyrashield/runtime-control"
 import { createSupervisorHandler } from "./http"
 import { SandboxToolAcknowledgements } from "./sandbox-tool-ack"
-import { createSandboxToolAckHandler, type SandboxToolRequestAuthority } from "./sandbox-tool-http"
+import {
+  createSandboxToolAckHandler,
+  createSandboxToolHandler,
+  type SandboxToolRequestAuthority,
+} from "./sandbox-tool-http"
 import {
   SandboxToolJournal,
   sandboxToolEventSchema,
@@ -59,7 +63,7 @@ afterEach(async () => {
   )
 })
 
-async function fixture(installed = true) {
+async function fixture(installed = true, exec = false) {
   const tool = {
     requestId,
     kind: "exec",
@@ -69,6 +73,7 @@ async function fixture(installed = true) {
     actionChecksum: "a".repeat(64),
     handleChecksum: "bc2cc17bf72365e870812896e41b82f5a76bd9dc9484e3dca61952c194563fd4",
     containerId: "c".repeat(64),
+    maxOutputBytes: 1024,
   }
   const base = {
     supervisorInstanceId: "supervisor-1.tools",
@@ -141,19 +146,114 @@ async function fixture(installed = true) {
     },
   }
   const service = undefined as unknown as SupervisorService
+  const execute = vi.fn(async () => terminalResponse)
+  const executeFile = vi.fn(async () => ({ ...terminalResponse, sha256: "a".repeat(64) }))
+  const port = vi.fn(async () => ({
+    host: "lyrashield-supervisor-fixture",
+    port: 48080,
+    tls: false,
+    query: "",
+  }))
+  const state = vi.fn(async () => ({
+    running: true,
+    grant: { raw: "fixture" },
+    runtimeAuthority: { raw: "fixture" },
+  }))
   const server = createServer(
     createSupervisorHandler(service, {
       controlToken: "c".repeat(48),
       admission: "closed",
-      ...(installed ? { sandboxToolHandler: createSandboxToolAckHandler(authority, ack) } : {}),
+      ...(installed
+        ? {
+            sandboxToolHandler: exec
+              ? createSandboxToolHandler(authority, ack, { execute, executeFile, port, state })
+              : createSandboxToolAckHandler(authority, ack),
+          }
+        : {}),
     })
   )
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   servers.push(server)
   const address = server.address() as AddressInfo
   const url = `http://127.0.0.1:${address.port}/v1/sandbox/${binding.attemptId}/request/${requestId}/ack`
-  return { events, proof, url }
+  return {
+    events,
+    proof,
+    url,
+    execute,
+    executeFile,
+    execUrl: `http://127.0.0.1:${address.port}/v1/sandbox/${binding.attemptId}/exec`,
+  }
 }
+
+describe("supervisor sandbox exec route", () => {
+  const input = {
+    binding,
+    requestId,
+    commandId: requestId,
+    argv: ["true"],
+    cwd: "/workspace",
+    user: "pentester",
+    timeoutSeconds: 1,
+    maxOutputBytes: 1024,
+  }
+  const headers = {
+    authorization: `Bearer ${token}`,
+    "x-lyrashield-sandbox-handle": binding.sandboxHandle,
+  }
+  it("authenticates exact attempt scope before invoking the immutable runner", async () => {
+    const f = await fixture(true, true)
+    const response = await fetch(f.execUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(input),
+    })
+    expect(response.status).toBe(200)
+    expect(f.execute).toHaveBeenCalledWith(
+      { token, attemptId: binding.attemptId, sandboxHandle: binding.sandboxHandle },
+      input
+    )
+    expect(await response.json()).toEqual(expect.objectContaining({ binding }))
+  })
+  it("rejects foreign scope and caller-selected ownership before execution", async () => {
+    const f = await fixture(true, true)
+    for (const changed of [
+      { ...input, binding: { ...binding, operationId: "foreign-1" } },
+      { ...input, ownership: { containerId: "a".repeat(64) } },
+    ]) {
+      const response = await fetch(f.execUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(changed),
+      })
+      expect(response.status).toBe(503)
+    }
+    expect(f.execute).not.toHaveBeenCalled()
+  })
+  it("requires the scoped credential and dispatches bounded file operations", async () => {
+    const f = await fixture(true, true)
+    const unauthorized = await fetch(f.execUrl, { method: "POST", body: JSON.stringify(input) })
+    expect(unauthorized.status).toBe(401)
+    const file = {
+      binding,
+      requestId,
+      commandId: requestId,
+      path: "/workspace/file",
+      maxBytes: 1024,
+    }
+    const response = await fetch(f.execUrl.replace(/exec$/, "files/read"), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(file),
+    })
+    expect(response.status).toBe(200)
+    expect(f.executeFile).toHaveBeenCalledWith(
+      expect.objectContaining({ token }),
+      "files/read",
+      file
+    )
+  })
+})
 
 describe("supervisor sandbox ACK route", () => {
   it("uses scan-bound authority and returns the exact durable acknowledgement", async () => {

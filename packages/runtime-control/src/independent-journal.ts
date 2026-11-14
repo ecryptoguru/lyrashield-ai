@@ -102,6 +102,9 @@ export interface IndependentAuthorityJournalOptions<T> {
   // event bindings. Returning from this journal is not execution permission;
   // the supervisor must independently fence the epoch at each physical action.
   authorize: (event: AuthorityEvent<T>) => Promise<boolean>
+  // Called only after all durable records, heads and observed ACKs agree.
+  // Historical identity checks must not grant permission for a new append.
+  authorizeConfirmed?: (record: JournalRecord<AuthorityEvent<T>>) => Promise<boolean>
 }
 
 function safeEqual(left: string, right: string): boolean {
@@ -256,7 +259,7 @@ export class IndependentAuthorityJournal<T> {
               throw conflict("bounded authority record differs")
             if (!(await this.hasAcknowledgement(record, true)))
               throw unknown("observed mirror acknowledgement is unavailable")
-            await this.assertAuthorized(record.payload)
+            await this.assertConfirmedAuthorized(record)
             assertDeadline()
           }
         }
@@ -300,7 +303,7 @@ export class IndependentAuthorityJournal<T> {
         )
       }
       await this.assertConfirmed()
-      for (const record of this.records!) await this.assertAuthorized(record.payload)
+      for (const record of this.records!) await this.assertConfirmedAuthorized(record)
       // Recheck after authorization reads so a concurrent durable-head change
       // cannot be returned as a successfully reconciled recovery snapshot.
       await this.assertConfirmed()
@@ -382,6 +385,13 @@ export class IndependentAuthorityJournal<T> {
   private async assertAuthorized(event: AuthorityEvent<T>): Promise<void> {
     if (!(await this.options.authorize(event))) {
       throw conflict("epoch or persisted event authority changed before dispatch")
+    }
+  }
+
+  private async assertConfirmedAuthorized(record: JournalRecord<AuthorityEvent<T>>): Promise<void> {
+    if (!this.options.authorizeConfirmed) return this.assertAuthorized(record.payload)
+    if (!(await this.options.authorizeConfirmed(record))) {
+      throw conflict("confirmed event identity is unavailable")
     }
   }
 

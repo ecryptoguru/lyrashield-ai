@@ -45,5 +45,7 @@ test("qualified normal releases consume exactly one rehearsed prebuilt image tup
   const preflight = deploy.jobs["preflight-compatible-baseline"].steps
   assert.ok(preflight.some((step) => step.run?.includes("--paired-candidate")))
   assert.ok(preflight.some((step) => step.run?.includes("paired-prepared-candidate.mjs")))
-  assert.ok(deploy.jobs["resolve-images"].steps[1].env.PAIRED_PREPARED)
+  assert.ok(
+    deploy.jobs["resolve-images"].steps.find((step) => step.id === "select").env.PAIRED_PREPARED
+  )
 })
