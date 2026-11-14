@@ -165,6 +165,7 @@ export function readDisposableSourceReceipt(root: string, revision: string) {
       "status",
       "--porcelain",
       "--untracked-files=all",
+      "--ignored=matching",
     ]) !== ""
   )
     preparationProofFailure()
