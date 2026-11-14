@@ -50,7 +50,9 @@ function results(outputs = classify("README.md")) {
       result: outputs["desktop-frontend-tests"] === "true" ? "success" : "skipped",
     },
     "container-build": {
-      result: ["web-image", "worker-image", "egress-image"].some((flag) => outputs[flag] === "true")
+      result: ["web-image", "worker-image", "egress-image", "controller-image"].some(
+        (flag) => outputs[flag] === "true"
+      )
         ? "success"
         : "skipped",
     },
@@ -291,6 +293,26 @@ test("selected images qualify packaging while required source consumers remain s
     assert.equal(step.if, `needs.changes.outputs.${flag} == 'true'`)
     assert.equal(step.with.push, false)
   }
+  // The control-plane roles are digest-pinned release images; their sources
+  // select the three builds without dragging in the web/worker packaging path.
+  assert.equal(selected(classify("apps/broker/src/index.ts")), true)
+  for (const [name, target] of [
+    ["broker", "controller"],
+    ["supervisor", "supervisor"],
+    ["provider-gateway", "provider-gateway"],
+  ]) {
+    const step = container.steps.find((step) => step.name === `Build ${name} image (no push)`)
+    assert.equal(step.if, "needs.changes.outputs.controller-image == 'true'")
+    assert.equal(step.with.target, target)
+    assert.equal(step.with.push, false)
+  }
+  const controller = classify("apps/broker/src/index.ts")
+  assert.equal(controller["controller-image"], "true")
+  assert.equal(controller.shared, "true")
+  assert.equal(controller["database-tests"], "true")
+  for (const flag of ["web-image", "worker-image", "egress-image", "azure-deploy"])
+    assert.equal(controller[flag], "false", flag)
+  assert.equal(classify("README.md")["controller-image"], "false")
 })
 
 test("Turbo task graphs retain dependencies and SDK/MCP/plugin prerequisites without unrelated applications", () => {

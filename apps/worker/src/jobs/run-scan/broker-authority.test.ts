@@ -254,18 +254,46 @@ describe("broker worker boundary and retained authority", () => {
     expect((await invalid(job)).errorCategory).toBe("BROKER_AUTHORITY_CLOSED")
     expect(mocks.legacy).toHaveBeenCalledTimes(1)
   })
-  it("validates publication but keeps preparation and both starts structurally closed", async () => {
+  it("prepares through the fenced authority and retains the checked intent", async () => {
     const { job, processor, broker, publication } = fixture()
-    expect((await processor(job)).errorCategory).toBe("BROKER_PREPARATION_FENCE_UNAVAILABLE")
+    expect((await processor(job)).errorCategory).toBe("BROKER_DISPATCH_PREPARED")
     expect(publication.verifyDispatch).toHaveBeenCalledWith(
       { operationId: "op-1", workspaceId: "ws-1" },
       expect.objectContaining({ id: "scan-1", data })
     )
-    expect(broker.prepare).not.toHaveBeenCalled()
+    expect(broker.prepare).toHaveBeenCalledWith({
+      operationId: "op-1",
+      workerInstanceId: "worker-1",
+      workerGrantId: "grant-1",
+      authorityEpochId: "epoch-1",
+      expiresAt: expect.any(Date),
+    })
+    // Execution is a separate install; a prepared intent never starts paid work.
     expect(broker.startPaid).not.toHaveBeenCalled()
     expect(broker.startUnmetered).not.toHaveBeenCalled()
     expect(mocks.legacy).not.toHaveBeenCalled()
     expect(mocks.update).not.toHaveBeenCalled()
+  })
+  it("retains capacity and unknown preparation outcomes without starting work", async () => {
+    const { job, processor, broker } = fixture()
+    broker.prepare.mockResolvedValueOnce({
+      kind: "waiting",
+      operationId: "op-1",
+      state: "WAITING_CAPACITY",
+    })
+    expect((await processor(job)).errorCategory).toBe("BROKER_CAPACITY_PENDING")
+    broker.prepare.mockResolvedValueOnce({
+      kind: "unknown",
+      operationId: "op-1",
+      reasonCode: "PREPARATION_ACKNOWLEDGEMENT_DEADLINE",
+    })
+    expect((await processor(job)).errorCategory).toBe("BROKER_OUTCOME_UNKNOWN")
+    broker.prepare.mockRejectedValueOnce(
+      Object.assign(new Error("revoked"), { code: "WORKER_GRANT_INVALID" })
+    )
+    expect((await processor(job)).errorCategory).toBe("BROKER_OUTCOME_UNKNOWN")
+    expect(broker.startPaid).not.toHaveBeenCalled()
+    expect(mocks.legacy).not.toHaveBeenCalled()
   })
   it.each(["id", "workspace", "focus", "grant"])(
     "rejects spoofed %s before broker preparation",
@@ -385,8 +413,16 @@ describe("broker worker boundary and retained authority", () => {
           mocks.entitlement.mockResolvedValue({ allowed: true, accountId: "changed-sponsor" })
       })
       released.release()
-      expect((await delivery).errorCategory).toBe("BROKER_PREPARATION_FENCE_UNAVAILABLE")
-      expect(broker.prepare).not.toHaveBeenCalled()
+      // The worker's snapshot is now stale on purpose: the fence is the broker's
+      // READ COMMITTED transaction, which re-reads the live authority and rejects
+      // this exact call. The worker must still call it exactly once and retain.
+      broker.prepare.mockImplementationOnce(async () => {
+        throw Object.assign(new Error("authority changed"), { code: "WORKER_GRANT_INVALID" })
+      })
+      expect((await delivery).errorCategory).toBe("BROKER_OUTCOME_UNKNOWN")
+      expect(broker.prepare).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ operationId: "op-1" })
+      )
       expect(broker.startPaid).not.toHaveBeenCalled()
       expect(broker.startUnmetered).not.toHaveBeenCalled()
       expect(broker.stop).not.toHaveBeenCalled()
@@ -474,7 +510,10 @@ describe("broker worker boundary and retained authority", () => {
       kind: "broker",
       adapter: createBrokerWorkerAuthorityAdapter(installation),
     })
+    broker.prepare.mockClear()
     expect((await restarted(job)).errorCategory).toBe("BROKER_DISPATCH_PENDING")
+    // A later delivery of a PREPARING operation re-fences through the broker
+    // rather than re-preparing or replaying paid work.
     expect(broker.prepare).not.toHaveBeenCalled()
     expect(mocks.legacy).not.toHaveBeenCalled()
     expect(Object.isFrozen(workerAuthorityStartup)).toBe(true)
