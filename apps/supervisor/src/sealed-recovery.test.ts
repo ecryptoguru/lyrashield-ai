@@ -368,6 +368,95 @@ async function pinnedFixture() {
 }
 
 describe("sealed supervisor recovery candidate", () => {
+  it.each(["completed", "missing", "pending", "reconcile-only"] as const)(
+    "requires the original completed STOP for a stopped-source reconciliation (%s)",
+    async (stopState) => {
+      const f = await fixture(false, false)
+      try {
+        const expiredNow = new Date("2026-12-02T00:00:00.000Z")
+        const base = { supervisorInstanceId, observedAt: expiredNow.toISOString() }
+        const stopAttemptId = binding.attemptId
+        if (stopState !== "missing") {
+          await f.journal.append({
+            ...base,
+            type: "command_intent",
+            command: {
+              type: stopState === "reconcile-only" ? "RECONCILE" : "STOP",
+              commandId: "command-stop-1",
+              attemptId: stopAttemptId,
+              expectedReceiptHash: (await f.original.load()).at(-1)!.hash,
+            },
+          })
+        }
+        await f.journal.append({
+          ...base,
+          type: "attempt_status",
+          commandId: "command-stop-1",
+          attemptId: binding.attemptId,
+          status: "STOPPED",
+        })
+        if (stopState !== "missing" && stopState !== "pending")
+          await f.journal.append({
+            ...base,
+            type: "command_terminal",
+            commandId: "command-stop-1",
+            attemptId: stopAttemptId,
+            status: "STOPPED",
+          })
+        const issue = createSupervisorAttemptProofIssuer({
+          journal: f.journal,
+          privateKey,
+          epochId,
+          supervisorInstanceId,
+          now: () => expiredNow,
+        })
+        const input = {
+          operationId: binding.operationId,
+          attemptId: binding.attemptId,
+          workspaceId: binding.workspaceId,
+          scanId: binding.scanId,
+          authorityEpochId: epochId,
+          commandId: "command-reconcile-1",
+          type: "RECONCILE" as const,
+          challenge: "a".repeat(64),
+        }
+        if (stopState === "reconcile-only") {
+          await expect(issue(input)).rejects.toThrow("Attempt proof is unavailable")
+          return
+        }
+        if (stopState !== "completed") {
+          // Recovery treats a terminal label without the completed original
+          // command as UNKNOWN; it cannot issue a stopped-source proof.
+          expect((await issue(input)).status).toBe("UNKNOWN")
+          return
+        }
+        const proof = verifySupervisorAttemptProof(
+          await issue(input),
+          input,
+          { publicKey, supervisorInstanceId },
+          expiredNow
+        )
+        expect(proof.status).toBe("STOPPED")
+        expect(proof.binding.expiresAt).toBe(binding.expiresAt)
+        expect(proof.command).toEqual({
+          type: "RECONCILE",
+          commandId: input.commandId,
+          attemptId: binding.attemptId,
+          expectedReceiptHash: (await f.original.load()).at(-1)!.hash,
+        })
+        await expect(issue({ ...input, workspaceId: "foreign-workspace" })).rejects.toThrow(
+          "Attempt proof is unavailable"
+        )
+        await expect(
+          issue({ ...input, type: "START_UNMETERED", executorKey: "sandbox" })
+        ).rejects.toThrow("Attempt proof is unavailable")
+      } finally {
+        await f.original.close()
+        await f.local.close()
+      }
+    }
+  )
+
   it("issues only a scoped fixed-head lifecycle proof after real preparation completion", async () => {
     const f = await fixture(false, false)
     try {

@@ -116,7 +116,11 @@ async function setup(executor = new Executor(), authorityFence = fence) {
   const gateway = undefined as unknown as SupervisorPort
   const makeService = (
     port: typeof journal,
-    cleanupRuntime?: { now: () => Date; authorityFence: ScanAuthorityFence }
+    cleanupRuntime?: {
+      now: () => Date
+      authorityFence: ScanAuthorityFence
+      admission?: "open" | "closed"
+    }
   ) =>
     new SupervisorService({
       journal: port,
@@ -126,7 +130,7 @@ async function setup(executor = new Executor(), authorityFence = fence) {
       authorityFence: cleanupRuntime?.authorityFence ?? authorityFence,
       signingSecret: secret,
       supervisorInstanceId: "supervisor-test-1",
-      admission: cleanupRuntime ? "closed" : "open",
+      admission: cleanupRuntime ? (cleanupRuntime.admission ?? "closed") : "open",
       policy: {
         allowedImages: new Set([image]),
         allowedNetworks: new Set(["none"]),
@@ -599,4 +603,65 @@ describe("main signed native acknowledgement production", () => {
       await recovered.close()
     }
   )
+
+  it("reconciles an authentic stopped attempt with its retained STOP after authority expires", async () => {
+    const executor = new Executor()
+    executor.loseStartAck = true
+    const f = await setup(executor)
+    const prepared = await f.service.execute(prepare)
+    const started = await f.service.execute({
+      type: "START_UNMETERED",
+      commandId: "start-1",
+      attemptId: "attempt-1",
+      executorKey: "engine",
+      expectedReceiptHash: prepared.receipt.hash,
+    })
+    expect(started.status).toBe("UNKNOWN")
+    const stopped = await f.service.execute({
+      type: "STOP",
+      commandId: "stop-1",
+      attemptId: "attempt-1",
+      expectedReceiptHash: started.receipt.hash,
+    })
+    expect(stopped.status).toBe("STOPPED")
+    const before = await f.journal.load()
+    const cleanup = f.makeService(f.journal, {
+      admission: "open",
+      now: () => new Date("2026-11-13T02:00:00.000Z"),
+      authorityFence: {
+        run: async () => {
+          throw new Error("Current execution authority revoked")
+        },
+      },
+    })
+    const reconcile = {
+      type: "RECONCILE",
+      commandId: "reconcile-stopped-1",
+      attemptId: "attempt-1",
+      expectedReceiptHash: stopped.receipt.hash,
+    }
+    const reconciled = await cleanup.execute(reconcile)
+    expect(reconciled.status).toBe("STOPPED")
+    expect(await cleanup.execute(reconcile)).toEqual(reconciled)
+    await expect(
+      cleanup.execute({
+        type: "START_UNMETERED",
+        commandId: "forbidden-start-after-stop",
+        attemptId: "attempt-1",
+        executorKey: "engine",
+        expectedReceiptHash: reconciled.receipt.hash,
+      })
+    ).rejects.toThrow()
+    const after = await f.journal.load()
+    expect(after.filter(({ payload }) => payload.type === "native_invocation_planned")).toEqual(
+      before.filter(({ payload }) => payload.type === "native_invocation_planned")
+    )
+    expect(after.at(-1)?.payload).toMatchObject({
+      type: "command_terminal",
+      commandId: reconcile.commandId,
+      attemptId: "attempt-1",
+      status: "STOPPED",
+    })
+    await f.journal.close()
+  })
 })

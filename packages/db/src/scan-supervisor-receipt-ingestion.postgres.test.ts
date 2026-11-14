@@ -921,7 +921,9 @@ describe.skipIf(!enabled)("authenticated broker receipt consumption", { timeout:
         )
       ).rows[0]
     ).toEqual({ type: "native_invocation_retired", phase: "SANDBOX_TOOL" })
-    await expect(broker.reconcile(input)).rejects.toThrow("Attempt proof is unavailable")
+    await expect(broker.reconcile(input)).rejects.toMatchObject({
+      code: "PREPARATION_AUTHORITY_UNAVAILABLE",
+    })
     await broker.consumeSupervisorReceipts(f.operationId)
     expect((await broker.status(f.operationId)).state).toBe("TERMINATED")
     expect(
@@ -1142,6 +1144,8 @@ describe.skipIf(!enabled)("authenticated broker receipt consumption", { timeout:
       "operationId",
       f.operationId
     )
+    expect(executor.stopCalls).toBe(2)
+    expect(executor.removedResources).toBe(2)
     expect((await service.status(f.operationId)).state).toBe("UNKNOWN")
     await expect(scoped(() => service.reconcile(input))).resolves.toMatchObject({
       kind: "committed",
@@ -1150,7 +1154,7 @@ describe.skipIf(!enabled)("authenticated broker receipt consumption", { timeout:
       "operationId",
       f.operationId
     )
-    expect(executor.stopCalls).toBe(2)
+    expect(executor.removedResources).toBe(2)
     expect((await service.status(f.operationId)).state).toBe("TERMINATED")
     expect(
       (

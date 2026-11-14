@@ -17,6 +17,7 @@ export class LifecycleFixtureExecutor implements RuntimeExecutor {
   createCalls = 0
   startCalls = 0
   stopCalls = 0
+  removedResources = 0
   private resources = new Map<string, ResourceInspection>()
   async create(
     key: ExecutorKey,
@@ -63,7 +64,7 @@ export class LifecycleFixtureExecutor implements RuntimeExecutor {
     retirement?: NativeRetirement
   ): Promise<ResourceInspection> {
     this.stopCalls++
-    this.resources.delete(ownership.ownershipId)
+    if (this.resources.delete(ownership.ownershipId)) this.removedResources++
     if (ownership.executorKey === "sandbox" && this.toolRetirements.length) {
       if (!retirement?.acknowledgeTools) throw new Error("Tool retirement source is unavailable")
       await retirement.acknowledgeTools(this.toolRetirements)

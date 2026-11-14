@@ -346,10 +346,6 @@ export class SupervisorOperations {
     if (!attempt) throw new RuntimeControlError("ATTEMPT_NOT_FOUND", "attempt not found", 404)
     this.ctx.assertCurrentReceipt(attempt, command.expectedReceiptHash)
     await this.ctx.appendIntent(command)
-    const stopRequested =
-      this.ctx.options.admission !== "open" ||
-      attempt.status === "STOPPING" ||
-      attempt.status === "UNKNOWN"
     const retainedStop = [...this.ctx.commands.values()]
       .map((state) => state.request)
       .reverse()
@@ -357,6 +353,11 @@ export class SupervisorOperations {
         (request): request is StopCommand =>
           request?.type === "STOP" && request.attemptId === command.attemptId
       )
+    const stopRequested =
+      this.ctx.options.admission !== "open" ||
+      attempt.status === "STOPPING" ||
+      attempt.status === "UNKNOWN" ||
+      (attempt.status === "STOPPED" && retainedStop !== undefined)
     const retirementFor = (ownership: ResourceOwnership) =>
       retainedStop
         ? nativeRetirementEvidence({

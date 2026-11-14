@@ -94,7 +94,37 @@ export function createSupervisorAttemptProofIssuer(options: {
         )
       )
         unavailable()
-    } else if (input.type === "RECONCILE" && attempt.status !== "UNKNOWN") unavailable()
+    } else if (input.type === "RECONCILE" && attempt.status !== "UNKNOWN") {
+      // A genuine STOP can reach the source before its database cleanup
+      // projection. Preserve that observed status and reconcile only the
+      // original signed STOP, never turn a terminal label into new authority.
+      const stopped = [...commands.values()].find(
+        (state) =>
+          state.request?.type === "STOP" &&
+          state.request.attemptId === input.attemptId &&
+          state.status === "STOPPED"
+      )
+      const stopCommandId = stopped?.request?.commandId
+      if (
+        attempt.status !== "STOPPED" ||
+        !stopCommandId ||
+        !records.some(
+          ({ payload: event }) =>
+            event.type === "attempt_status" &&
+            event.commandId === stopCommandId &&
+            event.attemptId === input.attemptId &&
+            event.status === "STOPPED"
+        ) ||
+        !records.some(
+          ({ payload: event }) =>
+            event.type === "command_terminal" &&
+            event.commandId === stopCommandId &&
+            event.attemptId === input.attemptId &&
+            event.status === "STOPPED"
+        )
+      )
+        unavailable()
+    }
     const command = supervisorCommandSchema.parse({
       type: input.type,
       commandId: input.commandId,
