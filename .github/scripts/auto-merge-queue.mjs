@@ -28,10 +28,15 @@ function list(api, path, key) {
     const items = key ? response?.[key] : response
     requireValue(Array.isArray(items), "invalid paginated response")
     result.push(...items)
-    if (items.length < 100) {
-      requireValue(!key || response.total_count === result.length, "incomplete paginated response")
-      return result
-    }
+    if (items.length === 100) continue
+    if (!key || response.total_count === result.length) return result
+    // The runs API reports a total that can lead or lag the rows it serves while a
+    // run changes state. Re-read the total once before trusting either view: a real
+    // truncation still fails, a transient skew must not fail the whole job.
+    const reread = api(`${path}${path.includes("?") ? "&" : "?"}per_page=100&page=1`)
+    requireValue(Array.isArray(reread?.[key]), "invalid paginated response")
+    requireValue(reread.total_count === result.length, "incomplete paginated response")
+    return result
   }
   throw new Error("Automatic merge: pagination limit exceeded")
 }
