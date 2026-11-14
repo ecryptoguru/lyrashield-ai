@@ -12,7 +12,7 @@ const ready = () => {
     JSON.stringify({
       service: "lyrashield-broker",
       status: "ready",
-      admission: config.admission,
+      admission: service.admission,
       receipts: config.receiptAuthority ? "installed" : "closed",
     }) + "\n"
   )

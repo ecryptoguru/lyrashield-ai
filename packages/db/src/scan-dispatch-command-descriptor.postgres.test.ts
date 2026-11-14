@@ -90,15 +90,22 @@ describe.skipIf(!enabled)("persisted canonical controller command descriptors", 
       connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
       transport: { kind: "unix" as const, socketPath: "/run/lyrashield/broker.sock" },
       controlToken: "fixture-control-token-at-least-32-characters",
-      admission: "closed" as const,
+      admission: "open" as const,
     }
-    const closed = createBrokerService(config)
+    const noCompiler = createBrokerService(config)
+    const closed = createBrokerService({
+      ...config,
+      admission: "closed",
+      preparationAuthority: compile,
+    })
     const installed = createBrokerService({ ...config, preparationAuthority: compile })
     try {
       const denied = await preparationFixture(owner)
-      await expect(closed.prepare(preparationInput(denied))).rejects.toMatchObject({
-        code: "PREPARATION_AUTHORITY_CLOSED",
-      })
+      for (const service of [noCompiler, closed]) {
+        await expect(service.prepare(preparationInput(denied))).rejects.toMatchObject({
+          code: "ADMISSION_CLOSED",
+        })
+      }
       expect(
         (
           await owner.query(
@@ -137,7 +144,7 @@ describe.skipIf(!enabled)("persisted canonical controller command descriptors", 
         ).rows[0].n
       ).toBe(0)
     } finally {
-      await Promise.all([closed.close(), installed.close()])
+      await Promise.all([noCompiler.close(), closed.close(), installed.close()])
     }
   })
 

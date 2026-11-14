@@ -101,6 +101,7 @@ function failure(error: unknown): { status: number; code: string } {
   // command from installed policy. These are 503, not 500: they describe a
   // closed capability, never an internal fault.
   if (
+    named === "ADMISSION_CLOSED" ||
     named === "DATABASE_REJECTED" ||
     named === "PREPARATION_AUTHORITY_BUSY" ||
     named === "PREPARATION_AUTHORITY_UNAVAILABLE" ||

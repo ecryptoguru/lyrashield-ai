@@ -22,7 +22,7 @@ const transportSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("loopback"),
-      host: z.string().min(1).max(64),
+      host: z.enum(["127.0.0.1", "::1"]),
       port: z.number().int().min(1).max(65535),
     })
     .strict(),
@@ -36,9 +36,8 @@ export interface BrokerConfig {
   /**
    * Checked preparation intent. The compiler is installed by trusted startup
    * code from verified host policy, never from a request field. Without it the
-   * broker serves status and STOP only, and every prepare call is refused with
-   * PREPARATION_AUTHORITY_CLOSED rather than committing a command bundle this
-   * installation cannot produce.
+   * broker keeps admission closed while allowing recovery, rather than
+   * committing a command bundle this installation cannot produce.
    */
   preparationAuthority?: ScanPreparationCompiler
   /**
@@ -70,9 +69,10 @@ function transport(env: NodeJS.ProcessEnv): BrokerConfig["transport"] {
   if (socketPath) return transportSchema.parse({ kind: "unix", socketPath })
   const rawPort = env.LYRASHIELD_BROKER_PORT?.trim() ?? "8080"
   if (!/^\d+$/.test(rawPort)) throw new Error("LYRASHIELD_BROKER_PORT must be a decimal port")
+  const host = env.LYRASHIELD_BROKER_HOST?.trim() || "127.0.0.1"
   return transportSchema.parse({
     kind: "loopback",
-    host: env.LYRASHIELD_BROKER_HOST?.trim() || "127.0.0.1",
+    host: host === "localhost" ? "127.0.0.1" : host,
     port: Number(rawPort),
   })
 }
@@ -99,8 +99,8 @@ function receiptAuthority(env: NodeJS.ProcessEnv): BrokerConfig["receiptAuthorit
  * from verified protected host policy and an installed signing identity, which
  * only the protected host composition can supply; constructing one from
  * environment would let an operator-supplied string become command authority.
- * Until that installation exists, PREPARE stays closed with
- * PREPARATION_AUTHORITY_CLOSED rather than committing an unverified bundle.
+ * Until that installation exists, admission stays closed rather than
+ * committing an unverified bundle.
  */
 export function loadBrokerConfig(env: NodeJS.ProcessEnv = process.env): BrokerConfig {
   const connectionString = required(env, "LYRASHIELD_SCAN_EXECUTION_DATABASE_URL")

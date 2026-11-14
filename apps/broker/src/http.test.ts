@@ -132,7 +132,7 @@ describe("broker control surface", () => {
         throw Object.assign(new Error("closed"), { code: "PREPARATION_AUTHORITY_CLOSED" })
       },
       startPaid: async () => {
-        throw Object.assign(new Error("no policy"), { code: "PREPARATION_AUTHORITY_UNAVAILABLE" })
+        throw Object.assign(new Error("closed"), { code: "ADMISSION_CLOSED" })
       },
       startUnmetered: async () => {
         throw Object.assign(new Error("policy mismatch"), {
@@ -159,13 +159,11 @@ describe("broker control surface", () => {
         ).status
       ).toBe(503)
       expect(
-        (
-          await call(server, `/operations/${operationId}/start-paid`, {
-            method: "POST",
-            body: JSON.stringify(attempt),
-          })
-        ).status
-      ).toBe(503)
+        await call(server, `/operations/${operationId}/start-paid`, {
+          method: "POST",
+          body: JSON.stringify(attempt),
+        })
+      ).toEqual({ status: 503, body: { error: "ADMISSION_CLOSED" } })
       expect(
         (
           await call(server, `/operations/${operationId}/start-unmetered`, {

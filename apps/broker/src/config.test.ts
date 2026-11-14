@@ -33,6 +33,28 @@ describe("broker installation", () => {
     })
   })
 
+  it("only permits loopback TCP addresses", () => {
+    const base = {
+      LYRASHIELD_SCAN_EXECUTION_DATABASE_URL: database,
+      LYRASHIELD_BROKER_CONTROL_TOKEN: token,
+    }
+    for (const host of ["0.0.0.0", "::", "192.0.2.1", "example.com"]) {
+      expect(() => loadBrokerConfig({ ...base, LYRASHIELD_BROKER_HOST: host })).toThrow()
+    }
+    for (const host of ["127.0.0.1", "::1"]) {
+      expect(loadBrokerConfig({ ...base, LYRASHIELD_BROKER_HOST: host }).transport).toMatchObject({
+        kind: "loopback",
+        host,
+      })
+    }
+    expect(
+      loadBrokerConfig({ ...base, LYRASHIELD_BROKER_HOST: "localhost" }).transport
+    ).toMatchObject({
+      kind: "loopback",
+      host: "127.0.0.1",
+    })
+  })
+
   it("installs the receipt consumer only from a complete protected source", () => {
     const base = {
       LYRASHIELD_SCAN_EXECUTION_DATABASE_URL: database,

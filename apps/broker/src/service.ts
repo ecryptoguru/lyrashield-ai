@@ -24,10 +24,15 @@ export interface BrokerService {
 /**
  * Thin process host over the stored dispatch authority. Every state transition,
  * epoch lock, capacity decision and receipt projection stays in
- * `@lyrashield/db`; this module only binds the protected installation and
- * refuses receipt settlement when that installation is absent.
+ * `@lyrashield/db`; this module binds the protected installation, controls new
+ * admission, and leaves recovery available when admission is closed.
  */
 export function createBrokerService(config: BrokerConfig): BrokerService {
+  const admission = config.admission === "open" && config.preparationAuthority ? "open" : "closed"
+  const admissionClosed = () =>
+    Promise.reject(
+      Object.assign(new Error("Broker admission is closed"), { code: "ADMISSION_CLOSED" })
+    )
   const authority = config.receiptAuthority
   const broker = createScanDispatchAuthorityBroker({
     connectionString: config.connectionString,
@@ -51,7 +56,7 @@ export function createBrokerService(config: BrokerConfig): BrokerService {
     // compiler that turns a transaction-verified scan into a checksum-bound
     // command. Installing one without the other would let PREPARE commit a
     // descriptor no executor can run, so an absent compiler leaves the whole
-    // authority closed and prepare fails with PREPARATION_AUTHORITY_CLOSED.
+    // authority and process admission closed.
     ...(config.preparationAuthority
       ? {
           preparationAuthority: "checked-intent-v1" as const,
@@ -60,10 +65,11 @@ export function createBrokerService(config: BrokerConfig): BrokerService {
       : {}),
   })
   return {
-    admission: config.admission,
-    prepare: (input) => broker.prepare(input),
-    startPaid: (input) => broker.startPaid(input),
-    startUnmetered: (input) => broker.startUnmetered(input),
+    admission,
+    prepare: (input) => (admission === "open" ? broker.prepare(input) : admissionClosed()),
+    startPaid: (input) => (admission === "open" ? broker.startPaid(input) : admissionClosed()),
+    startUnmetered: (input) =>
+      admission === "open" ? broker.startUnmetered(input) : admissionClosed(),
     stop: (input) => broker.stop(input),
     reconcile: (input) => broker.reconcile(input),
     consume: (operationId) => broker.consumeSupervisorReceipts(operationId),
