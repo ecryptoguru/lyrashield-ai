@@ -1,0 +1,146 @@
+name: Publish controller images
+
+# The controller roles (broker, supervisor, provider-gateway) run only on a
+# protected host and are pinned by digest in the installed runtime authority, so
+# they are published explicitly and never repointed by tag.
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact merged main commit to publish
+        required: true
+        type: string
+      confirmation:
+        description: Type publish-controller-images
+        required: true
+        type: string
+
+concurrency:
+  group: publish-controller-images
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  ENGINE_REVISION: 0793bcb9644a1985165963375586124c993c020a
+
+jobs:
+  publish:
+    name: Build and publish controller images
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Require the exact confirmation phrase
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$CONFIRMATION" == "publish-controller-images" ]]
+
+      - name: Require the source commit to be on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          gh api "repos/${GITHUB_REPOSITORY}/commits/${SOURCE_SHA}/branches-where-head" \
+            --jq '.[].name' | grep -Fx main
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Login to the registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Select unique tags
+        id: tags
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          tag="controller-$SOURCE_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
+          {
+            echo "broker=$repository/lyrashield-broker:$tag"
+            echo "supervisor=$repository/lyrashield-supervisor:$tag"
+            echo "gateway=$repository/lyrashield-provider-gateway:$tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build broker
+        id: broker
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: controller
+          push: true
+          sbom: true
+          tags: ${{ steps.tags.outputs.broker }}
+          build-args: |
+            PRODUCT_REVISION=${{ inputs.source_sha }}
+            ENGINE_REVISION=${{ env.ENGINE_REVISION }}
+          cache-from: type=gha,scope=release-controller
+          cache-to: type=gha,mode=max,scope=controller
+
+      - name: Build supervisor
+        id: supervisor
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: supervisor
+          push: true
+          sbom: true
+          tags: ${{ steps.tags.outputs.supervisor }}
+          build-args: |
+            PRODUCT_REVISION=${{ inputs.source_sha }}
+            ENGINE_REVISION=${{ env.ENGINE_REVISION }}
+          cache-from: type=gha,scope=release-controller
+          cache-to: type=gha,mode=max,scope=controller
+
+      - name: Build provider gateway
+        id: gateway
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: provider-gateway
+          push: true
+          sbom: true
+          tags: ${{ steps.tags.outputs.gateway }}
+          build-args: |
+            PRODUCT_REVISION=${{ inputs.source_sha }}
+            ENGINE_REVISION=${{ env.ENGINE_REVISION }}
+          cache-from: type=gha,scope=release-controller
+          cache-to: type=gha,mode=max,scope=controller
+
+      - name: Emit exact digests
+        env:
+          BROKER: ${{ steps.broker.outputs.digest }}
+          SUPERVISOR: ${{ steps.supervisor.outputs.digest }}
+          GATEWAY: ${{ steps.gateway.outputs.digest }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          for digest in "$BROKER" "$SUPERVISOR" "$GATEWAY"; do
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          done
+          {
+            echo "### Controller images"
+            echo
+            echo "Source \`$SOURCE_SHA\`, engine \`$ENGINE_REVISION\`"
+            echo
+            echo "| Role | Digest |"
+            echo "| --- | --- |"
+            echo "| broker | \`$BROKER\` |"
+            echo "| supervisor | \`$SUPERVISOR\` |"
+            echo "| provider-gateway | \`$GATEWAY\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
