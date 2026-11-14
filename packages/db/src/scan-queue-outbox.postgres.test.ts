@@ -15,6 +15,7 @@ import { fixtureQueueTransport, queueFixtureWorker } from "../scripts/tests/queu
 import {
   applyPreparationFixtureMigration,
   installPreparationFixtureRole,
+  fixturePreparationCompiler,
 } from "../scripts/tests/scan-preparation-fixture"
 import { getScanQueue } from "../../integrations/src/queue"
 import type { ScanFocus } from "@lyrashield/types"
@@ -307,6 +308,7 @@ describe.skipIf(!enabled)("closed outbox dispatcher with restricted PostgreSQL a
     const broker = createScanDispatchAuthorityBroker({
       connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
       preparationAuthority: "checked-intent-v1",
+      compilePreparation: fixturePreparationCompiler,
     })
     const prepare = {
       operationId: scope.operationId,

@@ -187,7 +187,7 @@ async function createPrepareAttempt(
   input: PrepareDispatchInput,
   expiresAt: string,
   focusDigest: string | null,
-  compilePreparation: ScanPreparationCompiler | undefined,
+  compilePreparation: ScanPreparationCompiler,
   focus: import("@lyrashield/types").ScanJobData["focus"]
 ): Promise<{
   waiting: false
@@ -263,7 +263,7 @@ async function createPrepareAttempt(
       commandId,
       operation.operationId,
       attemptId,
-      descriptor.commandInputChecksum ?? commandDigest("PREPARE", operation.operationId, attemptId),
+      descriptor.commandInputChecksum,
       descriptor.commandInputJson,
       descriptor.commandInputChecksum,
     ]
@@ -289,11 +289,12 @@ export async function prepareDispatch(
   ctx: DispatchBrokerContext,
   input: PrepareDispatchInput
 ): Promise<PrepareDispatchResult> {
-  if (ctx.preparationAuthority !== "checked-intent-v1")
+  if (ctx.preparationAuthority !== "checked-intent-v1" || !ctx.compilePreparation)
     throw new ScanDispatchAuthorityError(
       "PREPARATION_AUTHORITY_CLOSED",
       "Checked preparation authority is not installed"
     )
+  const compilePreparation = ctx.compilePreparation
   try {
     const expiresAt = timestampWithoutTimeZone(input.expiresAt)
     const outcome = await ctx.transaction(input.operationId, async (client) => {
@@ -343,7 +344,7 @@ export async function prepareDispatch(
           input,
           expiresAt,
           payload.focus === undefined ? null : scanQueueDigest(JSON.stringify(payload.focus)),
-          ctx.compilePreparation,
+          compilePreparation,
           payload.focus
         ),
         authority

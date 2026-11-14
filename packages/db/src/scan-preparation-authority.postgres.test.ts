@@ -20,6 +20,7 @@ import {
 import {
   preparationFixture,
   preparationInput,
+  fixturePreparationCompiler,
   applyPreparationFixtureMigration,
   installPreparationFixtureRole,
   installPreparationRevokerRole,
@@ -98,6 +99,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
     broker = createScanDispatchAuthorityBroker({
       connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
       preparationAuthority: "checked-intent-v1",
+      compilePreparation: fixturePreparationCompiler,
     })
   }, 30000)
   afterAll(async () => {
@@ -595,6 +597,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
     const mixed = createScanDispatchAuthorityBroker({
       connectionString: process.env.DATABASE_URL!,
       preparationAuthority: "checked-intent-v1",
+      compilePreparation: fixturePreparationCompiler,
     })
     try {
       await expect(mixed.prepare(preparationInput(f))).rejects.toMatchObject({

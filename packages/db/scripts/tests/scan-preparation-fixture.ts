@@ -4,7 +4,36 @@ import type pg from "pg"
 import { buildScanExecutionPlan, ScanExecutionPlanSchema } from "@lyrashield/types"
 import { computeScanExecutionPlanHash } from "../../src/scan-execution-plan"
 import { commandDigest } from "../../src/scan-dispatch-authority-broker-methods"
+import type { ScanPreparationCompiler } from "../../src/scan-dispatch-command-descriptor"
 import { publishFixtureOutbox } from "./queue-outbox-fixture"
+
+/** Synthetic descriptor for PostgreSQL authority tests; never installed at runtime. */
+export const fixturePreparationCompiler: ScanPreparationCompiler = ({ attempt }) => ({
+  executors: [
+    {
+      key: "engine",
+      spec: {
+        kind: "process",
+        command: "/opt/fixture-only-engine",
+        args: [],
+        cwd: "/var/lib/fixture-only",
+        cgroupPath: "/sys/fs/cgroup/fixture-only",
+        env: {},
+        grantEnvName: "LLM_API_KEY",
+      },
+    },
+  ],
+  ...(attempt.billingMode === "PAID"
+    ? {
+        provider: {
+          providerId: "fixture",
+          maxRequests: 1,
+          costReservationMicros: 0,
+          maxReservedCostMicros: 0,
+        },
+      }
+    : {}),
+})
 
 export type PreparationFixture = {
   userId: string

@@ -122,10 +122,9 @@ export function assertPreparationProviderPolicy(
 export async function compilePreparationCommand(
   client: pg.PoolClient,
   identity: { commandId: string; attemptId: string; operationId: string },
-  compile: ScanPreparationCompiler | undefined,
+  compile: ScanPreparationCompiler,
   focus: ScanJobData["focus"]
-): Promise<{ commandInputJson: string | null; commandInputChecksum: string | null }> {
-  if (!compile) return { commandInputJson: null, commandInputChecksum: null }
+): Promise<{ commandInputJson: string; commandInputChecksum: string }> {
   const result = await client.query<{
     attemptId: string
     scanId: string

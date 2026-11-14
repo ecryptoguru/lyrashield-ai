@@ -7,6 +7,7 @@ import {
   installPreparationFixtureRole,
   preparationFixture,
   preparationInput,
+  fixturePreparationCompiler,
 } from "../scripts/tests/scan-preparation-fixture"
 import { queueFixtureWorker } from "../scripts/tests/queue-outbox-fixture"
 
@@ -55,6 +56,7 @@ describe.skipIf(!enabled)("database-owned policy authority generations", () => {
     broker = createScanDispatchAuthorityBroker({
       connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
       preparationAuthority: "checked-intent-v1",
+      compilePreparation: fixturePreparationCompiler,
     })
   }, 30000)
   afterAll(async () => {

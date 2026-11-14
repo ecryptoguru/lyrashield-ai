@@ -10,6 +10,7 @@ import {
   installPreparationFixtureRole,
   legacyPreparationFixture,
   historicalPreparation,
+  fixturePreparationCompiler,
 } from "../scripts/tests/scan-preparation-fixture"
 import { publishFixtureOutbox, queueFixtureWorker } from "../scripts/tests/queue-outbox-fixture"
 
@@ -404,6 +405,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
     broker = createScanDispatchAuthorityBroker({
       connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
       preparationAuthority: "checked-intent-v1",
+      compilePreparation: fixturePreparationCompiler,
     })
     legacyBroker = createScanDispatchAuthorityBroker({ connectionString: brokerUrl })
     const epoch = await owner.query(
