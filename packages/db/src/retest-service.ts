@@ -1,4 +1,5 @@
 import { targetReadScopeWhere } from "./read-query-scope"
+import type { ScopedTransaction } from "./rls"
 import { prisma } from "./client"
 import type { Retest, Finding, Scan } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
@@ -71,21 +72,45 @@ export async function getRetest(
   return retest as RetestWithDetails | null
 }
 
-export async function listRetests(params: {
-  workspaceId: string
-  targetIds?: string[]
-  findingId?: string
-  status?: string
-  cursor?: string
-  limit?: number
-}): Promise<{ items: RetestWithDetails[]; nextCursor: string | null }> {
+export async function listRetests(
+  params: {
+    workspaceId: string
+    targetIds?: string[]
+    requireActiveTarget?: boolean
+    allowedProfiles?: string[]
+    findingId?: string
+    status?: string
+    cursor?: string
+    limit?: number
+  },
+  client?: ScopedTransaction
+): Promise<{ items: RetestWithDetails[]; nextCursor: string | null }> {
   const limit = Math.min(params.limit ?? 20, 50)
+  const db = client ?? prisma
 
-  const retests = await prisma.retest.findMany({
+  const retests = await db.retest.findMany({
     where: {
       workspaceId: params.workspaceId,
-      finding: { workspaceId: params.workspaceId, ...targetReadScopeWhere(params) },
-      scan: { workspaceId: params.workspaceId, ...targetReadScopeWhere(params) },
+      finding: {
+        workspaceId: params.workspaceId,
+        ...targetReadScopeWhere(params),
+        ...(params.requireActiveTarget
+          ? { target: { workspaceId: params.workspaceId, deletedAt: null } }
+          : {}),
+        ...(params.allowedProfiles !== undefined
+          ? { scan: { mode: { in: params.allowedProfiles as never[] } } }
+          : {}),
+      },
+      scan: {
+        workspaceId: params.workspaceId,
+        ...targetReadScopeWhere(params),
+        ...(params.requireActiveTarget
+          ? { target: { workspaceId: params.workspaceId, deletedAt: null } }
+          : {}),
+        ...(params.allowedProfiles !== undefined
+          ? { mode: { in: params.allowedProfiles as never[] } }
+          : {}),
+      },
       ...(params.findingId ? { findingId: params.findingId } : {}),
       ...(params.status ? { status: params.status } : {}),
     },

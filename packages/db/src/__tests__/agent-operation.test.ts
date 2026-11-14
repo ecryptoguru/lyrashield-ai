@@ -44,6 +44,7 @@ describe("WP-03 Agent Operation Durable Execution and Idempotency", () => {
     })
 
     expect(hash1).toBe(hash2)
+    expect(hash1).toBe("b31e5bc8578770702a57634458c8f921b0ba144c0b626a2c6354f5c7621169fa")
   })
 
   it("normalizes dates and omitted values into a Prisma JSON object", () => {
@@ -357,6 +358,29 @@ describe("WP-03 Agent Operation Durable Execution and Idempotency", () => {
       input: { targetId: "target-DIFFERENT-B" },
     })
 
+    expect(result.status).toBe("CONFLICT")
+  })
+
+  it("does not replay a different input with a prototype-named field", async () => {
+    const input = { metadata: { value: 1 } }
+    vi.mocked(prisma.agentOperation.findUnique).mockResolvedValueOnce({
+      id: "op-original",
+      workspaceId: "ws-1",
+      connectionId: "conn-1",
+      operationName: "connector.invoke",
+      idempotencyKey: "key-shared",
+      inputHash: hashOperationInput("connector.invoke", input),
+      status: "COMPLETED",
+      result: null,
+    } as never)
+    const differentInput = JSON.parse('{"metadata":{"value":1,"__proto__":{"extra":true}}}')
+    const result = await claimOrGetAgentOperation({
+      workspaceId: "ws-1",
+      connectionId: "conn-1",
+      operationName: "connector.invoke",
+      idempotencyKey: "key-shared",
+      input: differentInput,
+    })
     expect(result.status).toBe("CONFLICT")
   })
 

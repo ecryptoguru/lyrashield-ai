@@ -6,7 +6,9 @@ script="$repo/ops/worker/run-worker.sh"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-mkdir -p "$tmp/bin"
+mkdir -p "$tmp/bin" "$tmp/cold-start"
+sed "s|/var/lib/lyrashield/worker-cold-start|$tmp/cold-start|g" "$script" > "$tmp/run-worker.sh"
+script="$tmp/run-worker.sh"
 cat > "$tmp/bin/docker" <<'MOCK'
 #!/bin/sh
 set -eu
@@ -26,7 +28,18 @@ case "$1 ${2:-}" in
   *) echo "Unexpected Docker operation: $*" >&2; exit 90 ;;
 esac
 MOCK
-chmod +x "$tmp/bin/docker"
+cat > "$tmp/bin/flock" <<'MOCK'
+#!/bin/sh
+exit 0
+MOCK
+cat > "$tmp/bin/sync" <<'MOCK'
+#!/bin/sh
+set -eu
+[ "$1" = -f ] && [ -f "$2/owner-started" ] || exit 90
+[ -z "${MOCK_SYNC_FAIL:-}" ] || exit 1
+printf '%s\n' synced > "$2/sync-receipt"
+MOCK
+chmod +x "$tmp/bin/docker" "$tmp/bin/flock" "$tmp/bin/sync"
 
 digest=$(printf 'a%.0s' {1..64})
 cat > "$tmp/runtime.conf" <<EOF
@@ -41,7 +54,9 @@ run_case() {
   local name=$1 state=$2 allowed=$3 network=${4:-lyrashield-sandbox}
   local log="$tmp/$name.docker.log" output="$tmp/$name.output" status=0
   : > "$log"
+  rm -f "$tmp/cold-start/owner-started" "$tmp/cold-start/sync-receipt"
   PATH="$tmp/bin:$PATH" \
+    LYRASHIELD_WORKER_COLD_START_DIR="$tmp/cold-start" \
     LYRASHIELD_WORKER_RUNTIME_CONFIG="$tmp/runtime.conf" \
     LYRASHIELD_WORKER_ENV_FILE="$tmp/worker.env" \
     LYRASHIELD_WORKER_ENV_LIB="$tmp/worker-env.sh" \
@@ -72,6 +87,7 @@ run_case() {
       exit 1
     fi
   fi
+  [ -f "$tmp/cold-start/sync-receipt" ] || { echo "FAIL: missing durable startup sync" >&2; exit 1; }
   echo "PASS: $name"
 }
 
@@ -88,3 +104,44 @@ run_case malformed-boolean 'bridge|TRUE|false' no
 run_case multiple-networks $'bridge|true|false\nbridge|true|false' no
 run_case valid-network 'bridge|true|false' yes
 run_case configured-network 'bridge|true|false' yes private-sandbox
+
+# A crash may leave a late accepted Docker create. An empty inventory cannot
+# authorize another owner: both barrier and prior-start fences reject before
+# any native or registry operation.
+rm -f "$tmp/cold-start/owner-started"
+for fence in pending owner-started; do
+  : > "$tmp/cold-start/$fence"
+  log="$tmp/$fence.docker.log"
+  : > "$log"
+  status=0
+  PATH="$tmp/bin:$PATH" \
+    LYRASHIELD_WORKER_COLD_START_DIR="$tmp/cold-start" \
+    MOCK_DOCKER_LOG="$log" \
+    LYRASHIELD_WORKER_RUNTIME_CONFIG="$tmp/runtime.conf" \
+    LYRASHIELD_WORKER_ENV_FILE="$tmp/worker.env" \
+    LYRASHIELD_WORKER_ENV_LIB="$tmp/worker-env.sh" \
+    sh "$script" >"$tmp/$fence.output" 2>&1 || status=$?
+  [ "$status" -eq 1 ] && [ ! -s "$log" ] &&
+    grep -Fq 'Unresolved cold host barrier' "$tmp/$fence.output" || {
+      echo "FAIL: $fence did not prevent native restart" >&2
+      exit 1
+    }
+  rm "$tmp/cold-start/$fence"
+  echo "PASS: $fence blocks native restart"
+done
+
+: > "$tmp/sync-failure.docker.log"
+status=0
+PATH="$tmp/bin:$PATH" MOCK_SYNC_FAIL=1 MOCK_DOCKER_LOG="$tmp/sync-failure.docker.log" \
+  LYRASHIELD_WORKER_COLD_START_DIR="$tmp/cold-start" \
+  LYRASHIELD_WORKER_RUNTIME_CONFIG="$tmp/runtime.conf" \
+  LYRASHIELD_WORKER_ENV_FILE="$tmp/worker.env" \
+  LYRASHIELD_WORKER_ENV_LIB="$tmp/worker-env.sh" \
+  sh "$script" >"$tmp/sync-failure.output" 2>&1 || status=$?
+[ "$status" -eq 1 ] && [ ! -s "$tmp/sync-failure.docker.log" ] &&
+  [ -f "$tmp/cold-start/owner-started" ] &&
+  grep -Fq 'Cold owner fence could not be persisted' "$tmp/sync-failure.output" || {
+    echo "FAIL: failed sync allowed native startup or erased fence" >&2
+    exit 1
+  }
+echo "PASS: failed sync blocks native startup and preserves fence"

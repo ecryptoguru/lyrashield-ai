@@ -2,7 +2,13 @@
 
 Founder- and operator-run procedures consolidated from standalone runbooks. Each section is founder-controlled; nothing here runs unattended.
 
-## Current production readback — 2026-10-27
+## Current production readback — 2026-11-02
+
+[Production release 41438792830](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41438792830) succeeded for `d488862bd269c07194afe87a918ca413e4a62217`. Independent post-release Azure and VM observations found healthy app, scanner, egress proxy and worker with matching product/image identity; public app/scanner and scan readiness returned 200. Exact revisions and digests are recorded in [PRD §8](../PRD.md#nonbilling-production-release--2026-11-02-ist). Wait for release completion before VM RunCommand reads; never overlap worker promotion.
+
+The November 1 scheduled restore failed its private row-integrity step, and the later November 2 scheduled backup did not run a restore. A subsequent owner-requested [isolated backup/restore 41448546391](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41448546391) passed exact-object, row-integrity, schema, audit, readiness and cleanup steps from deployed source `d488862bd269c07194afe87a918ca413e4a62217`; retention deletion was skipped. The historical failure cause remains unknown. Follow the [owner-approved isolated restore procedure](#owner-approved-manual-isolated-restore) for future drills; do not rerun the failed scheduled workflow.
+
+## Historical production readback — 2026-10-27
 
 Product `2d4e168da544306bf6cc9958a55f14bbfcb717e3` passed [production release 40538483543](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40538483543). Provider readback showed app `0000507`, scanner `0000481` and proxy `0000347` at 100% traffic; scan readiness returned HTTP 200. Independent VM readback confirmed healthy worker `sha256:690bac6ed42d1c450af94055e270d5f21baa937771ba828e7e4871e501067fbe`, matching product and engine `3001517530300ca5f602536bfadcbd3c95ad3039` provenance and 23 PHP/Composer and coverage source hashes. Wait for release completion before VM RunCommand reads; never overlap worker promotion.
 
@@ -273,11 +279,55 @@ promotion. Cloudflare retains generated-artifact validation and live route/
 revision checks. Production Lighthouse scores run nightly or on demand,
 with reports and unchanged thresholds, outside the deployment path.
 
+### Automated cold single-worker release
+
+Production promotion remains held pending **both protected image qualification and isolated runtime authority**. The cold native barrier, DB epoch fence and containment do not establish the missing isolated authority: worker startup still selects the legacy baseline and the paired authority verifier is unavailable. The runtime workflow now unconditionally invokes the existing protected paired preflight before host/fleet writes. Exact source, cold flags, image digests or operator approval cannot skip it. The dormant cold steps below describe implementation, not authorization to promote.
+
+The normal protected `release-production.yml` caller still qualifies the merged source, builds web/worker/egress images once and runs the same-run exact-image rehearsal independently of the runtime hold. That rehearsal reauthenticates the immutable sandbox publication and native inventory, executes installed-engine fake-provider TCP/budget/crash probes, actual sandbox credential/network negatives, disposable funded-claim SIGKILL/redelivery, database epoch and external recovery checks. A development image smoke or an unsigned local receipt cannot qualify the release.
+
+Before mutation, the runner validates the configured authenticated unpaid canary key and exact active target. Candidate preparation claims only its own persistent admission stop and allows up to ten minutes for existing queues/scans to drain naturally. It never cancels or requeues paid work. The host completes a real daemon/owner cleanup barrier, installs the exact compatible guarded worker assets and preserves additive schema. A second barrier after replacing the legacy launcher flushes delayed old Docker creation before the candidate starts.
+
+The original PostgreSQL incarnation hash is captured only at first cold bootstrap. Later releases and automated process recovery compare and preserve that durable pin; a changed or unavailable epoch remains held. The launcher emits both cold mode and the original pin into the actual worker container. Logical restoration within the same PostgreSQL incarnation is outside this fence and must remain admission-stopped until reconciled. Quarantined paid boundaries, funding holds and UNKNOWN outcomes are never automatically replayed.
+
+Exact source/image/native/disposable-service gates and full-fleet health are the **pre-open release qualification**. The host fsyncs a per-release `pre-open-qualified.json` before CAS removal of only its owned stop. The authenticated SAFE URL canary then runs as **post-release health monitoring** and is independently checked against its stored manifest and the current worker tuple. Its evidence covers only the configured endpoint and unpaid deterministic execution; it does not establish broad security or paid-provider acceptance. A killed runner can miss the post-release result after a qualified fleet has opened admission; this is a residual monitoring window, not an acceptance-pending state.
+
+A detected post-release failure attempts worker containment even when Redis is unavailable. Fleet traffic rollback, ingress restoration and candidate cleanup require positive readback of both the exact persistent hold and stopped native worker. Missing or lost acknowledgements without successful readback preserve current fleet traffic and surface failure. Cold worker rollback never restores or restarts a legacy launcher and never reverses schema.
+
+An interrupted post-release health check leaves the durable pre-open qualification intact and does not create a global marker that blocks the next release. An abandoned preparation/containment stop owned by a different run still requires deliberate ownership reconciliation; a new run cannot silently steal or expire it. Unresolved database/native/paid authority remains held. Routine process recovery uses the installed recovery unit, original configuration and a fresh native barrier, without refreshing the database pin.
+
 ### v26 admission/capacity cutover and compatible rollback
 
 This is an operator procedure for a separately authorized release. Local v26 tests and a merged source commit do not authorize production migration, cancellation, financial reconciliation or paid acceptance. Record the exact candidate/rollback product revisions, worker digests, engine revision, runtime roles and a bounded maintenance window before starting. The [v26 source/disposition record](./handoffs/v26-implementation-2026-10-30.md) states local qualification limits.
 
+**October 31, 2026 IST evidence:** the first-v26 transition is complete. Do not repeat the first migration, replay the failed release, or use these steps to bootstrap maintenance again. They document the transition contract and the checks that later compatible releases must preserve. [Release 41117355986](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41117355986) deployed product `6739563df7dad585cef1be14cedcb978bc0a5219`; the retained independent VM/Azure/database readback records `COMPLETE`, absent admission stop, healthy exact-digest app/scanner/worker, four migration checksums and forced RLS. Exact deployed digests and observation limits are in [PRD §8](../PRD.md#v26-production-addendum--2026-10-31-ist).
+
+The first attempt, [release 41093295486](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41093295486), claimed admission during October 30 17:19:08–17:20:16 UTC, then failed its drain step at 17:22:08 UTC before migration. Azure's default revision list omitted deactivated revisions; the controller rejected the empty inventory. [PR #1062](https://github.com/ecryptoguru/lyrashield-ai/pull/1062) corrected this with `revision list --all` and checks of captured baselines and replicas. A missing baseline requires absence from the full inventory and explicit `RevisionNotFound` from both its revision and replica probes. Authentication failures, timeout, generic resource-not-found and successful empty probe responses do not establish deletion. Unexpected replicas still block promotion. The original app/scanner were restored and the exact owned stop was released through a reviewed pre-migration abort; retain its original receipt and private audits. That incident-specific abort is not a supported cross-run recovery command.
+
+The successful release claimed admission during 20:19:35–20:20:41 UTC, finished drain at 20:26:00, migration at 20:29:26 and owned-stop release at 20:48:48; the run completed at 20:48:54. These are GitHub step bounds, not exact service-outage or stop timestamps. The [readiness workflow 41110605407](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41110605407) failed during 18:52:41–18:52:53 UTC in the earlier recovery window and remains failed. Independent later HTTP observations returned 200 at 21:39:21–21:39:27 UTC; fresh public app/scanner/scan readiness checks also returned 200 at approximately 21:45 UTC. The earlier failed readiness and deliberate writer exclusion demonstrate a period of unavailable scan readiness and maintenance exposure. No retained continuous probe or customer-request trace establishes exact customer outage duration, failed customer requests, data loss or duplicate execution. Do not subtract workflow timestamps to claim an outage duration or treat a stale failed workflow as current Azure state.
+
 The protected Azure release implements the first transition through the separate `v26-accounting-cutover` protocol. Before claiming admission, it records a root-owned durable receipt after classifying the actual database, qualifying the exact images and observing app/scanner/worker database principals. The receipt remains separate from webhook maintenance. An incomplete or uncertain first-transition receipt blocks automatic redeployment before webhook retry classification; inspect that receipt and repair forward deliberately. Automatic cross-run recovery is not implemented. Before admission is released, failure retains the owned stop and excludes old writers. If admission removal succeeds but its acknowledgement or final receipt write is uncertain, cleanup preserves the qualified candidate fleet and does not recreate a stop or infer completion. A completed receipt retains the reservation-aware worker capability floor without pinning later releases to the original image.
+
+**Recovery ownership and escalation:** the named operational escalation role is the **incident commander (founder/operator, Ankit, unless another operator is explicitly designated)**. The commander records the exact original run/attempt, source and image digests, receipt phase, ownership-match result, last confirmed readiness observation and sanitized failure class before authorizing any repair. Keep the root-owned mode-0600 receipt at `/var/lib/lyrashield/v26-cutover.json` and original private audits; never publish connection strings, secret values, raw stop tokens or customer identifiers. A new run/attempt cannot adopt an old or foreign stop. A foreign replacement, lost ownership or uncertain readback requires escalation; never remove a stop merely to clear an alert.
+
+Before release, a post-migration failure keeps the owned stop and excludes old writers: preserve forward-only schema and repair forward unless an independently qualified compatible rollback exists. After durable `RELEASE_INTENT`, a lost Redis reply is reconciled only with the same operation, exact candidate proof and authoritative stop readback. If removal succeeded but final receipt persistence failed, the qualified healthy fleet stays running; do not recreate the stop or deactivate the fleet as ordinary cleanup. Do not label the receipt complete without proof. Unknown outcomes block unattended recovery. The controller reports the sanitized class `v26 safeguard failed; no rollback performed; inspect the original receipt and repair deliberately`; preserve detailed diagnostics privately.
+
+**Rollback qualification remains unverified.** The durable implementation records `REPAIR_FORWARD_ONLY`. The successful exact-worker disposable rehearsal proves its recorded retry/schema contracts, and image capability checks prove protocol/entrypoint presence. Neither establishes an independently exercised rollback of an exact reservation-aware app/worker digest against the deployed forward-only schema with outstanding execution, stop and pending finalization states. No such qualification receipt was found in this review. A separate disposable, synthetic-only rollback rehearsal would need those states and invariants without customer data, provider execution or financial investigation; this review did not perform it. Do not substitute a legacy nonreserving image or infer rollback safety from successful startup. Retain the guarded protocol: bypassing drain, deactivating fewer unproven writers or reopening before final verification has no demonstrated safety case here.
+
+Read-only triage can start with these commands; Azure names and resource group must come from the operator's verified deployment configuration. Repeat the Azure inventory for the scanner. Query only these bounded fields, never `secret list --show-values` in shared diagnostics:
+
+```sh
+gh run view 41117355986 --repo ecryptoguru/lyrashield-ai --json status,conclusion,headSha,updatedAt
+curl --fail --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}\n' https://app.lyrashieldai.com/api/ready
+curl --fail --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}\n' https://app.lyrashieldai.com/api/ready/scans
+curl --fail --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}\n' https://scanner.lyrashieldai.com/api/ready
+az containerapp revision list --all --name "$APP_NAME" --resource-group "$RG" --query '[].{name:name,active:properties.active,replicas:properties.replicas}' --output json
+az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.configuration.ingress.traffic --output json
+az containerapp revision show --name "$APP_NAME" --resource-group "$RG" --revision "$REVISION" --query '{name:name,active:properties.active,replicas:properties.replicas}' --output json
+az containerapp replica list --name "$APP_NAME" --resource-group "$RG" --revision "$REVISION" --query '[].name' --output json
+pnpm --filter @lyrashield/worker verify:launch-assurance -- --dry-run
+```
+
+The assurance command requires the configured operator environment and performs provenance/readiness/alert reads; keep storage-proof and failure-injection flags off during triage. From a reviewed repository checkout on an authorized worker host, `sh .github/scripts/v26-execution-drain.sh` only checks for sandbox/resolver containers and fails if observations are unavailable. `.github/scripts/promote-worker-vm.sh --preflight` is a queue-only check with the refreshed environment and no live-worker restart; it creates a disposable one-shot container and may refresh the worker environment file, so it is not a side-effect-free remote read. Neither check proves pending finalization safe or authorizes admission release. Do not invoke `v26-cutover.mjs` phases as diagnostic commands: they can change durable maintenance state. None of these checks is a full rollback rehearsal.
 
 1. **Stop new admission and drain every writer.** Use the existing guarded promotion/admission-stop ownership protocol for `lyrashield:scan-admission:stopped`; preserve a foreign/newer owner and retain its receipt. Prove all app/API, schedule, webhook/retest and local operational producers see that stop. Let already admitted work finish under its existing accounting version. Inspect both scan and fix queues and DB executions; an empty queue or terminal Scan status alone does not prove execution stopped or money settled. `promote-worker-vm.sh --preflight` is queue-only and never restarts the worker; it is necessary evidence, not the complete v26 cutover check.
 2. **Inspect active work and obligations read-only.** Before applying new columns, read the existing Scan IDs/workspace/sponsor/creator/status/startedAt/endedAt, their persisted events/usage/finalization evidence and worker/child provenance. Include QUEUED, PREFLIGHT, RUNNING, VERIFYING and REQUIRES_APPROVAL scans and terminal scans with unresolved execution/accounting. Use scoped authorized clients or the bounded system read path; preserve RLS and audit boundaries. Do not cancel work, remove queue keys, rewrite receipts/versions, mark findings fixed or release slots/holds to manufacture an empty state. Unknown legacy execution or settlement needs separate scan-specific evidence and authorized reconciliation; keep admission stopped if that proof is absent.
@@ -358,6 +408,36 @@ track state and audit entry have been reviewed.
 
 Payouts (RazorpayX/Payoneer), tax-form operations, marketplace listing
 payments — separate founder workstreams with their own gates.
+
+## Release packet signing and key rotation
+
+Version 1.1 release packets use the existing launch-report Ed25519 key pair. The private key is
+resolved through the managed Key Vault path in production. Issuance fails if the private key is
+unavailable or its derived public key is missing from, or revoked by, the configured verification
+keyring. Historical version 1.0 packets remain unsigned; their checksum is not a signature.
+
+`RELEASE_PACKET_VERIFICATION_KEYS_JSON` is an optional server-side JSON array of objects with
+`id`, `publicKey` (SPKI PEM) and `revoked` (boolean). The ID is
+`lyrashield-packet-ed25519-` followed by the lowercase SHA-256 of the public key's DER-encoded
+SPKI. An absent value allows only the current resolved launch public key; an explicit empty array
+allows none. An invalid, duplicate or mismatched entry fails closed. Do not put private keys in
+this setting. The same allowlist and revocations apply when the packet checks its bound launch
+assessment, because both use the shared signing key.
+
+Before rotating, install an explicit keyring containing the current and replacement public keys,
+verify their fingerprints, and test the new key against a non-production packet. Rotate the
+managed private and public pair together, then roll all web instances through the approved
+deployment procedure: launch keys are cached per process. Read back verification on each instance
+and confirm new issuance and old packet verification before removing any old public key. To revoke
+a compromised key, mark its keyring entry `revoked: true`, roll all web instances and verify the
+revoked status and blocked exports. Existing launch-assessment verification resolves only the
+current launch public key, so an older assessment can become unavailable after rotation even when
+its packet signature remains verifiable. The separate launch-report verification endpoint has its
+own key behavior and must not be assumed to enforce this packet keyring.
+
+These are configuration and verification steps, not evidence that production has been provisioned
+or rotated. Confirm the managed identity, Key Vault references, keyring configuration and runtime
+readback before enabling version 1.1 issuance in a release.
 
 ## License signing-key compromise (FF4)
 
@@ -441,6 +521,10 @@ The implementation state remains defined by `AGENTS.md`, `PRD.md` and code under
 
 ## Owner-approved manual isolated restore
 
+Read-only observation on October 31 IST, at `2026-10-30T22:55Z`: the latest successful scheduled [backup 41023916654](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41023916654) ran from `08:03:38Z` to `08:05:22Z` on October 30, source `284523ca381ee0d6ffa62ce22e855f7ecae9518f`; its restore job was skipped. The latest successful [restore 40172080687](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40172080687) ran from `07:17:22Z` to `07:18:33Z` on October 25, source `a9bd70c79aaf1f0914c22a60b85bd46601c2d3c6`. Its digest-only artifact metadata remains available, expiring November 24; no backup object or artifact contents were downloaded in this observation. Both receipts predate v26 and establish no v26 restore coverage. Source schedules backups at `02:00 UTC` daily (`07:30 IST`), with the restore job selected on Sundays; observed scheduled runs started later than the cron time. Retention remains 30 days.
+
+At the same observation, [readiness workflow 41140312487](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41140312487) succeeded (`22:46:31Z`–`22:46:43Z`, October 30) on deployed source `6739563df7dad585cef1be14cedcb978bc0a5219`. Fresh public `/api/ready` and `/api/ready/scans` probes also returned 200. This later healthy observation preserves the earlier [failed readiness run 41110605407](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41110605407) and does not qualify subsequent probe-source changes. The operator owns backup/restore failure follow-up; a healthy readiness probe does not establish recoverability. The existing October 27 alert-delivery observation remains the last recorded delivery evidence, not a new alert inventory or per-rule test. Preserve the approved receiver and disabled rules.
+
 `production-backup.yml` has an opt-in manual `isolated_restore=true` mode. It
 requires `restore=true`, `expected_source_sha` equal to the reviewed current
 main SHA, and original run attempt 1 in both jobs. Dispatch only after separate
@@ -458,8 +542,11 @@ remains in the existing bucket and is subject to ordinary scheduled 30-day
 retention; this mode does not delete it or any older object.
 
 Plaintext dumps, audit exports and command/error logs stay in a private 0700
-runner directory with 0600 files. Sensitive phases return exit status without
-publishing diagnostics. The first isolated `docker rm -fv` removes anonymous
+runner directory with 0600 files. Sensitive command output remains private. Row-integrity verification emits only
+fixed stage labels (`archive-binding`, `prepare`, `archive-export`,
+`restored-export`, `archive-capture`, `restored-capture`, `compare`, `cleanup`)
+and allowlisted failure reasons through a separate diagnostic descriptor. It
+never publishes table names, counts, hashes of individual rows, SQL or errors. The first isolated `docker rm -fv` removes anonymous
 restored-data volumes together with their containers; `always()` cleanup also
 removes private files and named backup containers; application cleanup validates the session leader's UID, process
 group, session and start time before signalling its group. Cleanup refuses
@@ -469,6 +556,124 @@ The isolated backup and restore jobs have respective 20/25-minute timeouts; queu
 waits mean this is not a 45-minute wall-clock limit.
 
 Restore additionally compares private per-table COPY row counts and order-independent SHA fingerprints derived from the same already-verified custom dump, with bounded sort spill and unconditional cleanup. Same-count content drift fails. This covers COPY contents/columns, not full physical/logical equivalence, sequences, large objects or extension semantics. Per-drill DB/auth credentials are random; the DB password stays only in a private 0600 file and never GITHUB_ENV/argv. Backup forwards the verified TLS URL by environment-variable name. These are current source contracts, not a fresh production drill receipt.
+
+The November 1 [scheduled restore 41289855308](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41289855308)
+restored the exact encrypted object but failed row-integrity verification. Its
+private logs were cleaned; the cause is unknown and schema/audit/readiness/proof
+were skipped. The earlier October 25 success does not qualify this later backup.
+Subsequent synthetic testing reproduced a stream startup race that could omit
+early COPY lines; the verifier now subscribes before asynchronous setup. The
+missing historical logs cannot establish whether this caused the November 1 failure.
+Do not rerun that scheduled run: it includes retention deletion and lacks the
+new diagnostic source. A later [isolated dispatch 41448546391](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41448546391)
+passed on merged source `d488862bd269c07194afe87a918ca413e4a62217`; it does not establish the cause of the earlier failure. Future drills still require separate owner approval and the reviewed current main SHA.
+
+CI explicitly enables a fresh owned PostgreSQL 17 round trip when operations
+checks are selected. Run it locally with:
+
+```sh
+RESTORE_SNAPSHOT_RUNTIME_TEST=1 node --test .github/scripts/tests/restore-snapshot-postgres.runtime.test.mjs
+```
+
+The fixture uses a UUID container/ownership label and a memory-backed database.
+It publishes no host ports and disables external container networking.
+Credentials and rows are synthetic. It
+checks both schemas, empty/duplicate/escaped/typed/partition/RLS rows, immutable
+archive expectations after later source writes, content/row/table/column drift,
+the actual staged verifier, and cleanup. It accepts no database URL and removes
+only its ownership-verified container. Ordinary failure invokes cleanup; hard
+process/daemon/host loss can leave resources for operator inspection. Local or
+CI success is synthetic evidence, not a fresh production recovery proof.
+
+The separate `verify-restored-authority.mjs` verifier remains offline-only and
+unwired from the production backup workflow. Its owned fixture pins PostgreSQL
+17.11 and requires `pgcrypto` 1.3 in `public`, with the extension-owned
+`digest(bytea,text)` implementation. It passively checks migration/source,
+extension identity, role grants and closed-state observations in bounded read-only
+transactions. Missing extension, schema usage, table read, RLS helper or digest
+execution grants fail closed. The standalone diagnostic issues no explicit
+digest execution probes. Its named-relation reads can still invoke restored
+functions through views, RLS policies, rules, operators or concurrent object
+replacement. Read-only transactions do not establish a non-executing inspector;
+`relkind` rejection checks are neither execution guards nor concurrency fences.
+Its result schema `/2` reports `UNQUALIFIED` for dispatch
+and any requested mirror, with `consistentAuthorityStateQualified=false`,
+`admissionAllowed=false` and `managedFailoverQualified=false`.
+
+Container ownership, network isolation and a pinned image do not establish
+sole-writer exclusion. Catalog/role/closed-epoch checks and independently retained
+mirror/journal reads occur in separate transactions; the mirror is a separate
+database. A concurrent owner can replace a helper, change grants or open an epoch
+after an earlier observation. These reads therefore do not establish one
+coherent authority state. There is no universal writer-enforced lock or other
+qualified exclusion contract, and an advisory lock would not supply one. Passing
+passive checks must never become `VERIFIED_CLOSED` or production applicability.
+The trusted synthetic fixture retains digest execution probes for compatibility
+testing only; it rejects unreviewed defaulted/variadic overloads before execution.
+Verification installs nothing, repairs no grants and opens no authority.
+
+Run the synthetic compatibility fixture with
+`RESTORE_AUTHORITY_RUNTIME_TEST=1 node --test .github/scripts/tests/restore-authority-postgres.runtime.test.mjs`.
+The fixture explicitly installs the omitted extension before schema restoration
+and restores only its synthetic prerequisite grants. The current
+`20261111120000_scan_queue_publication_receipts` migration adds checksum CHECK
+constraints that resolve `public.digest(bytea,text)` during `pg_restore`; without
+that extension prerequisite, restoring the `public`/`app` archive fails before
+the verifier runs. The production backup/restore workflow remains unchanged and
+unqualified for this schema until an independently reviewed, appropriately
+privileged pre-restore extension step is implemented and tested.
+`--no-owner --no-acl` archives still need a
+separately reviewed ownership and privilege restoration procedure, and the
+`public`/`app` archive still excludes the independent `lyrashield_authority`
+schema and retained journal. These checks do not qualify Supabase PostgreSQL
+17.6, its session pooler, provider-managed failover, production recovery or R2
+reconciliation.
+
+The separate `isolated-restore-prerequisite.mjs` preparation helper is also
+unwired. Its caller must authenticate producer metadata before supplying the
+expected archive SHA-256 and source revision; comparing against a digest
+calculated from the same supplied file does not authenticate the producer.
+An owner-only `0600` config in a canonical `0700` directory uses schema
+`lyrashield-isolated-restore-prerequisite/1` and exactly `archivePath`,
+`expectedSha256` and `sourceRevision`. Run it only with
+`LYRASHIELD_RESTORE_PREREQUISITE_DISPOSABLE=1 node .github/scripts/isolated-restore-prerequisite.mjs --config /private/config.json`.
+It accepts a regular private custom archive of at most 64 MiB, verifies the
+expected digest before parsing, and transfers those verified bytes through stdin.
+The supported TOC contains both `public` and `app`, PostgreSQL 17 headers and
+only its reviewed object classes. Legacy, extension, ACL, other-namespace, view
+and unknown entries fail closed. This allowlist is a compatibility boundary,
+not authentication or a general SQL safety proof.
+
+The helper creates only its exact pinned local PostgreSQL 17.11 target, with
+no network, host ports or host mounts; bounded memory, processes and tmpfs
+storage; and a unique container ID/ownership label. It installs fixed
+`public.pgcrypto` 1.3 before restore, preserves the default public namespace
+by suppressing exactly its one schema-create TOC entry, and uses
+`pg_restore --exit-on-error --no-owner --no-acl` without `--clean`.
+Restore authenticates as a separate synthetic NOSUPERUSER/NOBYPASSRLS writer,
+so `SET ROLE` cannot recover the bootstrap owner's authority. After restore,
+the writer becomes NOLOGIN and an explicitly synthetic `synthetic-policy-read/1`
+profile grants a separate restricted probe only schema usage, Policy read and
+the reviewed digest/RLS-helper execution permissions. PUBLIC function execution
+is revoked. Catalog checks retain dispatch-table, membership and unreviewed
+definer denials; no explicit restored-helper execution probe is issued.
+
+Every child environment excludes inherited provider credentials and connection
+settings. The helper rechecks the exact target before operations and cleanup,
+including stopped targets; identity substitution refuses removal and successful
+output. Caller-owned archive/config files remain the caller's cleanup
+responsibility. Hard runner/daemon loss remains outside guaranteed cleanup.
+Read-only relation/catalog queries can still invoke restored code; these
+observations do not prove a consistent authority state or sole-writer exclusion.
+The result retains authority `UNQUALIFIED`, `sourceAclRestored=false`,
+`productionApplicable=false` and admission/failover qualification false.
+This helper does not reconstruct production owners, source ACLs, the separate
+authority schema/journal, or the full app runtime grant profile. It does not
+replace the workflow's superuser app-readiness check or qualify its PostgreSQL
+image, Supabase 17.6/session pooler, real R2 reconciliation or production recovery.
+The owned PostgreSQL fixture covers complete migration-archive restoration,
+effective synthetic writer/probe boundaries and a restored CHECK attempting
+to regain the bootstrap role. Workflow integration requires separate review.
 
 Existing credentials authenticate only to their original production database
 and R2 endpoint; the passphrase is used locally. Full private production data

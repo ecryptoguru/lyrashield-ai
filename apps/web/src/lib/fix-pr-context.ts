@@ -116,7 +116,8 @@ export async function resolveFixPrRequest(
       : uri.protocol === "file:" &&
         fileURLToPath(uri) ===
           resolve(
-            env.LYRASHIELD_LOCAL_EVIDENCE_DIR || `${process.cwd()}/.lyrashield/evidence`,
+            /* turbopackIgnore: true */ env.LYRASHIELD_LOCAL_EVIDENCE_DIR ||
+              `${process.cwd()}/.lyrashield/evidence`,
             `${key}.enc`
           ))
   if (!producerBound)
@@ -175,7 +176,8 @@ function validateFixPrPatchReference(
           ? fileURLToPath(uri)
               .slice(
                 resolve(
-                  env.LYRASHIELD_LOCAL_EVIDENCE_DIR || `${process.cwd()}/.lyrashield/evidence`
+                  /* turbopackIgnore: true */ env.LYRASHIELD_LOCAL_EVIDENCE_DIR ||
+                    `${process.cwd()}/.lyrashield/evidence`
                 ).length + 1
               )
               .replace(/\\/g, "/")
@@ -187,7 +189,8 @@ function validateFixPrPatchReference(
       uri.protocol === "file:" &&
       fileURLToPath(uri) !==
         resolve(
-          env.LYRASHIELD_LOCAL_EVIDENCE_DIR || `${process.cwd()}/.lyrashield/evidence`,
+          /* turbopackIgnore: true */ env.LYRASHIELD_LOCAL_EVIDENCE_DIR ||
+            `${process.cwd()}/.lyrashield/evidence`,
           `${path}.enc`
         )
     )

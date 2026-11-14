@@ -27,6 +27,7 @@ function descriptor(overrides: Partial<AiResultCacheDescriptor> = {}): AiResultC
     engineRevision,
     providerFingerprint,
     modelSettings: {
+      mainApiMode: "auto",
       modelRoute: "azure_ai/gpt-6-luna",
       reasoningEffort: "medium",
       promptCachePolicy: "off",
@@ -256,6 +257,71 @@ describe("exact AI triage result cache", () => {
     expect(JSON.stringify([...redis.values.values()])).not.toContain("request_usage_entries")
   })
 
+  it("misses an already populated triage cache when only the main endpoint policy changes", async () => {
+    const redis = new FakeRedis()
+    const config = {
+      LYRASHIELD_AI_RESULT_CACHE_MODE: "enforce",
+      LYRASHIELD_AI_CACHE_KEY_SECRET: "k".repeat(32),
+      LYRASHIELD_ENGINE_REVISION: engineRevision,
+      LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT: providerFingerprint,
+      LLM_API_MODE: "responses",
+    }
+    const provider = vi.fn().mockResolvedValue({ exitCode: 0, timedOut: false, cancelled: false })
+    const input = { commitSha: "c".repeat(40), candidates: [{ evidenceChecksum: findingChecksum }] }
+    const inputHash = sha256CanonicalJson(input)
+    const result = artifact({
+      inputChecksum: inputHash,
+      redactionReceipt: { ...artifact().redactionReceipt, inputChecksum: inputHash },
+    })
+    vi.doMock("@lyrashield/config", () => ({ env: config }))
+    vi.doMock("@lyrashield/integrations", async (original) => ({
+      ...(await original<object>()),
+      getAiResultCacheRedis: () => redis,
+    }))
+    vi.doMock("./runner-process", () => ({ runEngineProcess: provider }))
+    vi.doMock("./runner-output", () => ({
+      readTextFileBounded: async () => JSON.stringify({ ...result, llmUsage: completeUsage() }),
+    }))
+    vi.doMock("./workspace-path", () => ({ ENGINE_WORK_ROOT: "/tmp/unused-triage-workspace" }))
+    vi.doMock("fs/promises", () => ({ writeFile: vi.fn(), rm: vi.fn() }))
+    try {
+      const { runEngineTriage } = await import("./triage-runner")
+      const params = {
+        input,
+        profile: {
+          model: result.modelRoute!,
+          reasoningEffort: "medium" as const,
+          delegateReasoningEffort: "medium" as const,
+        },
+        workspaceId: "workspace-1",
+        targetId: "target-1",
+        scanId: "scan-1",
+        maxBudgetUsd: 0.25,
+        timeoutMs: 2_000,
+      }
+      expect((await runEngineTriage(params)).source).toBe("provider")
+      expect((await runEngineTriage(params)).source).toBe("exact_cache")
+      config.LLM_API_MODE = "chat_completions"
+      expect((await runEngineTriage(params)).source).toBe("provider")
+      expect(provider).toHaveBeenCalledTimes(2)
+      expect((await runEngineTriage(params)).source).toBe("exact_cache")
+      config.LYRASHIELD_AI_RESULT_CACHE_MODE = "off"
+      redis.get.mockClear()
+      expect((await runEngineTriage(params)).source).toBe("provider")
+      expect(redis.get).not.toHaveBeenCalled()
+    } finally {
+      for (const name of [
+        "@lyrashield/config",
+        "@lyrashield/integrations",
+        "./runner-process",
+        "./runner-output",
+        "./workspace-path",
+        "fs/promises",
+      ])
+        vi.doUnmock(name)
+    }
+  })
+
   it("indexes cache entries under an opaque workspace-target key", async () => {
     const redis = new FakeRedis()
     const cache = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })
@@ -308,6 +374,32 @@ describe("exact AI triage result cache", () => {
     ])
   })
 
+  it("misses a populated cache when only engineRevision changes", async () => {
+    const redis = new FakeRedis()
+    const cache = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })
+    const value = descriptor()
+    expect(await cache.store(value, artifact(), completeUsage())).toBe(true)
+    expect((await cache.lookup(value)).outcome).toBe("hit")
+
+    const changed = await cache.lookup({ ...value, engineRevision: "f".repeat(40) })
+
+    expect(changed.outcome).toBe("miss")
+    expect(changed.artifact).toBeUndefined()
+  })
+
+  it("neither reuses nor replaces a populated cache when caching is off", async () => {
+    const redis = new FakeRedis()
+    const value = descriptor()
+    const enabled = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })
+    expect(await enabled.store(value, artifact(), completeUsage())).toBe(true)
+    const before = [...redis.values.entries()]
+    const disabled = createAiResultCache({ redis, secret: "k".repeat(32), mode: "off" })
+
+    expect((await disabled.lookup(value)).outcome).toBe("disabled")
+    expect(await disabled.store(value, artifact(), completeUsage())).toBe(false)
+    expect([...redis.values.entries()]).toEqual(before)
+  })
+
   it("misses when any ownership, source, evidence, model, or policy identity changes", async () => {
     const redis = new FakeRedis()
     const cache = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })
@@ -317,6 +409,36 @@ describe("exact AI triage result cache", () => {
 
     expect(changed.outcome).toBe("miss")
     expect(changed.artifact).toBeUndefined()
+  })
+
+  it("does not reuse a populated cache entry after the engine revision changes", async () => {
+    const redis = new FakeRedis()
+    const cache = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })
+    const now = Date.parse("2026-10-03T00:00:00.000Z")
+    expect(await cache.store(descriptor(), artifact(), completeUsage(), now)).toBe(true)
+    expect((await cache.lookup(descriptor(), now + 1_000)).outcome).toBe("hit")
+
+    const changed = await cache.lookup(descriptor({ engineRevision: "e".repeat(40) }), now + 1_000)
+
+    expect(changed).toEqual({ outcome: "miss" })
+    expect(redis.get.mock.calls[1]?.[0]).not.toBe(redis.get.mock.calls[0]?.[0])
+    expect(redis.values.size).toBe(1)
+    expect((await cache.lookup(descriptor(), now + 1_000)).outcome).toBe("hit")
+  })
+
+  it("does not read or write reusable results when cache mode is off", async () => {
+    const redis = new FakeRedis()
+    const enabled = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })
+    const disabled = createAiResultCache({ redis, secret: "k".repeat(32), mode: "off" })
+    const now = Date.parse("2026-10-03T00:00:00.000Z")
+    expect(await enabled.store(descriptor(), artifact(), completeUsage(), now)).toBe(true)
+    redis.get.mockClear()
+    redis.multi.mockClear()
+
+    expect(await disabled.lookup(descriptor(), now + 1_000)).toEqual({ outcome: "disabled" })
+    expect(await disabled.store(descriptor(), artifact(), completeUsage(), now)).toBe(false)
+    expect(redis.get).not.toHaveBeenCalled()
+    expect(redis.multi).not.toHaveBeenCalled()
   })
 
   it("refuses incomplete accounting, non-completed results, and evidence-join mismatches", async () => {

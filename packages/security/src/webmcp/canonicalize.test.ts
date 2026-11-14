@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { computeDefinitionHash, computeInventoryHash } from "./canonicalize"
+import { canonicalizeJson, computeDefinitionHash, computeInventoryHash } from "./canonicalize"
 import { sha256 } from "./hash"
 import type { WebMcpToolSurface } from "./types"
 
 describe("canonical hashes", () => {
+  it("includes prototype-named JSON properties in canonical output", () => {
+    const altered: unknown = JSON.parse('{"nested":{"__proto__":{"value":1}}}')
+    expect(canonicalizeJson(altered)).not.toBe(canonicalizeJson({ nested: {} }))
+  })
   const baseTool: WebMcpToolSurface = {
     kind: "imperative",
     name: "sample",

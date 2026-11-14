@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { ScanWorkflowSchema } from "./scan-execution-plan"
+import { EngineBudgetCeilingUsdSchema, ScanWorkflowSchema } from "./scan-execution-plan"
 
 export * from "./ai-safety-tests"
 export * from "./agent-operations"
@@ -316,6 +316,7 @@ export const CreateScanSchema = z.object({
   goal: ScanGoalSchema,
   mode: ScanModeSchema.default("SAFE"),
   policyId: z.string().optional(),
+  engineBudgetCeilingUsd: EngineBudgetCeilingUsdSchema.optional(),
   focus: ScanFocusSchema.optional(),
   // Optional workflow inputs. The server constructs and owns the immutable
   // execution plan — clients can never supply plans, hashes, internal
@@ -344,6 +345,13 @@ export const CreateScanSchema = z.object({
  * wrapper so CreateScanSchema stays a plain object for .pick()/JSON-schema
  * consumers (eligibility preflight, OpenAPI). */
 export const CreateScanInputSchema = CreateScanSchema.superRefine((data, ctx) => {
+  if (data.engineBudgetCeilingUsd !== undefined && data.workflow === "AUTHENTICATED_ASSESSMENT") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["engineBudgetCeilingUsd"],
+      message: "Authenticated assessments use fixed limits.",
+    })
+  }
   if ((data.baseRef || data.headRef) && data.workflow !== "REVIEW_CHANGES") {
     ctx.addIssue({
       code: "custom",
@@ -712,11 +720,14 @@ export * from "./plain-language"
 // service imports it through the package root.
 export * from "./scan-attachments"
 export * from "./scan-quality"
+export * from "./setup-health"
+export * from "./release-packet"
 
 export {
   resolveUrlReviewMode,
   resolveUrlReviewAvailability,
   TARGET_RELAY_UNAVAILABLE_MESSAGE,
+  URL_PROFILE_UNSUPPORTED_MESSAGE,
   type UrlReviewMode,
 } from "./url-review-admission"
 export { DEPENDENCY_RESOLUTION_CAPABILITIES } from "./dependency-capabilities"

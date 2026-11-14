@@ -1,5 +1,6 @@
 import { checksum } from "./checksum"
 import { prisma, verifyStoredManifestChecksum, withWorkspaceRLS } from "@lyrashield/db"
+import { DETERMINISTIC_RETEST_SCANNERS } from "@lyrashield/types"
 
 export async function markRetestsRunning(scanId: string): Promise<void> {
   await prisma.retest.updateMany({
@@ -8,16 +9,7 @@ export async function markRetestsRunning(scanId: string): Promise<void> {
   })
 }
 
-const DETERMINISTIC_RETEST_SCANNERS = new Set([
-  "sca",
-  "secrets",
-  "url",
-  "agent_config",
-  "ai_app_security",
-  "ml_supply_chain",
-  "sast",
-  "iac",
-])
+const deterministicRetestScanners = new Set<string>(DETERMINISTIC_RETEST_SCANNERS)
 const SOURCE_REVISION_PATTERN = /^[0-9a-f]{40}$/i
 const URL_CHECKSUM_PATTERN = /^[0-9a-f]{64}$/i
 
@@ -158,9 +150,9 @@ function evaluateRetestOutcome(params: {
   const trustedRetestManifest = retestChecksumValid ? retestManifest : null
   const baselineIdentity = storedManifestIdentity(baselineScan.id, trustedBaselineManifest)
   const retestIdentity = storedManifestIdentity(retestScan.id, trustedRetestManifest)
-  const deterministicSources = sources.filter((source) => DETERMINISTIC_RETEST_SCANNERS.has(source))
+  const deterministicSources = sources.filter((source) => deterministicRetestScanners.has(source))
   const hasEngineOrUnknownSource = sources.some(
-    (source) => !DETERMINISTIC_RETEST_SCANNERS.has(source)
+    (source) => !deterministicRetestScanners.has(source)
   )
   const scannerSource = deterministicSources.join("+")
 

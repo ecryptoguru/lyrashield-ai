@@ -206,6 +206,12 @@ const envSchema = z
     LLM_API_KEY: z.string().optional().or(z.literal("")),
     LLM_API_BASE: z.string().optional().or(z.literal("")),
     LLM_API_VERSION: z.string().optional().or(z.literal("")),
+    // Static endpoint policy only; unset dedupe inherits the main engine policy.
+    LLM_API_MODE: z.enum(["auto", "responses", "chat_completions"]).optional(),
+    DEDUPE_LLM_API_MODE: z.enum(["auto", "responses", "chat_completions"]).optional(),
+    // Reader-first deployment controls. Neither scan profiles nor chat may enable writers.
+    LYRASHIELD_RUN_RECORD_V1_1: z.enum(["0", "1"]).optional().default("0"),
+    LYRASHIELD_PENDING_HTTP_EVIDENCE: z.enum(["0", "1"]).optional().default("0"),
     LYRASHIELD_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().optional(),
     LYRASHIELD_MAX_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
     // GPT-6 explicit cache breakpoints. The engine ignores this for unsupported models.
@@ -461,6 +467,8 @@ const envSchema = z
         "LAUNCH_REPORT_SIGNING_PRIVATE_KEY must be a PEM-formatted key starting with '-----BEGIN'"
       ),
     LAUNCH_REPORT_SIGNING_PUBLIC_KEY: z.string().optional().or(z.literal("")),
+    // Optional public-key allowlist for packet signature rotation/revocation.
+    RELEASE_PACKET_VERIFICATION_KEYS_JSON: z.string().max(262144).optional().or(z.literal("")),
     // Key Vault secret names holding the launch-report signing key pair in
     // production (mirrors the license-signing secret-name pattern).
     LAUNCH_REPORT_SIGNING_PRIVATE_KEY_SECRET_NAME: z
@@ -642,6 +650,13 @@ const envSchema = z
       path: ["LYRASHIELD_TARGET_RELAY_URL"],
       message:
         "LYRASHIELD_TARGET_RELAY_URL requires HTTPS outside loopback — relay grants are bearer credentials",
+    }
+  )
+  .refine(
+    (val) => val.LYRASHIELD_PENDING_HTTP_EVIDENCE !== "1" || val.LYRASHIELD_RUN_RECORD_V1_1 === "1",
+    {
+      path: ["LYRASHIELD_PENDING_HTTP_EVIDENCE"],
+      message: "LYRASHIELD_PENDING_HTTP_EVIDENCE requires LYRASHIELD_RUN_RECORD_V1_1=1",
     }
   )
   .refine(

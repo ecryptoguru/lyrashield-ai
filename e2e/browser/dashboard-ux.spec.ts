@@ -275,6 +275,104 @@ for (const width of [390, 1280]) {
   }
 }
 
+test("failed background revalidation cannot leave an earlier ready verdict visible", async ({
+  page,
+}) => {
+  await page.route("**/api/launch-readiness?*", (route) => route.fulfill({ status: 503 }))
+  await page.goto("?dashboard-ux=readiness-refresh")
+  await expect(page.getByText("Ready before refresh.")).toBeVisible()
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+  await expect(
+    page.getByText("Current readiness could not be verified.", { exact: false })
+  ).toBeVisible()
+  await expect(page.getByText("Ready before refresh.")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible()
+})
+
+test("WebMCP workspace review cannot overwrite the scoped release verdict", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool(tool: unknown) {
+          ;(window as typeof window & { reviewTool?: unknown }).reviewTool = tool
+        },
+      },
+    })
+  })
+  await page.route("**/api/launch-readiness?*", (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          state: "READY",
+          verdict: "GO",
+          score: null,
+          triageScore: 100,
+          summary: "Workspace page is ready.",
+          blockingFindings: 0,
+          totalFindings: 0,
+          verifiedFindings: 0,
+          bySeverity: {},
+          conditions: [],
+          recommendations: [],
+        },
+      },
+    })
+  )
+  await page.goto("?dashboard-ux=readiness-scoped")
+  await expect(page.getByText("Scoped release needs more evidence.")).toBeVisible()
+  const output = await page.evaluate(async () => {
+    const tool = (
+      window as typeof window & { reviewTool?: { execute(input: unknown): Promise<unknown> } }
+    ).reviewTool
+    if (!tool) throw new Error("review_launch_readiness was not registered")
+    return tool.execute({})
+  })
+  expect(JSON.stringify(output)).toContain("Workspace page is ready.")
+  await expect(page.getByText("Scoped release needs more evidence.")).toBeVisible()
+  await expect(page.getByText("Workspace page is ready.")).toHaveCount(0)
+})
+
+test("refresh updates target pagination after targets are added or removed", async ({ page }) => {
+  let partial = true
+  await page.route("**/api/launch-readiness?*", (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          state: partial ? "INSUFFICIENT_EVIDENCE" : "READY",
+          verdict: partial ? "INCONCLUSIVE" : "GO",
+          score: null,
+          triageScore: null,
+          summary: partial ? "More targets require review." : "All remaining targets are ready.",
+          blockingFindings: 0,
+          totalFindings: 0,
+          verifiedFindings: 0,
+          bySeverity: {},
+          conditions: [],
+          recommendations: [],
+          releaseCheck: null,
+          targets: [{ targetId: "target-1", targetName: "Selected target" }],
+          nextCursor: partial ? "target-5" : null,
+          partial,
+        },
+      },
+    })
+  )
+  await page.goto("?dashboard-ux=readiness-refresh")
+  await expect(page.getByText("Ready before refresh.")).toBeVisible()
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+  await expect(page.getByText("More targets require review.")).toBeVisible()
+  await expect(page.getByRole("link", { name: "Next targets", exact: true })).toBeVisible()
+  await expect(page.getByText("Targets on this page")).toBeVisible()
+  partial = false
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+  await expect(page.getByText("All remaining targets are ready.")).toBeVisible()
+  await expect(page.getByRole("link", { name: "Next targets", exact: true })).toHaveCount(0)
+  await expect(page.getByText("All workspace targets")).toBeVisible()
+})
+
 test("license continuation links retain submitted filters and reset the cursor on the first page", async ({
   page,
 }) => {
@@ -372,7 +470,7 @@ test("target fetch failure preserves schedules already loaded", async ({ page })
   await expect(page.getByRole("heading", { name: "Existing checkout target" })).toBeVisible()
 })
 
-test("changing scheduled target resets an unavailable API review to the new target's options", async ({
+test("changing scheduled target resets the review to the new target's options", async ({
   page,
 }) => {
   await page.route("**/api/schedules?*", (route) =>
@@ -384,13 +482,8 @@ test("changing scheduled target resets an unavailable API review to the new targ
         success: true,
         data: {
           items: [
-            {
-              id: "api-target",
-              name: "API",
-              type: "API",
-              apiSpecUrl: "https://example.test/openapi.json",
-            },
-            { id: "url-target", name: "Web", type: "URL", apiSpecUrl: null },
+            { id: "repo-target", name: "Repo", type: "REPO", apiSpecUrl: null },
+            { id: "url-target", name: "Web", type: "WEB_APP", apiSpecUrl: null },
           ],
           nextCursor: null,
         },
@@ -399,20 +492,22 @@ test("changing scheduled target resets an unavailable API review to the new targ
   )
   await page.goto("?dashboard-ux=schedules")
   await page.getByRole("button", { name: "New Schedule" }).click()
-  await page.getByLabel("Target", { exact: true }).selectOption("api-target")
+  await page.getByLabel("Target", { exact: true }).selectOption("repo-target")
   await page.getByRole("button", { name: "Advanced", exact: true }).click()
   const depth = page.getByLabel("Scan depth", { exact: true })
-  const apiOption = await depth
+  const repoOption = await depth
     .locator("option")
     .evaluateAll(
       (options: HTMLOptionElement[]) =>
-        options.find((option) => /Contract/.test(option.text) && !option.disabled)?.value
+        options.find((option) => /Code scan/.test(option.text) && !option.disabled)?.value
     )
-  expect(apiOption).toBeTruthy()
-  await depth.selectOption(apiOption!)
+  expect(repoOption).toBeTruthy()
+  await depth.selectOption(repoOption!)
   await page.getByLabel("Target", { exact: true }).selectOption("url-target")
-  await expect(depth).not.toHaveValue(apiOption!)
-  await expect(page.getByRole("status")).toContainText("Review depth reset")
+  // URL/API offers only the deterministic surface review, so the depth resets
+  // to it rather than to a removed engine tier.
+  await expect(depth.locator("option")).toHaveCount(1)
+  await expect(depth.locator("option")).toContainText(/Surface Review/)
 })
 
 test("score history handles an empty state and a single completed scan accessibly", async ({
@@ -428,3 +523,46 @@ test("score history handles an empty state and a single completed scan accessibl
   await page.getByText("View score history", { exact: true }).click()
   await expect(page.getByRole("table").getByRole("row")).toHaveCount(2)
 })
+
+for (const width of [390, 1280]) {
+  test(`target pages preserve release filters and remain inconclusive at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 800 })
+    const errors: string[] = []
+    page.on("pageerror", (error) => errors.push(error.message))
+    await page.route("**/dashboard/launch-readiness?*", async (route) => {
+      const destination = new URL(route.request().url())
+      destination.pathname = "/e2e/browser/index.html"
+      destination.searchParams.set("dashboard-ux", "readiness-paged")
+      await route.fulfill({ status: 302, headers: { location: destination.toString() } })
+    })
+    await page.goto("?dashboard-ux=readiness-paged")
+    await expect(
+      page.getByText("This page covers only some targets.", { exact: false })
+    ).toBeVisible()
+    await expect(page.getByRole("link", { name: "Review next targets" })).toBeVisible()
+    const next = page.getByRole("link", { name: "Next targets", exact: true })
+    await expect(next).toBeVisible()
+    const href = await next.getAttribute("href")
+    const url = new URL(href!, "http://127.0.0.1:3101")
+    expect(url.searchParams.get("targetId")).toBe("target-1")
+    expect(url.searchParams.get("commit")).toBe("a".repeat(40))
+    expect(url.searchParams.get("cursor")).toBe("target-5")
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+    ).toBe(true)
+    if (process.env.GATE_BROWSER_EVIDENCE_DIR)
+      await page.screenshot({
+        path: `${process.env.GATE_BROWSER_EVIDENCE_DIR}/readiness-${width}.png`,
+        fullPage: true,
+      })
+    await next.click()
+    await expect(page.getByRole("link", { name: "First targets", exact: true })).toBeVisible()
+    await expect(
+      page.getByText("This page covers only some targets.", { exact: false })
+    ).toBeVisible()
+    expect(new URL(page.url()).searchParams.get("cursor")).toBe("target-5")
+    expect(errors).toEqual([])
+  })
+}

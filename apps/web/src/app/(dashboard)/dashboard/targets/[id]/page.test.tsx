@@ -22,6 +22,22 @@ vi.mock("@/lib/cache", () => ({
   getCachedWorkspaceId: (...args: unknown[]) => getCachedWorkspaceId(...args),
 }))
 vi.mock("next/navigation", () => ({ redirect, notFound }))
+vi.mock("@/lib/target-assessment-server", () => ({
+  loadTargetAssessmentPanels: vi.fn(async () => ({
+    gate: { status: "available", value: null },
+    remediation: {
+      status: "available",
+      value: {
+        newFindings: 0,
+        recurringFindings: 0,
+        resolvedFindings: 0,
+        uncertainMatches: 0,
+        blockingFindings: 0,
+      },
+    },
+    spend: { status: "available", value: null },
+  })),
+}))
 
 import TargetDetailPage from "./page"
 

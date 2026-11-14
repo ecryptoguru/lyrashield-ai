@@ -1,5 +1,5 @@
-import { getScanQualitySurface, withWorkspaceRLS } from "@lyrashield/db"
-import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
+import { getScanQualitySurface, withDelegatedReadAuthority } from "@lyrashield/db"
+import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
@@ -7,6 +7,7 @@ import { apiError } from "../../../../../lib/api-response"
 import { jsonWithEtag } from "../../../../../lib/http-etag"
 import { z } from "zod"
 import { ScanIdSchema } from "@lyrashield/types"
+import { delegatedReadPrincipal, delegatedScanAccess } from "@/lib/delegated-target-read-scope"
 
 const WorkspaceSchema = z.string().min(1)
 
@@ -30,22 +31,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const workspaceId = parsedWorkspace.data
 
   try {
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
-    const connection = session.oauth
-    if (connection?.connectionId && !connection.allTargets) {
-      const scan = await withWorkspaceRLS(workspaceId, (tx) =>
-        tx.scan.findFirst({
-          where: { id: parsedId.data, workspaceId, deletedAt: null },
-          select: { targetId: true },
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const principal = delegatedReadPrincipal(session, workspace)
+    const load = async (
+      client?: Parameters<typeof getScanQualitySurface>[2],
+      authority?: { allowedProfiles: string[] }
+    ) => {
+      if (principal) {
+        const access = await delegatedScanAccess(session, workspace, parsedId.data, client)
+        if (!access || access.statusOnly) return null
+        return getScanQualitySurface(parsedId.data, workspaceId, client, {
+          requireActiveTarget: true,
+          allowedProfiles: authority!.allowedProfiles,
         })
-      )
-      if (!scan) {
-        return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
       }
-      assertOAuthDelegatedScope(session, scan.targetId)
+      return getScanQualitySurface(parsedId.data, workspaceId)
     }
-
-    const surface = await getScanQualitySurface(parsedId.data, workspaceId)
+    const surface = principal
+      ? await withDelegatedReadAuthority(principal, (tx, authority) => load(tx, authority))
+      : await load()
     if (!surface) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }

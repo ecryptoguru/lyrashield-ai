@@ -31,6 +31,63 @@ const expectedMigrations = () =>
     finished: true,
     rolled_back: false,
   }))
+function delegatedSchemaQuery(sql, args, s) {
+  if (sql.includes("_prisma_migrations") && args[0] === "20261105120000_delegated_scan_provenance")
+    return rows(
+      s.delegatedSchema
+        ? [
+            {
+              checksum: hash(read(`packages/db/prisma/migrations/${args[0]}/migration.sql`)),
+              finished: true,
+              rolled_back: false,
+            },
+          ]
+        : []
+    )
+  if (sql.includes("_prisma_migrations")) return rows(s.schema ? expectedMigrations() : [])
+  if (sql.includes("delegated_scan_provenance") && sql.includes("pg_catalog.pg_policy"))
+    return rows([
+      {
+        relrowsecurity: true,
+        relforcerowsecurity: !s.delegatedRlsDisabled,
+        polname: "delegated_scan_provenance_workspace",
+        polcmd: "*",
+        polpermissive: true,
+        roles: "{0}",
+        using_expression: '("workspaceId" = app.current_workspace_id())',
+        check_expression: '("workspaceId" = app.current_workspace_id())',
+      },
+    ])
+  if (sql.includes("delegated_scan_provenance") && sql.includes("pg_catalog.pg_trigger"))
+    return rows([
+      {
+        tgname: "delegated_scan_provenance_immutable",
+        tgtype: 19,
+        tgenabled: "O",
+        unconditional: true,
+        function_schema: "app",
+        proname: "reject_delegated_scan_provenance_update",
+        pronargs: 0,
+        prosecdef: false,
+        returns_trigger: true,
+        prosrc:
+          "\nBEGIN\n  RAISE EXCEPTION 'delegated scan provenance is immutable' USING ERRCODE = '23514';\nEND;\n",
+      },
+    ])
+  if (sql.includes("delegated_scan_provenance") && sql.includes("has_table_privilege")) {
+    save({ ...s, delegatedPrincipals: args[0] })
+    return rows(
+      args[0].map((rolname) => ({
+        rolname,
+        rolsuper: false,
+        rolbypassrls: false,
+        can_select: !s.delegatedSelectMissing,
+        can_insert: !s.delegatedInsertMissing,
+        can_delete: !!s.delegatedDeletePresent,
+      }))
+    )
+  }
+}
 class Client {
   constructor(options) {
     this.role = principal(options.connectionString)
@@ -66,7 +123,8 @@ class Client {
       return rows([{ slot: s.schema, capacity: s.schema, version: s.schema, settled: s.schema }])
     if (sql.includes("slot_present"))
       return rows([{ slot_present: false, reservation_present: false }])
-    if (sql.includes("_prisma_migrations")) return rows(s.schema ? expectedMigrations() : [])
+    const delegated = delegatedSchemaQuery(sql, args, s)
+    if (delegated !== undefined) return delegated
     if (sql.includes("AS approvals"))
       return rows([{ approvals: "0", operations: "0", webhook_tracks: "0" }])
     if (sql.includes(" AS type_name")) {
@@ -95,6 +153,9 @@ class Client {
           accountId: "text",
           kind: "text",
           idempotencyKey: "text",
+          quantity: "int4",
+          createdAt: "timestamp",
+          cycleStart: "timestamp",
           deletedAt: "timestamp",
           metadata: "jsonb",
         },
@@ -242,11 +303,77 @@ fs.fsyncSync = function (fd) {
     throw new Error("final fsync unavailable")
   return originalFsync(fd)
 }
+function mockRevisionProbe(args, s) {
+  const get = (flag) => args[args.indexOf(flag) + 1]
+  if (args[0] === "containerapp" && ["revision", "replica"].includes(args[1])) {
+    s.revisionProbes ??= []
+    s.revisionProbes.push(args.slice(0, -3))
+    save(s)
+    if (s.deletedBaseline && get("--revision")?.endsWith("-old1")) {
+      const mode = args[1] === "revision" ? s.deletionShowMode : s.deletionReplicaMode
+      if (mode === "present")
+        return JSON.stringify({ name: get("--revision"), properties: { active: false } })
+      if (mode === "empty") return "[]"
+      if (mode === "replicas") return "[{}]"
+      const code =
+        mode === "auth"
+          ? "AuthorizationFailed"
+          : mode === "resource"
+            ? "ResourceNotFound"
+            : "RevisionNotFound"
+      throw Object.assign(new Error("private provider failure"), {
+        status: mode === "timeout" ? null : mode === "wrong-exit" ? 2 : 1,
+        ...(mode === "buffer" ? { code: "ENOBUFS" } : {}),
+        ...(mode === "signal" ? { signal: "SIGTERM" } : {}),
+        stderr: `ERROR: (${code}) ${process.env.V26_APP_TEST_URL}${mode === "mixed" ? "\nERROR: (AuthorizationFailed) private" : ""}`,
+      })
+    }
+  }
+}
+function mockRevisionInventory(args, s, app, runtime) {
+  return JSON.stringify(
+    [
+      {
+        name: `${app}-old1`,
+        properties: {
+          active: s.active && !s.candidate,
+          replicas: s.active && !s.candidate ? 1 : 0,
+          template: { containers: [{ ...runtime, image: s.oldWeb }] },
+        },
+      },
+      {
+        name: `${app}-current`,
+        properties: {
+          active: s.active,
+          replicas: Object.hasOwn(s, "invalidReplicaCount")
+            ? s.invalidReplicaCount
+            : s.active
+              ? 1
+              : 0,
+          template: { containers: [runtime] },
+        },
+      },
+      ...(s.orphanReplica || s.orphanReplicaReportedOnly
+        ? [
+            {
+              name: `${app}-historic`,
+              properties: { active: false, replicas: 1, template: { containers: [runtime] } },
+            },
+          ]
+        : []),
+    ].filter(
+      (revision) =>
+        (!s.deletedBaseline || !revision.name.endsWith("-old1")) &&
+        (args.includes("--all") || revision.properties.active)
+    )
+  )
+}
 const originalExec = child.execFileSync
 child.execFileSync = function (file, args, options) {
   const s = state()
   if (file === "sh" && args[0].endsWith("verify-v26-images.sh")) {
     if (s.failure === "images") throw new Error("qualification failed")
+    save({ ...s, imageQualificationArgs: args })
     return "V26_IMAGES_QUALIFIED\n"
   }
   if (file === "docker") {
@@ -273,6 +400,8 @@ child.execFileSync = function (file, args, options) {
   if (file !== "az") return originalExec.call(this, file, args, options)
   const get = (flag) => args[args.indexOf(flag) + 1]
   const app = get("--name")
+  const revisionProbe = mockRevisionProbe(args, s)
+  if (revisionProbe !== undefined) return revisionProbe
   if (args[0] === "vm") {
     const matches = get("--scripts").match(/v26-vm\.sh" '([^']+)' '([^']+)' '([^']+)'$/)
     if (!matches) throw new Error("Unknown VM transport")
@@ -346,21 +475,14 @@ child.execFileSync = function (file, args, options) {
     return "{}"
   }
   if (args.includes("revision") && args.includes("list"))
-    return JSON.stringify([
-      {
-        name: `${app}-old1`,
-        properties: {
-          active: s.active && !s.candidate,
-          template: { containers: [{ ...runtime, image: s.oldWeb }] },
-        },
-      },
-      {
-        name: `${app}-current`,
-        properties: { active: s.active, template: { containers: [runtime] } },
-      },
-    ])
+    return mockRevisionInventory(args, s, app, runtime)
   if (args.includes("replica"))
-    return JSON.stringify(s.active && get("--revision").endsWith("current") ? [{}] : [])
+    return JSON.stringify(
+      (s.active && get("--revision").endsWith("current")) ||
+        (s.orphanReplica && get("--revision").endsWith("historic"))
+        ? [{}]
+        : []
+    )
   if (args.includes("secret"))
     return JSON.stringify([{ name: "runtime-url", value: process.env.V26_APP_TEST_URL }])
   if (args.includes("traffic"))

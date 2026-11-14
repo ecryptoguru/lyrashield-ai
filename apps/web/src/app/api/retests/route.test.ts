@@ -13,8 +13,44 @@ vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: mocks.requirePermission,
 }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { retest: { view: "retest:view" } } }))
-vi.mock("@lyrashield/db", () => ({ listRetests: mocks.listRetests }))
+vi.mock("@lyrashield/db", () => ({
+  listRetests: mocks.listRetests,
+  withDelegatedReadAuthority: async (
+    params: { allTargets?: boolean; allowedTargetIds?: string[] },
+    run: (tx: unknown, authority: { targetIds?: string[]; allowedProfiles: string[] }) => unknown
+  ) =>
+    run(
+      {},
+      {
+        ...(params.allTargets ? {} : { targetIds: params.allowedTargetIds ?? [] }),
+        allowedProfiles: ["SAFE", "STANDARD", "QUICK"],
+      }
+    ),
+}))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: mocks.loggerError } }))
+vi.mock("../../../lib/delegated-target-read-scope", () => ({
+  delegatedReadPrincipal: (session: {
+    userId?: string
+    oauth?: {
+      connectionId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+    }
+  }) =>
+    session.oauth?.connectionId
+      ? {
+          workspaceId: "ws-1",
+          userId: session.userId ?? "user-1",
+          memberId: "member-1",
+          memberRole: "OWNER",
+          memberUpdatedAt: new Date("2026-11-05T10:00:00Z"),
+          connectionId: session.oauth.connectionId,
+          authorizationVersion: 2,
+          allTargets: session.oauth.allTargets,
+          allowedTargetIds: session.oauth.allowedTargetIds ?? [],
+        }
+      : null,
+}))
 
 import { GET } from "./route"
 
@@ -100,7 +136,8 @@ it.each([{ targetIds: ["target-1"] }, { targetIds: [] }])(
     )
     expect(response.status).toBe(200)
     expect(mocks.listRetests).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: "ws-1", targetIds, cursor: "cursor-1" })
+      expect.objectContaining({ workspaceId: "ws-1", targetIds, cursor: "cursor-1" }),
+      expect.any(Object)
     )
   }
 )

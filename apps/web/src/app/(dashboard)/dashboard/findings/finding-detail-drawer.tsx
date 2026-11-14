@@ -1,4 +1,5 @@
 "use client"
+import { evidenceInsightsSchema } from "./finding-evidence-insights"
 import { useState, useEffect, useCallback, useRef } from "react"
 import { z } from "zod"
 import { fixProposalSchema } from "./finding-fix-proposal-schema"
@@ -74,22 +75,7 @@ export interface FindingDetail {
   }>
   evidence?: Array<{ id: string; type: string; redactionStatus: string }>
   /** Engine-declared claim context — assertions, never app verification. */
-  evidenceInsights?: {
-    counterevidence?: string
-    evidenceWarnings?: string[]
-    severityChangeConditions?: string
-    assumptions?: string
-    confidenceRationale?: string
-    contextualCvssReasoning?: string
-    advisoryCvss?: {
-      score: number
-      vector?: string
-      source?: string
-      metric_reasoning?: string
-    }
-    engineVerificationState?: string
-    engineConfidence?: string
-  } | null
+  evidenceInsights?: z.infer<typeof evidenceInsightsSchema>
   fixProposals?: Array<{
     id: string
     status: string
@@ -146,31 +132,6 @@ const verificationReceiptSchema = z
 const evidenceSchema = z
   .object({ id: z.string(), type: z.string(), redactionStatus: z.string() })
   .passthrough()
-
-/**
- * Engine-declared claim-context projection — allowlisted server-side, every
- * field labeled as an engine assertion rather than app verification.
- */
-const evidenceInsightsSchema = z
-  .object({
-    counterevidence: z.string().optional(),
-    evidenceWarnings: z.array(z.string()).optional(),
-    severityChangeConditions: z.string().optional(),
-    assumptions: z.string().optional(),
-    confidenceRationale: z.string().optional(),
-    contextualCvssReasoning: z.string().optional(),
-    advisoryCvss: z
-      .object({
-        score: z.number(),
-        vector: z.string().optional(),
-        source: z.string().optional(),
-        metric_reasoning: z.string().optional(),
-      })
-      .optional(),
-    engineVerificationState: z.string().optional(),
-    engineConfidence: z.string().optional(),
-  })
-  .nullable()
 
 const retestSchema = z
   .object({

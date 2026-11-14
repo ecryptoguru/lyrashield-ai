@@ -47,7 +47,7 @@ shared_pattern='^(docs/marketplace/|packages/|package\.json|pnpm-lock\.yaml|pnpm
 marketing_deploy_pattern='^(\.github/workflows/deploy-marketing\.yml|apps/(marketing|marketing-motion)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo)'
 # Keep independent marketing projects and their browser tests out of unrelated
 # deployment-tool changes. Shared build/dependency inputs still select both.
-marketing_tests_pattern='^(apps/marketing/|packages/(agent-registry|agent-rules|auth|billing|config|db|egress-proxy|evidence-storage|gate|integrations|licenses|logger|myra|pricing|score|security|types)/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts)'
+marketing_tests_pattern='^(apps/marketing/|packages/(agent-registry|agent-rules|auth|billing|config|db|egress-proxy|evidence-storage|gate|integrations|licenses|logger|myra|pricing|runtime-control|score|security|types)/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts)'
 motion_tests_pattern='^(apps/marketing-motion/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs)'
 # Ops tests read workflow/helper sources, actual DB fixtures and package
 # manifests. Keep shared packages conservative; ordinary app UI/routes do not
@@ -98,7 +98,7 @@ presentation_pattern='^(apps/web/public/.*\.(png|jpe?g|webp|avif|gif|ico|woff2?|
 image_packaging_pattern='(^|/)(Dockerfile[^/]*|\.dockerignore|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig[^/]*\.json|[^/]*\.config\.(ts|js|mjs|cjs|json)|\.npmrc|\.pnpmfile\.cjs)$'
 image_build_workflow_pattern='^\.github/workflows/(ci|deploy-azure|release-tauri|verify-webhook-worker-image)\.yml$'
 source_input_pattern='\.(tsx?|jsx?|mjs|cjs|css|scss|sass|less|json|prisma|sql|astro|mdx|html|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|mp4|webm|mp3|wav|snap|map)$'
-worker_host_pattern='^ops/worker/(run-worker\.sh|worker-env\.sh|webhook-cutover-(recovery|schema)\.mjs|v26-cutover-identity\.mjs|refresh-(secrets|egress)\.sh|capture-stop-provenance\.sh|lyrashield-worker(-secrets|-egress|-egress-refresh)?\.(service|timer))$'
+worker_host_pattern='^ops/worker/(run-worker\.sh|recover-worker\.sh|worker-env\.sh|worker-recovery-probe\.mjs|cold-start-barrier\.py|webhook-cutover-(recovery|schema)\.mjs|v26-cutover-identity\.mjs|refresh-(secrets|egress)\.sh|capture-stop-provenance\.sh|lyrashield-worker(-recover|-secrets|-egress|-egress-refresh)?\.(service|timer))$'
 
 while IFS= read -r f || [[ -n "$f" ]]; do
   [ -z "$f" ] && continue

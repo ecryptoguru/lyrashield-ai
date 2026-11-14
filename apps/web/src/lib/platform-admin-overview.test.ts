@@ -74,6 +74,9 @@ describe("getPlatformAdminOverview", () => {
       validAssessments: 24n,
       ttfvMedianMinutes: 12.5,
       ttfvP90Minutes: 45,
+      usefulAssessments: 20n,
+      ttfuMedianMinutes: 10.25,
+      ttfuP95Minutes: 38.5,
       githubConnectStarted: 25n,
       githubConnected: 20n,
       targetsZero: 10n,
@@ -116,6 +119,7 @@ describe("getPlatformAdminOverview", () => {
       worker: { status: "healthy", available: true },
       queue: { status: "degraded", waiting: 2, active: 1, delayed: 0, failed: 1 },
       activation: {
+        metricVersion: "setup-quality/2.0.0",
         minimumSample: 20,
         activation: { numerator: 24, denominator: 40, percent: 60 },
         setupAbandonment: { numerator: 10, denominator: 40, percent: 25 },
@@ -123,6 +127,11 @@ describe("getPlatformAdminOverview", () => {
           denominator: 24,
           medianMinutes: 12.5,
           p90Minutes: 45,
+        },
+        timeToFirstUsefulResult: {
+          denominator: 20,
+          medianMinutes: 10.25,
+          p95Minutes: 38.5,
         },
         connectionSuccess: { numerator: 20, denominator: 25, percent: 80 },
         repeatedInput: {
@@ -158,6 +167,9 @@ describe("getPlatformAdminOverview", () => {
     expect(query).toContain('target_event."createdAt" >= users."createdAt"')
     expect(query).toContain('connected."createdAt" >= started.started_at')
     expect(query).toContain('connected."workspaceId" = started.workspace_id')
+    expect(query).toContain('LEFT JOIN "GateVerdict"')
+    expect(query).toContain('LEFT JOIN "ScanResultManifest"')
+    expect(query).toContain('FROM "ScanCoverageReceipt"')
   })
 
   it("keeps other cards available when one dependency fails", async () => {
@@ -192,6 +204,9 @@ describe("getPlatformAdminOverview", () => {
         validAssessments: 1n,
         ttfvMedianMinutes: 4,
         ttfvP90Minutes: 4,
+        usefulAssessments: 1n,
+        ttfuMedianMinutes: 4,
+        ttfuP95Minutes: 4,
         githubConnectStarted: 2n,
         githubConnected: 1n,
         targetsZero: 2n,
@@ -210,6 +225,8 @@ describe("getPlatformAdminOverview", () => {
 
     expect(activation?.activation.percent).toBeNull()
     expect(activation?.timeToFirstValidAssessment.medianMinutes).toBeNull()
+    expect(activation?.timeToFirstUsefulResult.medianMinutes).toBeNull()
+    expect(activation?.timeToFirstUsefulResult.p95Minutes).toBeNull()
     expect(activation?.connectionSuccess.percent).toBeNull()
     expect(activation?.repeatedInput.sufficient).toBe(false)
     expect(activation?.recoverySuccess.percent).toBeNull()

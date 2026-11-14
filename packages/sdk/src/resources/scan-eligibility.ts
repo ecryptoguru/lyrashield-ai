@@ -73,6 +73,7 @@ export interface ScanEligibilityInput {
   targetId: string
   goal: string
   mode: string
+  engineBudgetCeilingUsd?: number
   workflow?: "REVIEW_TARGET" | "REVIEW_CHANGES" | "AUTHENTICATED_ASSESSMENT"
   baseRef?: string
   headRef?: string
@@ -91,6 +92,8 @@ export function getScanEligibility(
   params.set("targetId", input.targetId)
   params.set("goal", input.goal)
   params.set("mode", input.mode)
+  if (input.engineBudgetCeilingUsd !== undefined)
+    params.set("engineBudgetCeilingUsd", String(input.engineBudgetCeilingUsd))
   if (input.workflow) params.set("workflow", input.workflow)
   if (input.baseRef) params.set("baseRef", input.baseRef)
   if (input.headRef) params.set("headRef", input.headRef)

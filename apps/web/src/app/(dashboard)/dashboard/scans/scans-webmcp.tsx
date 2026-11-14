@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { registerWebMcpTool } from "@/lib/webmcp/register"
 import { useWebMcpReceiptStore } from "@/components/webmcp/webmcp-receipt-provider"
 
@@ -13,16 +13,22 @@ import {
 
 export function useScansWebMcp({
   workspaceId,
+  principalId,
+  visibleDraft,
   targets,
   selectedPreset,
+  setEngineBudgetCeiling,
   setSelectedTarget,
   setSelectedPreset,
   setShowCreate,
   setModeResetNotice,
 }: {
   workspaceId: string
+  principalId: string
+  visibleDraft: { targetId: string; reviewType?: string; budget: string } | null
   targets: TargetItem[]
   selectedPreset: string
+  setEngineBudgetCeiling: (value: string) => void
   setSelectedTarget: (targetId: string) => void
   setSelectedPreset: (presetId: string) => void
   setShowCreate: (show: boolean) => void
@@ -32,10 +38,12 @@ export function useScansWebMcp({
   const targetsRef = useRef(targets)
   const selectedPresetRef = useRef(selectedPreset)
 
-  useEffect(() => {
+  const draftRef = useRef({ workspaceId, principalId, visibleDraft })
+  useLayoutEffect(() => {
     targetsRef.current = targets
     selectedPresetRef.current = selectedPreset
-  }, [targets, selectedPreset])
+    draftRef.current = { workspaceId, principalId, visibleDraft }
+  }, [targets, selectedPreset, workspaceId, principalId, visibleDraft])
 
   // Advisory read-only preflight: reports whether the server would currently
   // admit the chosen review, using the page's own workspace and session —
@@ -60,6 +68,7 @@ export function useScansWebMcp({
       ...createPrepareSecurityScanTool({
         getTargets: () => targetsRef.current,
         getSelectedPreset: () => selectedPresetRef.current,
+        setEngineBudgetCeiling,
         setSelectedTarget,
         setSelectedPreset,
         setShowCreate,
@@ -71,6 +80,7 @@ export function useScansWebMcp({
     return cleanup
   }, [
     workspaceId,
+    setEngineBudgetCeiling,
     setSelectedTarget,
     setSelectedPreset,
     setShowCreate,
@@ -86,6 +96,15 @@ export function useScansWebMcp({
     const cleanup = registerWebMcpTool({
       ...createRequestSecurityScanTool({
         workspaceId,
+        getMatchingDraftBudget: (targetId, reviewType) => {
+          const scope = draftRef.current
+          if (scope.workspaceId !== workspaceId || scope.principalId !== principalId)
+            throw new Error("The active workspace or user changed. Start a new review.")
+          const draft = scope.visibleDraft
+          return draft?.targetId === targetId && draft.reviewType === reviewType
+            ? draft.budget
+            : undefined
+        },
         getTargets: () => targetsRef.current,
         getSelectedPreset: () => selectedPresetRef.current,
       }),
@@ -93,5 +112,5 @@ export function useScansWebMcp({
     })
 
     return cleanup
-  }, [workspaceId, receiptStore])
+  }, [workspaceId, principalId, receiptStore])
 }

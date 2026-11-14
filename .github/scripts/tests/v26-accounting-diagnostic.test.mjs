@@ -14,6 +14,7 @@ const scan = (overrides = {}) => ({
   startedAt: "2026-10-30T01:00:00.000Z",
   endedAt: "2026-10-30T01:01:00.000Z",
   finalizationStartedAt: "2026-10-30T01:00:30.000Z",
+  deletedAt: null,
   ...overrides,
 })
 const intent = (overrides = {}) => ({
@@ -180,6 +181,141 @@ test("a valid receipt without an intent is retained as unknown rather than a deb
   assert.equal(result.counts.receiptWithoutIntent, 1)
   assert.equal(result.counts.unsettledIntents, 0)
   assert.equal(result.counts.unknownDisposition, 1)
+})
+
+const historicalScan = (overrides = {}) =>
+  scan({
+    startedAt: "2026-08-28T00:00:00.000Z",
+    endedAt: "2026-08-28T00:01:00.000Z",
+    finalizationStartedAt: null,
+    ...overrides,
+  })
+const historicalReceipt = (overrides = {}) =>
+  receipt({
+    createdAt: "2026-08-28T00:00:30.000Z",
+    quantity: 1,
+    cycleStart: null,
+    metadata: { scanId: "scan-private" },
+    ...overrides,
+  })
+
+test("pre-policy receipts are counted as unresolved history without certifying settlement or nonbilling", () => {
+  for (const status of [
+    "COMPLETED",
+    "PARTIAL",
+    "FAILED",
+    "CANCELLED",
+    "STOPPED_BUDGET",
+    "TIMED_OUT",
+  ]) {
+    const input = snapshot({
+      scans: [historicalScan({ status })],
+      intents: [],
+      receipts: [historicalReceipt()],
+    })
+    const before = structuredClone(input)
+    const result = diagnoseLegacyAccountingSnapshot(input)
+    assert.equal(result.status, "NO_DETECTED_DB_BLOCKERS", status)
+    assert.equal(result.counts.legacyHistoricalReceipts, 1)
+    assert.equal(result.counts.legacyFailedReceipts, status === "FAILED" ? 1 : 0)
+    assert.equal(result.counts.failedScanReceipts, 0)
+    assert.equal(result.counts.settledReceipts, 0)
+    assert.equal(result.counts.unknownDisposition, 1)
+    assert.equal(result.historyDispositionComplete, false)
+    assert.equal(result.cutoverReady, false)
+    assert.deepEqual(input, before)
+    assert.doesNotMatch(JSON.stringify(result), /private|engine_run|nonbillable/i)
+  }
+})
+
+test("historical classification requires strict timestamps, live bindings and unambiguous legacy metadata", () => {
+  const cases = [
+    ["usage", { createdAt: "2026-08-29T00:00:00.000Z" }],
+    ["scan", { endedAt: "2026-08-29T00:00:00.000Z" }],
+    ["scan", { endedAt: "2026-10-30T00:00:00.000Z" }],
+    ["usage", { createdAt: "2026-08-28T00:02:00.000Z" }],
+    ["usage", { createdAt: null }],
+    ["usage", { createdAt: "invalid" }],
+    ["usage", { quantity: 0 }],
+    ["usage", { quantity: -1 }],
+    ["usage", { quantity: 0.5 }],
+    ["usage", { quantity: "1" }],
+    ["usage", { quantity: undefined }],
+    ["usage", { cycleStart: "2026-08-01T00:00:00.000Z" }],
+    ["usage", { cycleStart: undefined }],
+    ["usage", { accountId: "other" }],
+    ["usage", { workspaceId: "other" }],
+    ["usage", { idempotencyKey: "other" }],
+    ["usage", { kind: "pool_grant" }],
+    ["usage", { deletedAt: "2026-08-28T02:00:00.000Z" }],
+    ["scan", { deletedAt: "2026-08-28T02:00:00.000Z" }],
+    ["scan", { deletedAt: undefined }],
+    ["usage", { metadata: { scanId: "other" } }],
+    ["usage", { metadata: { scanId: "scan-private", accountId: "other" } }],
+    ["usage", { metadata: { scanId: "scan-private", accountId: null } }],
+    ["usage", { metadata: { scanId: "scan-private", accountId: 1 } }],
+    ["usage", { metadata: null }],
+  ]
+  for (const [kind, change] of cases) {
+    const result = diagnoseLegacyAccountingSnapshot(
+      snapshot({
+        scans: [historicalScan({ status: "FAILED", ...(kind === "scan" ? change : {}) })],
+        intents: [],
+        receipts: [historicalReceipt(kind === "usage" ? change : {})],
+      })
+    )
+    assert.equal(result.status, "REVIEW_REQUIRED", JSON.stringify([kind, change]))
+    assert.equal(result.counts.legacyHistoricalReceipts, 0)
+    assert.equal(result.counts.legacyFailedReceipts, 0)
+  }
+})
+
+test("historical receipt never excuses any settlement intent or active scan", () => {
+  for (const active of ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"]) {
+    const result = diagnoseLegacyAccountingSnapshot(
+      snapshot({
+        scans: [historicalScan({ status: active })],
+        intents: [],
+        receipts: [historicalReceipt()],
+      })
+    )
+    assert.equal(result.status, "REVIEW_REQUIRED")
+    assert.equal(result.counts.activeScans, 1)
+    assert.equal(result.counts.legacyHistoricalReceipts, 0)
+  }
+  for (const event of [
+    intent(),
+    intent({ metadata: null }),
+    intent({ metadata: { ...intent().metadata, idempotencyKey: "other" } }),
+  ]) {
+    const result = diagnoseLegacyAccountingSnapshot(
+      snapshot({ scans: [historicalScan()], intents: [event], receipts: [historicalReceipt()] })
+    )
+    assert.equal(result.status, "REVIEW_REQUIRED")
+    assert.equal(result.counts.legacyHistoricalReceipts, 0)
+  }
+})
+
+test("current failed-scan billing policy and account metadata checks remain strict", () => {
+  for (const input of [
+    snapshot({ scans: [scan({ status: "FAILED" })], intents: [] }),
+    snapshot({
+      scans: [scan({ status: "FAILED" })],
+      intents: [],
+      receipts: [historicalReceipt({ createdAt: "2026-10-30T01:00:30.000Z" })],
+    }),
+    snapshot({
+      scans: [historicalScan({ status: "FAILED" })],
+      intents: [],
+      receipts: [
+        historicalReceipt({ metadata: { scanId: "scan-private", accountId: "account-private" } }),
+      ],
+    }),
+  ]) {
+    const result = diagnoseLegacyAccountingSnapshot(input)
+    assert.equal(result.status, "REVIEW_REQUIRED")
+    assert.equal(result.counts.legacyHistoricalReceipts, 0)
+  }
 })
 
 test("retained receipts with deleted scan or workspace remain historical unknowns", () => {

@@ -1,5 +1,8 @@
 vi.mock("@lyrashield/integrations", () => ({
   isTargetRelayWorkerAvailable: vi.fn().mockResolvedValue(true),
+  getBranchRefSha: vi.fn().mockResolvedValue("a".repeat(40)),
+  getDefaultBranch: vi.fn().mockResolvedValue("main"),
+  getMergeBaseSha: vi.fn().mockResolvedValue("b".repeat(40)),
 }))
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -33,6 +36,7 @@ vi.mock("@lyrashield/db", () => {
     workspace: { findUnique: vi.fn() },
     targetDomainVerification: { findFirst: vi.fn() },
     policy: { findFirst: vi.fn() },
+    integration: { findFirst: vi.fn() },
     scanAttachment: { findMany: vi.fn() },
     auditLog: { create: vi.fn() },
   }
@@ -47,6 +51,9 @@ vi.mock("@lyrashield/db", () => {
       return { domain, verified: Boolean(proof) }
     }),
     prisma,
+    withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: typeof prisma) => unknown) =>
+      fn(prisma)
+    ),
     createScan: vi.fn(),
     resolveScanAttachments: vi.fn().mockResolvedValue([]),
     resolveAuthenticatedAssessmentAuthorization: vi.fn().mockResolvedValue({ id: "authz-1" }),
@@ -127,14 +134,15 @@ vi.mock("../../../../lib/rate-limit", () => ({
 
 import {
   prisma,
+  withWorkspaceRLS,
   createScan,
   resolveScanAttachments,
   resolveAuthenticatedAssessmentAuthorization,
-  LiveAiSafetyError,
   ScanAttachmentError,
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { assertScanAllowed, evaluateScanEntitlement, isTrialAvailable } from "@lyrashield/billing"
+import { getBranchRefSha } from "@lyrashield/integrations"
 import {
   checkFreeUrlScanRateLimit,
   checkScanCreateRateLimit,
@@ -142,6 +150,7 @@ import {
   peekFreeUrlScanRateLimit,
 } from "../../../../lib/rate-limit"
 import { GET } from "./route"
+import { GET as setupHealthGET } from "../../setup-health/route"
 import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 function request(params: Record<string, string> | URLSearchParams) {
@@ -159,6 +168,58 @@ const validQuery = {
 }
 
 describe("GET /api/scans/eligibility", () => {
+  it("accepts a positive operator ceiling for a repository review and keeps policy amounts private", async () => {
+    vi.mocked(prisma.policy.findFirst).mockResolvedValueOnce({
+      id: "p",
+      maxBudgetUsd: { toNumber: () => 0.47 },
+    } as never)
+    const response = await GET(request({ ...validQuery, engineBudgetCeilingUsd: "1" }))
+    const { data } = await response.json()
+    expect(data.allowed).toBe(true)
+    expect(JSON.stringify(data)).not.toContain("0.47")
+  })
+
+  it.each(["REPO", "WEB_APP"])(
+    "checks engine capability against zero policy on %s",
+    async (type) => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValueOnce({
+        id: "target-1",
+        type,
+        url: "https://app.example.com",
+      } as never)
+      vi.mocked(prisma.policy.findFirst).mockResolvedValueOnce({
+        id: "p",
+        maxBudgetUsd: { toNumber: () => 0 },
+      } as never)
+      const response = await GET(
+        request({ ...validQuery, ...(type === "REPO" ? { engineBudgetCeilingUsd: "1" } : {}) })
+      )
+      const { data } = await response.json()
+      expect(response.status).toBe(200)
+      if (type === "REPO") {
+        expect(data.allowed).toBe(false)
+        expect(data.blockers).toContainEqual({
+          code: "SCAN_PLAN_INVALID",
+          message: expect.stringMatching(/engine spending is disabled/i),
+        })
+      } else expect(data.allowed).toBe(true)
+    }
+  )
+
+  it.each(["0", "-1", "NaN", "Infinity", ""])(
+    "rejects invalid requested engine ceiling %s",
+    async (value) => {
+      expect((await GET(request({ ...validQuery, engineBudgetCeilingUsd: value }))).status).toBe(
+        400
+      )
+    }
+  )
+  it("rejects duplicate request ceilings instead of selecting the last amount", async () => {
+    const params = new URLSearchParams({ ...validQuery, engineBudgetCeilingUsd: "1" })
+    params.append("engineBudgetCeilingUsd", "2")
+    expect((await GET(request(params))).status).toBe(400)
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     configMocks.authAssessment.enabled = "0"
@@ -188,6 +249,10 @@ describe("GET /api/scans/eligibility", () => {
       remainingMinutes: 120,
     } as never)
     vi.mocked(resolveScanAttachments).mockResolvedValue([] as never)
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({
+      id: "integration-1",
+      status: "active",
+    } as never)
     vi.mocked(resolveAuthenticatedAssessmentAuthorization).mockResolvedValue({
       id: "authz-1",
     } as never)
@@ -220,6 +285,7 @@ describe("GET /api/scans/eligibility", () => {
 
     expect(response.status).toBe(404)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:create")
+    expect(withWorkspaceRLS).toHaveBeenCalledWith("ws-1", expect.any(Function))
     expect(prisma.target.findFirst).toHaveBeenCalledWith({
       where: { id: "target-1", workspaceId: "ws-1", deletedAt: null },
     })
@@ -265,31 +331,27 @@ describe("GET /api/scans/eligibility", () => {
     expect(evaluateScanEntitlement).not.toHaveBeenCalled()
   })
 
-  it("mirrors the POST domain-verification gate for engine-backed remote targets", async () => {
-    // Preflight parity: a paid WEB_APP target without a verified domain must
-    // report DOMAIN_VERIFICATION_REQUIRED on an engine-backed tier here, not
-    // an allowed verdict that POST would then reject with a raw error.
+  it("refuses an explicit Standard URL tier as an unsupported profile, matching POST", async () => {
+    // Standard/Deep/Custom are removed from the URL/API launch offering: the
+    // preflight refuses them with the same unsupported code POST returns,
+    // before any entitlement, queue or provider work.
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-1",
       type: "WEB_APP",
       url: "https://app.example.com",
     } as never)
     vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "PRO" } as never)
-    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
 
     const response = await GET(request({ ...validQuery, mode: "STANDARD" }))
 
     expect(response.status).toBe(200)
     const body = await response.json()
     expect(body.data.allowed).toBe(false)
-    expect(body.data.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(body.data.code).toBe("URL_MODE_UNSUPPORTED")
     expect(body.data.blockers).toEqual([
-      {
-        code: "DOMAIN_VERIFICATION_REQUIRED",
-        message: "Verify control of this domain once to enable engine-backed reviews.",
-      },
+      { code: "URL_MODE_UNSUPPORTED", message: body.data.message },
     ])
-    expect(body.data.remediation.txtName).toBe("_lyrashield.app.example.com")
+    expect(body.data.message).toContain("Safe and Quick")
     expect(body.data.supportedModes.length).toBeGreaterThan(0)
     expect(evaluateScanEntitlement).not.toHaveBeenCalled()
   })
@@ -312,7 +374,7 @@ describe("GET /api/scans/eligibility", () => {
     expect(prisma.targetDomainVerification.findFirst).not.toHaveBeenCalled()
   })
 
-  it("reports an engine-backed target as allowed once a current domain proof exists", async () => {
+  it("keeps a Standard URL tier unsupported even when a current domain proof exists", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-1",
       type: "WEB_APP",
@@ -327,22 +389,12 @@ describe("GET /api/scans/eligibility", () => {
 
     expect(response.status).toBe(200)
     const body = await response.json()
-    expect(body.data.allowed).toBe(true)
-    expect(body.data.canonicalMode).toBe("STANDARD")
-    expect(body.data.canonicalProfileId).toBe("WEB_APP_STANDARD")
-    expect(evaluateScanEntitlement).toHaveBeenCalled()
-    expect(prisma.targetDomainVerification.findFirst).toHaveBeenCalledWith({
-      where: {
-        workspaceId: "ws-1",
-        domain: "app.example.com",
-        status: "VERIFIED",
-        expiresAt: { gt: expect.any(Date) },
-      },
-      select: { id: true },
-    })
+    expect(body.data.allowed).toBe(false)
+    expect(body.data.code).toBe("URL_MODE_UNSUPPORTED")
+    expect(evaluateScanEntitlement).not.toHaveBeenCalled()
   })
 
-  it("denies an API contract review without an OpenAPI document like POST does", async () => {
+  it("denies an explicit API contract review as unsupported like POST does", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-1",
       type: "API",
@@ -354,8 +406,8 @@ describe("GET /api/scans/eligibility", () => {
 
     const body = await response.json()
     expect(body.data.allowed).toBe(false)
-    expect(body.data.code).toBe("API_SPEC_REQUIRED")
-    expect(body.data.blockers[0].code).toBe("API_SPEC_REQUIRED")
+    expect(body.data.code).toBe("URL_MODE_UNSUPPORTED")
+    expect(body.data.blockers[0].code).toBe("URL_MODE_UNSUPPORTED")
     expect(body.data.supportedModes.length).toBeGreaterThan(0)
     expect(evaluateScanEntitlement).not.toHaveBeenCalled()
   })
@@ -558,7 +610,9 @@ describe("GET /api/scans/eligibility", () => {
     expect(resolveAuthenticatedAssessmentAuthorization).not.toHaveBeenCalled()
   })
 
-  it("reports a recorded authorization failure for the gated beta", async () => {
+  it("keeps the gated beta unavailable even with the env flag and allowlist on", async () => {
+    // Authenticated assessments are deferred: the shared boundary refuses them
+    // regardless of the deployment flag, so no authorization is resolved.
     configMocks.authAssessment.enabled = "1"
     configMocks.authAssessment.allowlist = "ws-1:target-1"
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
@@ -574,9 +628,6 @@ describe("GET /api/scans/eligibility", () => {
       id: "default-policy",
       destructiveTestsAllowed: false,
     } as never)
-    vi.mocked(resolveAuthenticatedAssessmentAuthorization).mockRejectedValue(
-      new LiveAiSafetyError("AUTH_ASSESSMENT_AUTH_NOT_FOUND")
-    )
 
     const response = await GET(
       request({ ...validQuery, workflow: "AUTHENTICATED_ASSESSMENT", authorizationRef: "authz-9" })
@@ -584,14 +635,8 @@ describe("GET /api/scans/eligibility", () => {
 
     const body = await response.json()
     expect(body.data.allowed).toBe(false)
-    expect(body.data.code).toBe("AUTH_ASSESSMENT_AUTH_NOT_FOUND")
-    expect(resolveAuthenticatedAssessmentAuthorization).toHaveBeenCalledWith({
-      workspaceId: "ws-1",
-      targetId: "target-1",
-      authorizationRef: "authz-9",
-    })
-    // Read-only check — the policy lookup is a find, never a write.
-    expect(prisma.policy.findFirst).toHaveBeenCalled()
+    expect(body.data.code).toBe("SCAN_WORKFLOW_UNAVAILABLE")
+    expect(resolveAuthenticatedAssessmentAuthorization).not.toHaveBeenCalled()
   })
 
   it("keeps the entitlement verdict first when workflow gates would also fail", async () => {
@@ -617,5 +662,156 @@ describe("GET /api/scans/eligibility", () => {
       "NO_MINUTES_REMAINING",
       "SCAN_WORKFLOW_UNAVAILABLE",
     ])
+  })
+
+  it("binds setup health to resolved policy, sponsor, membership and source connection", async () => {
+    const member = { id: "member-1", role: "OWNER", status: "active", updatedAt: new Date(0) }
+    vi.mocked(requirePermission).mockResolvedValue({
+      session: { userId: "user-1" },
+      workspace: { role: "OWNER", member },
+    } as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "REPO",
+      repoFullName: "private/app",
+      branch: "main",
+      installationId: "123",
+    } as never)
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({
+      id: "connection-1",
+      status: "active",
+      updatedAt: new Date(0),
+    } as never)
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue({
+      id: "policy-1",
+      maxBudgetUsd: { toNumber: () => 0.47 },
+      blockedPaths: ["/private"],
+    } as never)
+    vi.mocked(evaluateScanEntitlement).mockResolvedValue({
+      allowed: true,
+      accountId: "private-sponsor",
+      plan: "PRO",
+      isTrial: false,
+      remainingMinutes: 120,
+    } as never)
+    const check = async () =>
+      (await (await setupHealthGET(request({ ...validQuery, mode: "STANDARD" }))).json()).data
+    const initial = await check()
+    expect(initial).toMatchObject({ status: "ready", allowed: true })
+    expect(vi.mocked(withWorkspaceRLS).mock.calls.map(([workspaceId]) => workspaceId)).toEqual([
+      "ws-1",
+      "ws-1",
+      "ws-1",
+      "ws-1",
+    ])
+    expect(JSON.stringify(initial)).not.toContain("private-sponsor")
+    expect(JSON.stringify(initial)).not.toContain("private/app")
+    expect(JSON.stringify(initial)).not.toContain("0.47")
+
+    vi.mocked(getBranchRefSha).mockResolvedValueOnce("f".repeat(40))
+    const movedBranch = await check()
+    expect(movedBranch.scopeFingerprint).not.toBe(initial.scopeFingerprint)
+    expect(JSON.stringify(movedBranch)).not.toContain("f".repeat(40))
+    vi.mocked(getBranchRefSha).mockRejectedValueOnce(new Error("provider unavailable"))
+    const unavailableSource = await check()
+    expect(unavailableSource).toMatchObject({ status: "unknown", allowed: false })
+
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue({
+      id: "policy-1",
+      maxBudgetUsd: { toNumber: () => 0.22 },
+      blockedPaths: ["/private"],
+    } as never)
+    const policyChanged = await check()
+    expect(policyChanged.scopeFingerprint).not.toBe(initial.scopeFingerprint)
+
+    vi.mocked(evaluateScanEntitlement).mockResolvedValue({
+      allowed: true,
+      accountId: "another-sponsor",
+      plan: "PRO",
+      isTrial: false,
+      remainingMinutes: 120,
+    } as never)
+    const sponsorChanged = await check()
+    expect(sponsorChanged.scopeFingerprint).not.toBe(policyChanged.scopeFingerprint)
+
+    member.role = "MEMBER"
+    const membershipChanged = await check()
+    expect(membershipChanged.scopeFingerprint).not.toBe(sponsorChanged.scopeFingerprint)
+
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({
+      id: "connection-1",
+      status: "disabled",
+      updatedAt: new Date(1),
+    } as never)
+    const disconnected = await check()
+    expect(disconnected.scopeFingerprint).not.toBe(membershipChanged.scopeFingerprint)
+    expect(disconnected).toMatchObject({ status: "unknown", allowed: false })
+
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({
+      id: "connection-1",
+      status: "active",
+      updatedAt: new Date(0),
+    } as never)
+    vi.mocked(requirePermission)
+      .mockResolvedValueOnce({ session: { userId: "user-1" }, workspace: { member } } as never)
+      .mockRejectedValueOnce(new Error("FORBIDDEN"))
+    let release: ((revision: string) => void) | undefined
+    vi.mocked(getBranchRefSha).mockClear()
+    vi.mocked(getBranchRefSha).mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          release = resolve
+        })
+    )
+    const pending = setupHealthGET(request({ ...validQuery, mode: "STANDARD" }))
+    await vi.waitFor(() => expect(getBranchRefSha).toHaveBeenCalledTimes(1))
+    release?.("a".repeat(40))
+    const revoked = await pending
+    expect(revoked.status).toBe(403)
+  })
+
+  it("rechecks attachments that are revoked during source observation", async () => {
+    vi.mocked(requirePermission).mockResolvedValue({
+      session: { userId: "user-1" },
+      workspace: { member: { id: "member-1", role: "OWNER", status: "active" } },
+    } as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "REPO",
+      repoFullName: "owner/project",
+      branch: "main",
+      installationId: "123",
+    } as never)
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({
+      id: "connection-1",
+      status: "active",
+    } as never)
+    vi.mocked(resolveScanAttachments)
+      .mockResolvedValueOnce([
+        { id: "attachment-1", checksum: "a".repeat(64), status: "ACTIVE", byteLength: 1 },
+      ] as never)
+      .mockRejectedValueOnce(
+        new ScanAttachmentError("SCAN_ATTACHMENT_UNAVAILABLE", "Attachment is unavailable")
+      )
+    let release: ((revision: string) => void) | undefined
+    vi.mocked(getBranchRefSha).mockClear()
+    vi.mocked(getBranchRefSha).mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          release = resolve
+        })
+    )
+    const pending = setupHealthGET(
+      request({ ...validQuery, mode: "STANDARD", attachmentIds: "attachment-1" })
+    )
+    await vi.waitFor(() => expect(getBranchRefSha).toHaveBeenCalledTimes(1))
+    release?.("a".repeat(40))
+    const body = await (await pending).json()
+    expect(resolveScanAttachments).toHaveBeenCalledTimes(2)
+    expect(body.data).toMatchObject({
+      status: "blocked",
+      allowed: false,
+      primaryCheck: "SCAN_ATTACHMENT_UNAVAILABLE",
+    })
   })
 })

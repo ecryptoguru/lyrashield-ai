@@ -11,6 +11,21 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@lyrashield/db", () => ({
   getScanWithEvents: vi.fn(),
+  withDelegatedReadAuthority: async (
+    params: { targetId?: string; allTargets?: boolean; allowedTargetIds?: string[] },
+    run: (tx: unknown, authority: { targetIds: string[]; allowedProfiles: string[] }) => unknown
+  ) =>
+    run(
+      {},
+      {
+        targetIds: params.targetId
+          ? [params.targetId]
+          : params.allTargets
+            ? ["target-1"]
+            : (params.allowedTargetIds ?? []),
+        allowedProfiles: ["STANDARD"],
+      }
+    ),
   cancelScan: vi.fn(),
   removeScan: vi.fn(),
   claimOrGetAgentOperation: vi.fn(),
@@ -35,6 +50,31 @@ vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
   setRequestIdResolver: vi.fn(),
   logger: { error: vi.fn() },
+}))
+const delegatedScanAccessMock = vi.fn()
+vi.mock("../../../../lib/delegated-target-read-scope", () => ({
+  delegatedReadPrincipal: (session: {
+    userId?: string
+    oauth?: {
+      connectionId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+    }
+  }) =>
+    session.oauth?.connectionId
+      ? {
+          workspaceId: "ws-1",
+          userId: session.userId ?? "user-1",
+          memberId: "member-1",
+          memberRole: "OWNER",
+          memberUpdatedAt: new Date("2026-11-05T10:00:00Z"),
+          connectionId: session.oauth.connectionId,
+          authorizationVersion: 2,
+          allTargets: session.oauth.allTargets,
+          allowedTargetIds: session.oauth.allowedTargetIds ?? [],
+        }
+      : null,
+  delegatedScanAccess: (...args: unknown[]) => delegatedScanAccessMock(...args),
 }))
 
 import { DELETE, GET, POST } from "./route"
@@ -85,6 +125,11 @@ const readOnlySession = {
 describe("/api/scans/[id] workspace boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delegatedScanAccessMock.mockResolvedValue({
+      scanId: "scan-1",
+      status: "COMPLETED",
+      statusOnly: false,
+    })
     vi.mocked(assertOAuthDelegatedScope).mockImplementation((session, targetId) => {
       const connection = session.oauth
       if (
@@ -120,8 +165,51 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(response.status).toBe(200)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:view")
     expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
+    expect((await response.json()).data.eventsCursorApplied).toBeNull()
     // No `eventsAfter` param = no cursor: the full event window is returned.
     expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1", { eventsAfter: undefined })
+  })
+
+  it("returns only scan status and id for a delegated deleted target", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: allTargetsSession } as never)
+    delegatedScanAccessMock.mockResolvedValueOnce({
+      scanId: "scan-1",
+      status: "COMPLETED",
+      statusOnly: true,
+    })
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      success: true,
+      data: { id: "scan-1", status: "COMPLETED" },
+    })
+    expect(getScanWithEvents).not.toHaveBeenCalled()
+  })
+
+  it("withholds the scan id for an unproven legacy delegated record", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: allTargetsSession } as never)
+    delegatedScanAccessMock.mockResolvedValueOnce({
+      scanId: null,
+      status: "COMPLETED",
+      statusOnly: true,
+    })
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      success: true,
+      data: { status: "COMPLETED" },
+    })
+    expect(getScanWithEvents).not.toHaveBeenCalled()
   })
 
   it("denies a target-a connection reading a scan persisted on target-b", async () => {
@@ -435,7 +523,11 @@ describe("/api/scans/[id] workspace boundary", () => {
   })
 
   it("passes a well-formed eventsAfter cursor through to the service", async () => {
-    vi.mocked(getScanWithEvents).mockResolvedValue({ id: "scan-1", workspaceId: "ws-1" } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      eventsCursorApplied: "event-42",
+    } as never)
 
     const response = await GET(
       new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1&eventsAfter=event-42"),
@@ -443,6 +535,7 @@ describe("/api/scans/[id] workspace boundary", () => {
     )
 
     expect(response.status).toBe(200)
+    expect((await response.json()).data.eventsCursorApplied).toBe("event-42")
     expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1", { eventsAfter: "event-42" })
   })
 

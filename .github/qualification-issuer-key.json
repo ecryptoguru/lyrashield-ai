@@ -1,0 +1,6 @@
+{
+  "clientId": "26606e0a-ea0a-4657-bef5-a5cef18147fb",
+  "tenantId": "06f052f9-f03f-46c4-8e81-4c3d46871e8b",
+  "keyId": "https://lyrashieldqualb2f8f58b.vault.azure.net/keys/runtime-qualification/04fcf77a4e4e47629eae1de963b8560f",
+  "algorithm": "RS256"
+}

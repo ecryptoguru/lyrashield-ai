@@ -153,6 +153,7 @@ function buildTriageCacheDescriptor(params: {
     engineRevision: env.LYRASHIELD_ENGINE_REVISION ?? "",
     providerFingerprint: env.LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT ?? "",
     modelSettings: {
+      mainApiMode: env.LLM_API_MODE ?? "auto",
       modelRoute,
       reasoningEffort: "medium",
       promptCachePolicy: "off",

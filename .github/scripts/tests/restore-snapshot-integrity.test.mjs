@@ -1,5 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { createInterface } from "node:readline"
+import { Readable } from "node:stream"
 import { copySnapshot, verifySnapshot } from "../restore-snapshot-integrity.mjs"
 const sha = "a".repeat(64)
 const sql = (rows) => [
@@ -10,6 +12,16 @@ const sql = (rows) => [
   'COPY public."Scan" (id) FROM stdin;',
   "\\.",
 ]
+test("snapshot captures the first COPY block from an immediately available stream", async () => {
+  async function* input() {
+    yield sql(["row"]).join("\n") + "\n"
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  const lines = createInterface({ input: Readable.from(input()) })
+  const snapshot = await copySnapshot(lines, sha)
+  assert.equal(snapshot.tables['public."Workspace"'].count, 1)
+  assert.equal(snapshot.tables['public."Scan"'].count, 0)
+})
 test("private snapshot binds exact dump and compares rows including duplicates without row-order assumptions", async () => {
   const expected = await copySnapshot(sql(["a\tprivate\\nrow", "b\tother", "b\tother"]), sha)
   const actual = await copySnapshot(sql(["b\tother", "a\tprivate\\nrow", "b\tother"]), sha)
@@ -37,4 +49,8 @@ test("snapshot fails closed on malformed, duplicate, missing or truncated COPY b
   ])
     await assert.rejects(copySnapshot(lines, sha))
   await assert.rejects(copySnapshot(sql([]), "invalid"))
+})
+
+test("oversized COPY rows retain the fail-closed limit", async () => {
+  await assert.rejects(copySnapshot(sql(["x".repeat(16 * 1024 * 1024 + 1)]), sha), /row-size-limit/)
 })

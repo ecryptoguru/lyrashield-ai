@@ -107,7 +107,11 @@ export default async function WorkspaceSettingsPage() {
       </Card>
 
       <section id="api-keys" className="scroll-mt-24" aria-label="Workspace API keys">
-        <ApiKeysSection workspaceId={workspaceId} canManage={canManageApiKeys} />
+        <ApiKeysSection
+          key={session.userId}
+          workspaceId={workspaceId}
+          canManage={canManageApiKeys}
+        />
       </section>
 
       <section

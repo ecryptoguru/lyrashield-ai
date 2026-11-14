@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto"
 import {
   advisoryCvssSchema,
+  httpExchangeOutcomeV12Schema,
+  engineVulnerabilitySchema,
   findingRevisionSchema,
   fixVerificationSchema,
   MAX_EVIDENCE_FIELD_CHARS,
@@ -10,6 +13,9 @@ import { HTTP_EXCHANGE_ID_PATTERN, recordIngestionIssue } from "./output-parser-
 import type {
   AdvisoryCvss,
   EngineVulnerability,
+  EngineRunRecord,
+  ParsedHttpExchangeExport,
+  HttpExchangeBinding,
   FindingRevision,
   FixVerificationAttestation,
 } from "./output-parser-types"
@@ -28,6 +34,119 @@ import type {
 export interface EvidenceIngestionContext {
   issues?: string[]
   httpExchangeIds?: Set<string> | null
+  /** Undefined: legacy contract; null: 1.2 manifest/run binding failed. */
+  httpExchangeBinding?: HttpExchangeBinding | null
+  httpExchangeRequestHosts?: Map<string, string>
+  httpExchangeExcludedIds?: Set<string>
+}
+
+// Use the writer's independent list and revision bounds before a lenient finding
+// projection can discard malformed pending claims that contradict a capture.
+const captureOwnerSchema = engineVulnerabilitySchema.pick({
+  id: true,
+  evidence_contract_version: true,
+  http_exchange_ids: true,
+  pending_http_exchange_ids: true,
+  update_history: true,
+})
+
+/** 1.2 refs require an exact manifest and run binding before per-finding checks. */
+export function bindHttpExchangeEvidence(
+  run: EngineRunRecord | null,
+  runJsonRaw: string,
+  vulnerabilitiesRaw: string,
+  httpExchangesRaw: string | null | undefined,
+  exported: ParsedHttpExchangeExport | null
+): HttpExchangeBinding | null | undefined {
+  let record
+  try {
+    record = JSON.parse(runJsonRaw)
+  } catch {
+    return undefined
+  }
+  if (record?.schema_version !== "1.2") return undefined
+  const binding = exported?.binding
+  // Validate the raw outcome before any bounded legacy projection can discard
+  // negative evidence. A repaired/truncated exclusion list is not authoritative.
+  const outcome = httpExchangeOutcomeV12Schema.safeParse(record.evidence_export)
+  if (
+    record.receipt_persisted !== true ||
+    !run ||
+    !binding ||
+    exported?.schemaVersion !== "lyrashield-http-exchanges/1.0" ||
+    !outcome.success ||
+    outcome.data.exchanges !== exported.exchangeCount ||
+    outcome.data.sha256 !== record.result_manifest?.artifacts?.["http_exchanges.json"]?.sha256 ||
+    !run.run_id ||
+    !run.run_name ||
+    !Number.isInteger(run.report_artifacts_revision) ||
+    binding.run_id !== run.run_id ||
+    binding.run_name !== run.run_name ||
+    binding.report_artifacts_revision !== run.report_artifacts_revision ||
+    typeof httpExchangesRaw !== "string" ||
+    record.result_manifest?.schema_version !== 1
+  )
+    return null
+  for (const [path, raw] of [
+    ["vulnerabilities.json", vulnerabilitiesRaw],
+    ["http_exchanges.json", httpExchangesRaw],
+  ] as const) {
+    const entry = record.result_manifest?.artifacts?.[path]
+    if (
+      entry?.path !== path ||
+      entry?.bytes !== Buffer.byteLength(raw, "utf8") ||
+      entry?.sha256 !== createHash("sha256").update(raw, "utf8").digest("hex")
+    )
+      return null
+  }
+  if (!binding.findings || !binding.finding_revisions) return null
+  let owners: unknown
+  try {
+    owners = JSON.parse(vulnerabilitiesRaw)
+  } catch {
+    return null
+  }
+  if (!Array.isArray(owners)) return null
+  const revisions = binding.finding_revisions
+  const declared = new Map(Object.entries(binding.findings))
+  if (Object.keys(revisions).length !== declared.size) return null
+  const matched = new Set<string>()
+  const indexedIds = new Set([
+    ...exported.knownIds,
+    ...exported.excludedIds,
+    ...(outcome.data.missing_request_ids ?? []),
+    ...(outcome.data.capacity_omitted_request_ids ?? []),
+  ])
+  for (const rawOwner of owners) {
+    const ids = declared.get(rawOwner?.id)
+    // Owners without a current claim have no entry in the writer's binding.
+    if (
+      !ids &&
+      rawOwner?.http_exchange_ids === undefined &&
+      rawOwner?.pending_http_exchange_ids === undefined
+    )
+      continue
+    const parsed = captureOwnerSchema.safeParse(rawOwner)
+    if (!parsed.success) return null
+    const owner = parsed.data
+    // select_http_export_ids gives captures first use of the shared export capacity.
+    const selected = [
+      ...new Set([...(owner.http_exchange_ids ?? []), ...(owner.pending_http_exchange_ids ?? [])]),
+    ].slice(0, MAX_HTTP_EXCHANGE_IDS)
+    if (!ids && !selected.length) continue
+    if (
+      !ids ||
+      !selected.length ||
+      owner.evidence_contract_version !== "1.2" ||
+      matched.has(owner.id) ||
+      revisions[owner.id] !== (owner.update_history?.length ?? 0) ||
+      ids.length !== selected.length ||
+      selected.some((id) => !ids.includes(id) || !indexedIds.has(id))
+    )
+      return null
+    matched.add(owner.id)
+  }
+  return matched.size === declared.size ? binding : null
 }
 
 export function evidenceString(
@@ -122,10 +241,30 @@ export function parseFixVerification(
   return { ...parsed.data, kind: parsed.data.kind ?? "engine_attestation" }
 }
 
-export function parseHttpExchangeIds(
+export function parseFindingExchangeRefs(
+  v: Record<string, unknown>,
+  id: string,
+  ctx?: EvidenceIngestionContext
+) {
+  const captured = parseHttpExchangeIds(v.http_exchange_ids, id, ctx, {
+    target: typeof v.target === "string" ? v.target : undefined,
+    endpoint: typeof v.endpoint === "string" ? v.endpoint : undefined,
+    evidence_contract_version:
+      typeof v.evidence_contract_version === "string" ? v.evidence_contract_version : undefined,
+  })
+  const pending = parsePendingHttpExchangeIds(v.pending_http_exchange_ids, id, ctx?.issues)
+  return {
+    ...(captured.ids ? { http_exchange_ids: captured.ids } : {}),
+    ...(captured.refsDropped ? { http_exchange_refs_dropped: true as const } : {}),
+    ...(pending ? { pending_http_exchange_ids: pending } : {}),
+  }
+}
+
+function parseHttpExchangeIds(
   value: unknown,
   findingId: string,
-  ctx?: EvidenceIngestionContext
+  ctx?: EvidenceIngestionContext,
+  finding?: Pick<EngineVulnerability, "target" | "endpoint" | "evidence_contract_version">
 ): { ids?: string[]; refsDropped?: boolean } {
   if (value === undefined) return {}
   if (!Array.isArray(value)) {
@@ -158,6 +297,62 @@ export function parseHttpExchangeIds(
     )
     return { refsDropped: true }
   }
+  if (finding?.evidence_contract_version === "1.2" && ctx?.httpExchangeBinding === undefined) {
+    recordIngestionIssue(
+      ctx?.issues,
+      `finding ${findingId}: http_exchange_ids require a valid 1.2 run evidence context — field dropped`
+    )
+    return { refsDropped: true }
+  }
+  if (ctx?.httpExchangeBinding !== undefined) {
+    const binding = ctx.httpExchangeBinding
+    const findingIds = binding?.findings?.[findingId]
+    let expectedHost: string | undefined
+    for (const candidate of [finding?.target, finding?.endpoint]) {
+      if (!candidate) continue
+      try {
+        const host = new URL(candidate).hostname.replace(/^\[|\]$/g, "")
+        if (host) {
+          expectedHost = host.toLowerCase().replace(/\.+$/, "")
+          break
+        }
+      } catch {
+        /* A relative endpoint cannot establish target ownership. */
+      }
+    }
+    if (
+      !binding ||
+      !Array.isArray(findingIds) ||
+      !expectedHost ||
+      !(ctx.httpExchangeIds instanceof Set)
+    ) {
+      recordIngestionIssue(
+        ctx.issues,
+        `finding ${findingId}: http_exchange_ids lack a matching run/manifest/finding revision binding — field dropped`
+      )
+      return { refsDropped: true }
+    }
+    // A partial export can qualify one capture without qualifying another.
+    // Keep independently eligible refs; never repair the separate pending list.
+    const eligible = distinct.filter(
+      (id) =>
+        findingIds.includes(id) &&
+        ctx.httpExchangeIds?.has(id) &&
+        !ctx.httpExchangeExcludedIds?.has(id) &&
+        ctx.httpExchangeRequestHosts?.get(id) === expectedHost
+    )
+    const refsDropped = malformed || eligible.length !== distinct.length
+    if (refsDropped) {
+      recordIngestionIssue(
+        ctx.issues,
+        `finding ${findingId}: ineligible http_exchange_ids omitted from partial evidence`
+      )
+    }
+    return {
+      ...(eligible.length ? { ids: eligible } : {}),
+      ...(refsDropped ? { refsDropped: true } : {}),
+    }
+  }
   // No exchange-export context: carry the refs as engine-asserted evidence.
   // They are claims, not verification receipts.
   if (ctx?.httpExchangeIds === undefined) return { ids: distinct }
@@ -180,6 +375,45 @@ export function parseHttpExchangeIds(
     return { refsDropped: true }
   }
   return { ids: distinct }
+}
+
+/** Pending claims are shape-checked only, independently of the exported index. */
+export function parsePendingHttpExchangeIds(
+  value: unknown,
+  findingId: string,
+  issues?: string[]
+): string[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: pending_http_exchange_ids is not a list — field dropped`
+    )
+    return undefined
+  }
+  const distinct = new Set<string>()
+  let malformed = false
+  for (const item of value) {
+    if (typeof item !== "string" || !HTTP_EXCHANGE_ID_PATTERN.test(item)) {
+      malformed = true
+      continue
+    }
+    distinct.add(item)
+    if (distinct.size > MAX_HTTP_EXCHANGE_IDS) {
+      recordIngestionIssue(
+        issues,
+        `finding ${findingId}: pending_http_exchange_ids exceeds ${MAX_HTTP_EXCHANGE_IDS} distinct ids — field dropped`
+      )
+      return undefined
+    }
+  }
+  if (malformed) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: pending_http_exchange_ids contained non-numeric or oversized ids — entries dropped`
+    )
+  }
+  return distinct.size ? [...distinct] : undefined
 }
 
 export function parseEvidenceWarnings(

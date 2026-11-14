@@ -62,6 +62,7 @@ export {
   mapScanStatusToTaskStatus,
   operationMatchesPrincipal,
   resolveTaskView,
+  resolveOperationStatusTaskView,
   scanRowToCallToolResult,
   storedResultToCallToolResult,
   buildTask,

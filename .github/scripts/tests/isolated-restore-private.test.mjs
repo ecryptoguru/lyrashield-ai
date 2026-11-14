@@ -5,6 +5,7 @@ import {
   mkdirSync,
   writeFileSync,
   readFileSync,
+  readdirSync,
   existsSync,
   rmSync,
   chmodSync,
@@ -110,6 +111,7 @@ for (const scenario of [
   "ETag tamper",
   "fetch failure",
   "decrypt failure",
+  "randomness failure",
   "restore failure",
 ]) {
   test(`actual exact-object restore block: ${scenario}`, (t) => {
@@ -133,6 +135,14 @@ for (const scenario of [
     if (scenario === "ETag tamper") env.BACKUP_ETAG = '"def456"'
     if (scenario === "fetch failure") env.MOCK_FETCH_FAIL = "true"
     if (scenario === "decrypt failure") env.MOCK_DECRYPT_FAIL = "true"
+    if (scenario === "randomness failure")
+      writeFileSync(
+        join(f.bin, "openssl"),
+        "#!/bin/bash\necho PRIVATE_RANDOM_ERROR >&2\nexit 51\n",
+        {
+          mode: 0o755,
+        }
+      )
     if (scenario === "restore failure") env.MOCK_RESTORE_FAIL = "true"
     const result = f.run(
       runBlock("Restore the exact produced encrypted backup into PostgreSQL 17"),
@@ -273,6 +283,9 @@ for (const kind of [
       writeFileSync(record, "987654 1234567\n", {
         mode: kind === "writable identity" ? 0o666 : 0o600,
       })
+    // Explicit chmod bypasses an inherited restrictive umask; mode on create
+    // alone can silently turn this unsafe fixture back into 0600.
+    if (kind === "writable identity") chmodSync(record, 0o666)
     const mock =
       kind === "foreign session"
         ? processMocks("1234567", "987654", "123456")
@@ -422,4 +435,68 @@ test("first isolated container removal deletes anonymous restored-data volumes",
   const cleanupHelper = readFileSync(helper, "utf8")
   assert.match(cleanupHelper, /docker rm -fv "lyrashield-isolated-backup-/)
   assert.match(cleanupHelper, /docker rm -fv lyrashield-restore-postgres lyrashield-restore-redis/)
+})
+
+for (const scenario of [
+  ["valid", "restore/snapshot/complete\n"],
+  ["binding", "restore/snapshot/archive-binding/failed\n"],
+  ["archive-export", "restore/snapshot/archive-export/failed\n"],
+  ["restored-export", "restore/snapshot/restored-export/failed\n"],
+  [
+    "archive-capture",
+    "restore/snapshot/reason/invalid-copy-header\nrestore/snapshot/archive-capture/failed\n",
+  ],
+  [
+    "restored-capture",
+    "restore/snapshot/reason/invalid-copy-header\nrestore/snapshot/restored-capture/failed\n",
+  ],
+  [
+    "compare",
+    "restore/snapshot/reason/snapshot-content-mismatch\nrestore/snapshot/compare/failed\n",
+  ],
+]) {
+  test(`actual snapshot workflow block has private output and fixed diagnostics: ${scenario[0]}`, (t) => {
+    const f = fixture(t)
+    const plain = "SYNTHETIC_PRIVATE_DUMP"
+    writeFileSync(join(f.directory, "backup.dump"), plain)
+    writeFileSync(
+      join(f.bin, "docker"),
+      `#!${process.execPath}
+const args=process.argv.slice(2), phase=process.env.SNAPSHOT_FAILURE;
+const archive=args.includes('pg_restore');
+console.error('PRIVATE_ROW_CONNECTION_ERROR');
+if((archive&&phase==='archive-export')||(!archive&&phase==='restored-export'))process.exit(44);
+if((archive&&phase==='archive-capture')||(!archive&&phase==='restored-capture')) {
+  console.log('COPY invalid PRIVATE_ROW;');
+} else {
+  console.log('COPY public."PrivateTable" (id) FROM stdin;');
+  console.log(!archive&&phase==='compare'?'PRIVATE_CHANGED_ROW':'PRIVATE_ROW');
+  console.log('\\\\.');
+}
+`,
+      { mode: 0o755 }
+    )
+    const result = f.run(runBlock("Verify private row integrity against the same dump snapshot"), {
+      ISOLATED_RESTORE_TEMP: f.directory,
+      BACKUP_DUMP_SHA256: fixtureDigest(scenario[0] === "binding" ? "wrong archive" : plain),
+      SNAPSHOT_FAILURE: scenario[0],
+    })
+    assert.equal(result.status === 0, scenario[0] === "valid")
+    assert.equal(result.stdout, scenario[1])
+    assert.equal(result.stderr, "")
+    assert.doesNotMatch(result.stdout, /PRIVATE|PrivateTable|postgresql|SYNTHETIC/)
+    assert.equal(existsSync(join(f.directory, "private-operation.log")), true)
+    assert.deepEqual(
+      readdirSync(f.directory).filter((name) => name.startsWith("snapshot-integrity.")),
+      []
+    )
+  })
+}
+
+test("CI explicitly enables the owned restore round trip", () => {
+  const ci = readFileSync(new URL("../../workflows/ci.yml", import.meta.url), "utf8")
+  assert.match(
+    ci,
+    /if: needs\.changes\.outputs\.ops-tests == 'true'\n[^\n]*\n\s+run: RESTORE_SNAPSHOT_RUNTIME_TEST=1 node --test \.github\/scripts\/tests\/restore-snapshot-postgres\.runtime\.test\.mjs/
+  )
 })

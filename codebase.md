@@ -124,7 +124,7 @@ POST /api/scans
   → score, notifications, terminal state
 ```
 
-Repository scans invoke the controlled engine. Under `url-scan/3.0.0`, URL/API Safe/Quick stay deterministic-only; Standard and Deep/Custom select engine-backed profiles through a verified-domain, scan-scoped relay and run deterministic checks alongside.
+Repository scans invoke the controlled engine. URL/API launch supports deterministic Safe/Quick only; the engine-backed Standard/Deep/Custom profiles are removed from the launch offering (see `docs/Phase2.md`) and require a future explicit product decision. Historical engine-backed profile code remains a source contract, not an availability claim.
 Before execution, the worker binds every authority-bearing BullMQ field (`workspaceId`,
 `targetId`, `goal`, `mode`, and `policyId`) back to the stored scan; schema-valid queue
 data cannot upgrade routing, budget, or policy.
@@ -140,7 +140,7 @@ The v26 dependency capability registry is `packages/types/src/dependency-capabil
 - Fetch time resolves, validates, pins, and revalidates each redirect.
 - Production URL fetching uses authenticated `packages/egress-proxy`.
 - Profiles bound documents, depth, bytes, concurrency, methods, origin probes, and wall time.
-- API Standard/Deep require validated public HTTPS OpenAPI input.
+- API Standard/Deep (source contract only; removed from the launch offering) require validated public HTTPS OpenAPI input.
 - Engine-backed tiers require current domain verification, sponsor entitlement, and a signed grant bound to the scan, workspace, target, host, methods, and request budgets.
 - The remote relay supports explicit absolute-form HTTP/HTTPS requests and rejects opaque CONNECT tunnels. The engine sandbox-local TLS adapter uses the installed sandbox CA to convert ordinary HTTPS client traffic into inspectable relay requests. Composed local curl and Chromium navigation/fetch tests passed allowed requests and denied path/method/redirect requests without TLS bypass; invalid upstream certificates were rejected. This verifies bounded local transport, while exact-image production deployment and a paid URL engine scan remain unverified.
 
@@ -222,7 +222,7 @@ Alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved), `CAN
 
 ### Engine boundary
 
-Cloud and Desktop release workflows pin engine `3001517530300ca5f602536bfadcbd3c95ad3039`, including the request-bounded model-stream idle guard for Lyra's custom provider, four-agent concurrency for Quick scans, method/status-aware relay framing with audited dependency compatibility, the v23 remediation: runtime deadlines covering preprocessing/acquisition, bounded stream-timeout salvage of partial evidence, conservative abandoned-request spend, strict TUI types, source-acquisition decomposition and bounded Docker image acquisition, plus PR #199 artifact identity/revision recovery, usage accounting, sandbox identity and isolation, telemetry redaction, and viewer/TUI recovery. Product branch protection requires the `Pinned Engine / Worker Contract` job alongside security and lint/typecheck/test/build. Engine CI separately tests its exact `.lyrashield-worker-pin` consumer; refresh that reverse pin after the reviewed product merge. Source compatibility, production promotion and signed Desktop publication remain separate gates. Desktop launch work remains deferred.
+Candidate Cloud, recovery and Desktop release workflows pin merged engine `0793bcb9644a1985165963375586124c993c020a`, including engine PR #225 trusted normalization descriptors, #226 frozen evaluation-v3 corpus/scorer, #227–#232 diagnostics and CI safeguards, #233–#234 independent inventory verification, #235 scan-bound gateway identity, #236 nested Python inventory coverage, #237 signed attach-only controller sandbox execution, and #238 OpenTelemetry 1.45.2/0.66b2 for CVE-2026-126360 with the reverse worker-consumer pin. This revision retains the established model, relay, bounded-runtime, acquisition and immutable-evidence contracts. Evaluation profiles remain unmeasured and public benchmark claims disabled. The last verified deployed engine is `3001517530300ca5f602536bfadcbd3c95ad3039`. Production promotion remains held pending protected image qualification and isolated runtime authority. The cold native rehearsal does not establish that authority; retained-worker and high-availability lanes remain held. Product protection requires `Pinned Engine / Worker Contract` alongside security and lint/typecheck/test/build. Engine CI separately tests its exact `.lyrashield-worker-pin` consumer; update that reverse pin only after final merged-product compatibility verification. Source compatibility, production qualification and signed Desktop publication remain separate gates. Desktop launch remains deferred.
 
 - Product code lives in engine `lyrashield/**` and `lyrashield_adapter/**`; upstream `strix/**` retains only hard-gated generic seams.
 - Stable upstream releases enter through reviewed PRs; never force-push or auto-resolve conflicts.
@@ -241,7 +241,7 @@ Cloud and Desktop release workflows pin engine `3001517530300ca5f602536bfadcbd3c
 
 Authorities:
 
-- `apps/worker/src/engine/runner.ts`: `resolveEngineProfile()`.
+- `packages/security/src/engine-profile.ts`: `resolveEngineProfile()` (re-exported by the worker).
 - `apps/worker/src/engine/command-builder.ts`: `resolveScanBudgetUsd()`.
 - `apps/worker/src/engine/gpt6-pricing.ts`: GPT-6 rate card.
 
@@ -549,7 +549,17 @@ CI runs code quality, app/core/operations and selected marketing/motion work ind
 - [`prepare-verified-backup-connection.mjs`](./.github/scripts/prepare-verified-backup-connection.mjs) validates one explicit supported TLS mode and applies the existing strict backup endpoint, principal, scope, compatibility and query checks. It strengthens legacy `require` to `verify-full` before `pg_dump`, supplies fixed `sslrootcert=system` and `gssencmode=disable`, and removes only the already-validated Prisma schema option from the libpq URL. User-supplied trust paths, GSS/host overrides, duplicate TLS keys and weaker/missing modes remain rejected. A certificate or hostname failure stops the backup before encryption/upload/output. The producer emits a logical identity digest only after successful dump and upload; the proof writer recomputes the identity and requires the same digest. The shared runtime/maintenance parser and stored credentials are unchanged.
 - [`production-backup.yml`](./.github/workflows/production-backup.yml) creates scheduled PostgreSQL custom-format dumps of `public` and `app`, encrypts them with AES-256 GPG, uploads to R2, and verifies the plaintext dump checksum from object metadata. Retention is 30 days and runs only after a successful upload. The weekly isolated restore drill verifies checksum, schema/migrations, the audit chain, and application readiness against disposable PostgreSQL/Redis; a manual dispatch can also request the drill. A green isolated restore is recovery evidence, not a production restore or release proof; check the exact workflow run when relying on a specific backup.
 
-### Current release evidence — 2026-10-27
+### Current release evidence — 2026-11-02 IST
+
+[Production release 41438792830](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41438792830) deployed `d488862bd269c07194afe87a918ca413e4a62217` after [exact-head CI 41436905869](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41436905869). November 2 independent Azure readback found app `0000513`, scanner `0000487` and proxy `0000353` healthy at 100% traffic; app and scanner use web digest `sha256:155deca0b118249ab8590d87563bf0cffe839d15809bbb56dfceb4799843fc76`, while proxy uses `sha256:54f29c5b5502e03a0a3842ef454798b2565248b27ce0bc9c7ca8232a2bce3172`. A subsequent VM read found the worker service active and container healthy on `sha256:c84fe0c97554bd4003f005f86d0041b29c8cbf2cefcd0ebe038956bbf05293c0`, with matching product and engine `3001517530300ca5f602536bfadcbd3c95ad3039`. Public app, scanner and scan-readiness probes returned 200. Marketing was deployed with source unchanged from `0d8fc0f6c126271aa966ca895608cec2460f8cb4`, preserving landing motion. The [PRD release addendum](./PRD.md#nonbilling-production-release--2026-11-02-ist) and [restore runbook](./docs/operations.md#owner-approved-manual-isolated-restore) retain unresolved acceptance and recovery limits.
+
+### Historical release evidence — 2026-10-31 IST
+
+Product `6739563df7dad585cef1be14cedcb978bc0a5219` passed [production release 41117355986](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41117355986). Retained independent readback records receipt `COMPLETE`, four expected migration checksums, forced RLS on both new tables, app/scanner 100% traffic on web digest `sha256:c73a978d3c9de1efa93b87e0e8524e775fa54cc1b627b8137a043541b7ce385b`, healthy worker `sha256:33a769654ba9c68116d07b4986da673d95d38ed58c8be8369cdc33895d78e723`, unchanged engine `3001517530300ca5f602536bfadcbd3c95ad3039` and admission stop absent. This documentation pass did not repeat privileged VM/database readback.
+
+Fresh public app/scanner `/api/ready` and app `/api/ready/scans` returned HTTP 200 at `2026-10-30T21:39:21Z`–`21:39:27Z`. Initial urllib app probes returned 403; curl probes succeeded. The previously failed [readiness workflow 41110605407](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41110605407) remains a failed recovery-window receipt, not a later successful workflow run. At that checkpoint, marketing was at `0d8fc0f6c126271aa966ca895608cec2460f8cb4`; preserved landing motion and original specs matched their pre-v26 baseline. Recorded desktop and 390×844 smoke is not physical-device or screen-reader proof. See [PRD v26 addendum](./PRD.md#v26-production-addendum--2026-10-31-ist) for the first failed pre-migration release/owned-stop abort, retained evidence source, original-ID dispositions and unresolved acceptance limits. No financial conclusion or new loading/model policy is established.
+
+### Historical release evidence — 2026-10-27
 
 - Product `2d4e168da544306bf6cc9958a55f14bbfcb717e3` passed [production release 40538483543](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40538483543). Provider readback showed app `0000507`, scanner `0000481` and egress proxy `0000347` each at 100% traffic. Scan readiness returned HTTP 200.
 - Independent VM readback confirmed healthy worker `sha256:690bac6ed42d1c450af94055e270d5f21baa937771ba828e7e4871e501067fbe`, matching product and engine `3001517530300ca5f602536bfadcbd3c95ad3039` provenance and 23 PHP/Composer and coverage source hashes.
@@ -644,7 +654,8 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 | `apps/worker/src/jobs/run-scan.job.ts`                  | Scan orchestration entry; delegates to `run-scan/` phases                           |
 | `apps/worker/src/jobs/run-scan/`                        | Scan lifecycle phases (authority, preparation, execution, settlement, finalization) |
 | `apps/worker/src/engine/runner.ts`                      | Bounded/cancellable engine subprocess                                               |
-| `apps/worker/src/engine/command-builder.ts`             | Engine arguments and budget policy                                                  |
+| `packages/security/src/engine-command.ts`               | Shared trusted engine arguments                                                     |
+| `apps/worker/src/engine/command-builder.ts`             | Worker command environment and budget policy                                        |
 | `apps/worker/src/engine/gpt6-pricing.ts`                | GPT-6 rate cards and per-request cache usage accounting                             |
 | `apps/worker/src/engine/scanner-orchestrator.ts`        | Deterministic and engine result merge                                               |
 | `apps/worker/src/engine/result-integrity.ts`            | Manifest/candidate/receipt boundary                                                 |
@@ -664,6 +675,8 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 | `ops/worker/*`                                          | Worker VM services, secrets, egress, promotion, verification                        |
 | `.github/workflows/ci.yml`                              | Main release gate                                                                   |
 | `.github/workflows/deploy-azure.yml`                    | Migration-first Azure deployment                                                    |
+
+CI's app, marketing and Desktop browser sites use `.github/scripts/ci-browser.mjs` to run the unchanged selected Playwright suites with local Chromium. Font assets come from the digest-pinned official Playwright 1.62.1 Jammy amd64 image: a bounded regular-file archive includes a SHA-256 manifest, and extraction rejects traversal, duplicate, link, sparse and special entries. A private Fontconfig overlay retains host rules and uses verified image fonts and a private cache; it does not install apt packages or copy image configuration or libraries. Startup independently verifies the locked headless shell used by all selected CI suites, every font asset, required font families, native libraries and native WebMCP, including a short local trace cleanup probe. The image container is nonroot, read-only, capability-free and network-disabled, with no host mounts or credentials; it extracts fonts and provides only the bounded synthetic FFmpeg fallback when host `lavfi` and `libx264` fail validation. Every browser job removes its owned container, font overlay and temporary FFmpeg wrapper, including failed startup. Required check routing, auth-mail privacy guards and marketing failure diagnostics remain in force.
 
 ## 13. Landmines
 

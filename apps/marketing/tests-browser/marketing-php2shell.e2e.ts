@@ -59,7 +59,9 @@ test("patched thresholds retain session uncertainty and edits clear stale result
   await expect(page.getByLabel("Exact PHP version", { exact: false })).toHaveValue("")
 })
 
-test("assessment download carries inputs, rules and unverified state", async ({ page }) => {
+test("assessment download carries inputs, rules and unverified state", async ({
+  page,
+}, testInfo) => {
   await page.goto("/tools/php2shell-checker")
   await page.getByRole("button", { name: "Load example", exact: true }).click()
   await page.getByRole("button", { name: "Check PHP2Shell locally" }).click()
@@ -67,9 +69,10 @@ test("assessment download carries inputs, rules and unverified state", async ({ 
   await page.getByRole("button", { name: "Download assessment" }).click()
   const download = await pending
   expect(download.suggestedFilename()).toBe("php2shell-assessment.json")
-  const path = await download.path()
+  const path = testInfo.outputPath("php2shell-assessment.json")
+  await download.saveAs(path)
   expect(path).toBeTruthy()
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Playwright supplies the temporary path of this synthetic download.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Playwright supplies the test-owned output path of this synthetic download.
   const report = JSON.parse(await readFile(path!, "utf8"))
   expect(report.input.version).toBe("8.4.26")
   expect(report.verified).toBe(false)

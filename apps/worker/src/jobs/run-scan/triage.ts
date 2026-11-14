@@ -1,3 +1,5 @@
+import { EngineProcessStopUnconfirmedError } from "../../engine/runner-process"
+import { ColdDatabaseEpochError } from "../../cold-database-epoch"
 import { resolveAccountBilling } from "@lyrashield/billing"
 import { env } from "@lyrashield/config"
 import { addScanEvent, runWithAccountContext } from "@lyrashield/db"
@@ -171,7 +173,12 @@ async function attemptRepoTriageOverlay(args: {
         : triageResult.timedOut
           ? "TRIAGE_TIMEOUT"
           : "TRIAGE_ARTIFACT_UNAVAILABLE"
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof ColdDatabaseEpochError ||
+      error instanceof EngineProcessStopUnconfirmedError
+    )
+      throw error
     // An additive overlay can never fail the deterministic scan.
     triageTerminalReason = "TRIAGE_COMMAND_FAILED"
   }

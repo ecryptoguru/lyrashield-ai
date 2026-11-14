@@ -1,10 +1,18 @@
-import { listEvidenceFindings, validateFindingScope } from "@lyrashield/db"
-import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
+import {
+  listEvidenceFindings,
+  validateFindingScope,
+  withDelegatedReadAuthority,
+} from "@lyrashield/db"
+import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiPaginated, parsePaginationParams } from "../../../../lib/api-response"
+import {
+  delegatedReadPrincipal,
+  resolveDelegatedTargetReadScope,
+} from "../../../../lib/delegated-target-read-scope"
 
 const EvidenceQuerySchema = z.object({
   workspaceId: z.string().min(1),
@@ -27,30 +35,53 @@ export async function GET(request: Request) {
     }
 
     const { workspaceId, targetId, observedInScanId } = parsed.data
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
-    const readScope = resolveOAuthReadScope(session, targetId)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const principal = delegatedReadPrincipal(session, workspace)
+    const load = async (
+      client?: Parameters<typeof listEvidenceFindings>[1],
+      authority?: { targetId?: string; targetIds?: string[]; allowedProfiles: string[] }
+    ) => {
+      const readScope = authority
+        ? {
+            ...(authority.targetId ? { targetId: authority.targetId } : {}),
+            ...(authority.targetIds !== undefined ? { targetIds: authority.targetIds } : {}),
+            allowedProfiles: authority.allowedProfiles,
+            requireActiveTarget: true,
+          }
+        : await resolveDelegatedTargetReadScope(session, workspace, targetId)
+      const scopeInput = {
+        workspaceId,
+        ...readScope,
+        ...(observedInScanId ? { observedInScanId } : {}),
+      }
+      const scope = client
+        ? await validateFindingScope(scopeInput, client)
+        : await validateFindingScope(scopeInput)
+      if (!scope.available) return null
 
-    const scope = await validateFindingScope({
-      workspaceId,
-      ...readScope,
-      ...(observedInScanId ? { observedInScanId } : {}),
-    })
-    if (!scope.available) {
+      const { cursor, limit } = parsePaginationParams(searchParams, 25)
+      const listInput = {
+        workspaceId,
+        ...readScope,
+        ...(observedInScanId ? { observedInScanId } : {}),
+        ...(cursor ? { cursor } : {}),
+        limit,
+      }
+      return client ? listEvidenceFindings(listInput, client) : listEvidenceFindings(listInput)
+    }
+    const result = principal
+      ? await withDelegatedReadAuthority(
+          { ...principal, ...(targetId ? { targetId } : {}) },
+          (tx, authority) => load(tx, authority)
+        )
+      : await load()
+    if (!result) {
       return apiError(
         "INVALID_PARAM",
         "Selected scan or target is unavailable in this workspace",
         400
       )
     }
-
-    const { cursor, limit } = parsePaginationParams(searchParams, 25)
-    const result = await listEvidenceFindings({
-      workspaceId,
-      ...readScope,
-      ...(observedInScanId ? { observedInScanId } : {}),
-      ...(cursor ? { cursor } : {}),
-      limit,
-    })
 
     return apiPaginated(result.items, result.nextCursor)
   } catch (error) {

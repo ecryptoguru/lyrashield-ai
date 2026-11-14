@@ -38,6 +38,27 @@ describe("LaunchReadinessClient triage relabel", () => {
     summary: "No completed assessment evidence is available.",
   }
 
+  it("exposes continuation links outside the collapsed release form", () => {
+    const html = renderToStaticMarkup(
+      <LaunchReadinessClient
+        workspaceId="ws-1"
+        initialReport={inconclusive}
+        targets={[]}
+        initialTargetId=""
+        initialReleaseRef=""
+        initialReleaseCheck={null}
+        initialCheckError={null}
+        checkNeedsTarget={false}
+        nextTargetsHref="/dashboard/launch-readiness?cursor=target-5"
+        firstTargetsHref="/dashboard/launch-readiness"
+      />
+    )
+    expect(html).toContain('aria-label="Target pages"')
+    expect(html).toContain("Next targets")
+    expect(html).toContain("cursor=target-5")
+    expect(html.indexOf("Next targets")).toBeLessThan(html.indexOf("Check a specific release"))
+  })
+
   it("renders a neutral (not green) gauge with zero scans", () => {
     const html = renderToStaticMarkup(
       <LaunchReadinessClient

@@ -1,9 +1,12 @@
 import { readFileSync } from "node:fs"
+import { createElement } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
+import { ReportCard } from "./reports-views"
 
 // The screen spans its keyed route boundary, coordinator, and presentational views.
 function screenSource(): string {
-  return ["page.tsx", "reports-client.tsx", "reports-views.tsx"]
+  return ["page.tsx", "reports-client.tsx", "reports-views.tsx", "use-report-share-actions.ts"]
     .map((file) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8"))
     .join("\n")
 }
@@ -17,13 +20,26 @@ describe("report share state", () => {
   })
 
   it("uses separate inline-view and attachment download URLs", () => {
-    const source = screenSource()
-    expect(source).toContain(
-      "href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}`}"
+    const html = renderToStaticMarkup(
+      createElement(ReportCard, {
+        workspaceId: "ws-1",
+        report: {
+          id: "report-1",
+          title: "Report",
+          type: "developer",
+          status: "generated",
+          format: "html",
+          shareExpiresAt: null,
+          revokedAt: null,
+          createdAt: "2026-11-01T00:00:00.000Z",
+          scanId: null,
+        },
+        onShare: () => {},
+        onRevoke: () => {},
+      })
     )
-    expect(source).toContain(
-      "href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}&download=1`}"
-    )
+    expect(html).toContain('href="/api/reports/report-1/download?workspaceId=ws-1"')
+    expect(html).toContain('href="/api/reports/report-1/download?workspaceId=ws-1&amp;download=1"')
   })
 })
 

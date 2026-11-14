@@ -6,7 +6,12 @@ import { WebMcpReceiptProvider } from "../../apps/web/src/components/webmcp/webm
 
 // Exercises production components with explicit fixture data. No real scan is submitted.
 export function FirstScanHarness() {
-  const [destination, setDestination] = useState("")
+  const fixtureParams = new URLSearchParams(location.search)
+  const [destination, setDestination] = useState(() =>
+    fixtureParams.has("launch-review")
+      ? "/dashboard/scans?new=1&target=target-test&goal=LAUNCH_REVIEW&mode=STANDARD"
+      : ""
+  )
   useEffect(() => {
     const onNavigate = (event: Event) => setDestination((event as CustomEvent<string>).detail)
     window.addEventListener("test:navigate", onNavigate)
@@ -15,6 +20,8 @@ export function FirstScanHarness() {
   const targetId = destination.includes("new=1")
     ? new URL(destination, location.origin).searchParams.get("target")
     : null
+  const scanParams = targetId ? new URL(destination, location.origin).searchParams : null
+  const targetType = fixtureParams.get("target-type") === "API" ? "API" : "WEB_APP"
   return (
     <WebMcpReceiptProvider>
       <TooltipProvider>
@@ -26,7 +33,7 @@ export function FirstScanHarness() {
               {
                 id: targetId,
                 name: "example.com",
-                type: "WEB_APP",
+                type: targetType,
                 url: "https://example.com",
                 apiSpecUrl: null,
                 repoFullName: null,
@@ -36,6 +43,8 @@ export function FirstScanHarness() {
             initialNextCursor={null}
             initialShowCreate
             initialTargetId={targetId}
+            initialGoal={scanParams?.get("goal") ?? undefined}
+            initialMode={scanParams?.get("mode") ?? undefined}
           />
         ) : destination.startsWith("/dashboard/scans/") ? (
           <p role="status">Scan progress: {destination}</p>

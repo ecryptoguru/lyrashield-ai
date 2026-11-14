@@ -9,6 +9,7 @@ import {
 } from "./queue"
 
 import { resolveAvailableUrlReview } from "./url-review-admission"
+import { URL_PROFILE_UNSUPPORTED_MESSAGE } from "@lyrashield/types"
 
 const SCAN_WORKER_REGISTRY_KEY = "lyrashield:scan-workers"
 const runRedisTests = process.env.CI === "true"
@@ -77,24 +78,26 @@ describe.runIf(runRedisTests)("scan worker Redis scripts", () => {
       sendCommand.mockRestore()
     }
   })
-  it("shares live URL availability across interactive, retest and scheduled admission", async () => {
+  it("refuses removed URL tiers before consulting relay availability", async () => {
     if (!redis) throw new Error("REDIS_URL is required")
     await redis.del(SCAN_WORKER_REGISTRY_KEY)
-    const input = { targetType: "WEB_APP", mode: "STANDARD", hasApiSpec: false }
-    expect(await resolveAvailableUrlReview(input)).toMatchObject({
+    // URL/API launch is deterministic-only: a removed engine tier is refused
+    // on profile grounds, and the relay gate is never consulted for it.
+    const removed = { targetType: "WEB_APP", mode: "STANDARD", hasApiSpec: false }
+    expect(await resolveAvailableUrlReview(removed)).toEqual({
       ok: false,
-      code: "TARGET_RELAY_UNAVAILABLE",
+      code: "URL_MODE_UNSUPPORTED",
+      reason: URL_PROFILE_UNSUPPORTED_MESSAGE,
     })
-    expect(await resolveAvailableUrlReview({ ...input, mode: "SAFE" })).toEqual({
+    expect(await resolveAvailableUrlReview({ ...removed, mode: "SAFE" })).toEqual({
       ok: true,
       engineBacked: false,
     })
+    // Registering a live relay worker cannot resurrect the removed tier.
     await registerScanWorker("admission-relay", Date.now(), true)
-    expect(await resolveAvailableUrlReview(input)).toEqual({ ok: true, engineBacked: true })
-    await registerScanWorker("admission-relay", Date.now(), false)
-    expect(await resolveAvailableUrlReview(input)).toMatchObject({
+    expect(await resolveAvailableUrlReview(removed)).toMatchObject({
       ok: false,
-      code: "TARGET_RELAY_UNAVAILABLE",
+      code: "URL_MODE_UNSUPPORTED",
     })
   })
   it("publishes positive and negative relay capability atomically in the ordinary lease key", async () => {

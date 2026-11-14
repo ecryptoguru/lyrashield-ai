@@ -1,6 +1,6 @@
 // security-scan-skip-file: relay tests mint grants and stand up loopback fixtures intentionally
-import { describe, expect, it, afterAll, beforeAll } from "vitest"
-import { randomBytes } from "node:crypto"
+import { describe, expect, it, afterAll, beforeAll, vi } from "vitest"
+import { randomBytes, randomUUID } from "node:crypto"
 import { execFileSync } from "node:child_process"
 import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -47,7 +47,8 @@ function rawForward(
   absoluteUrl: string,
   token: string | undefined,
   method = "GET",
-  body = ""
+  body = "",
+  ownerHeader?: string
 ): Promise<{ status: number; raw: string }> {
   return new Promise((resolve, reject) => {
     const socket = net.connect(relayPort, "127.0.0.1", () => {
@@ -55,6 +56,7 @@ function rawForward(
         `${method} ${absoluteUrl} HTTP/1.1`,
         `Host: ${new URL(absoluteUrl).host}`,
         ...(token ? [`x-lyra-relay-grant: ${token}`] : []),
+        ...(ownerHeader ? [`x-lyra-relay-owner: ${ownerHeader}`] : []),
         ...(body ? [`Content-Length: ${Buffer.byteLength(body)}`] : []),
         "Connection: close",
         "\r\n",
@@ -141,6 +143,7 @@ describe("scoped relay", () => {
             authorization: req.headers["authorization"] ?? null,
             cookie: req.headers["cookie"] ?? null,
             grant: req.headers["x-lyra-relay-grant"] ?? null,
+            owner: req.headers["x-lyra-relay-owner"] ?? null,
           })
         )
       } else if (req.url === "/stream") {
@@ -427,6 +430,181 @@ describe("scoped relay", () => {
     )
     expect(result.status).toBe(200)
     await expect.poll(() => activeStreams).toBe(0)
+  })
+
+  async function ownedAdmin(
+    action: "register" | "revoke",
+    scanId: string,
+    token: string,
+    owner: string,
+    session?: unknown
+  ) {
+    return fetch(`http://127.0.0.1:${proxy.port}/v1/${action}-owned/${scanId}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${ADMIN}`,
+        "x-lyra-relay-grant": token,
+        "x-lyra-relay-owner": owner,
+        "content-type": "application/json",
+      },
+      body: session ? JSON.stringify({ session }) : undefined,
+    })
+  }
+
+  it.each([false, true])(
+    "keeps the winner live after foreign registration and cleanup (same grant %s)",
+    async (sameGrant) => {
+      const scope = scopeFor(UPSTREAM_HOST)
+      const winner = randomUUID(),
+        stale = randomUUID()
+      const token = mintRelayGrant(scope, RELAY_SECRET)
+      const other = sameGrant
+        ? token
+        : mintRelayGrant({ ...scope, maxRequests: scope.maxRequests + 1 }, RELAY_SECRET)
+      expect((await ownedAdmin("register", scope.scanId, token, winner)).status).toBe(200)
+      const pending = rawForward(
+        proxy.port,
+        `http://${UPSTREAM_HOST}:${upstreamPort}/stream`,
+        token
+      )
+      await expect.poll(() => activeStreams).toBe(1)
+      try {
+        expect((await ownedAdmin("register", scope.scanId, other, stale)).status).toBe(403)
+        expect((await ownedAdmin("revoke", scope.scanId, other, stale)).status).toBe(200)
+        const wrongGrant = mintRelayGrant(
+          { ...scope, maxRequests: scope.maxRequests + 2 },
+          RELAY_SECRET
+        )
+        expect((await ownedAdmin("revoke", scope.scanId, wrongGrant, winner)).status).toBe(200)
+        expect(
+          (await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/echo`, token))
+            .status
+        ).toBe(200)
+        expect(activeStreams).toBe(1)
+      } finally {
+        if (sameGrant)
+          expect((await ownedAdmin("revoke", scope.scanId, token, winner)).status).toBe(200)
+        else {
+          const response = await fetch(`http://127.0.0.1:${proxy.port}/v1/revoke/${scope.scanId}`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${ADMIN}` },
+          })
+          expect(response.status).toBe(200)
+        }
+        await pending
+      }
+      await expect.poll(() => activeStreams).toBe(0)
+    }
+  )
+
+  it("binds the owned session once without forwarding or auditing the private owner", async () => {
+    const scope = scopeFor(UPSTREAM_HOST),
+      token = mintRelayGrant(scope, RELAY_SECRET),
+      owner = randomUUID()
+    const session = {
+      hosts: [UPSTREAM_HOST],
+      headers: { cookie: "fixture-session-cookie" },
+      exp: scope.exp,
+    }
+    expect((await ownedAdmin("register", scope.scanId, token, owner, session)).status).toBe(200)
+    expect((await ownedAdmin("register", scope.scanId, token, owner, session)).status).toBe(200)
+    expect(
+      (
+        await ownedAdmin("register", scope.scanId, token, owner, {
+          ...session,
+          headers: { cookie: "replacement" },
+        })
+      ).status
+    ).toBe(403)
+    const response = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/echo-auth`,
+      token,
+      "GET",
+      "",
+      owner
+    )
+    expect(response.raw).toContain('"owner":null')
+    expect(response.raw).toContain('"cookie":"fixture-session-cookie"')
+    expect(response.raw).not.toContain(owner)
+    const audit = JSON.stringify(proxy.relay!.getAudit(scope.scanId))
+    expect(audit).not.toContain(owner)
+    expect(audit).not.toContain("fixture-session-cookie")
+  })
+
+  it("rejects missing owner, bad grant, and unauthorized owned admin requests", async () => {
+    const scope = scopeFor(UPSTREAM_HOST),
+      token = mintRelayGrant(scope, RELAY_SECRET),
+      owner = randomUUID()
+    for (const action of ["register", "revoke"] as const) {
+      const url = `http://127.0.0.1:${proxy.port}/v1/${action}-owned/${scope.scanId}`
+      expect(
+        (
+          await fetch(url, {
+            method: "POST",
+            headers: { "x-lyra-relay-owner": owner, "x-lyra-relay-grant": token },
+          })
+        ).status
+      ).toBe(401)
+      expect(
+        (
+          await fetch(url, {
+            method: "POST",
+            headers: { authorization: `Bearer ${ADMIN}`, "x-lyra-relay-grant": token },
+          })
+        ).status
+      ).toBe(400)
+      expect((await ownedAdmin(action, scope.scanId, "bad-signature", owner)).status).toBe(403)
+      expect((await ownedAdmin(action, scope.scanId + "_other", token, owner)).status).toBe(403)
+    }
+    expect((await ownedAdmin("register", scope.scanId, token, owner)).status).toBe(200)
+  })
+
+  it("rejects a delayed registration after a lost acknowledgement and admits another owner", async () => {
+    const scope = scopeFor(UPSTREAM_HOST),
+      token = mintRelayGrant(scope, RELAY_SECRET)
+    const stale = randomUUID(),
+      winner = randomUUID()
+    expect((await ownedAdmin("revoke", scope.scanId, token, stale)).status).toBe(200)
+    expect((await ownedAdmin("register", scope.scanId, token, stale)).status).toBe(403)
+    expect((await ownedAdmin("register", scope.scanId, token, winner)).status).toBe(200)
+    expect((await ownedAdmin("revoke", scope.scanId, token, stale)).status).toBe(200)
+    expect(
+      (await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/echo`, token)).status
+    ).toBe(200)
+  })
+
+  it("holds an acknowledged foreign cleanup beyond natural expiry and closed-audit eviction", async () => {
+    const { createRelayHandler } = await import("./relay")
+    const handler = createRelayHandler(RELAY_SECRET)
+    const now = Date.now(),
+      clock = vi.spyOn(Date, "now").mockReturnValue(now)
+    try {
+      const scope = scopeFor(UPSTREAM_HOST, { exp: now + 1000 })
+      const ownerA = randomUUID(),
+        ownerB = randomUUID()
+      const grantA = mintRelayGrant(scope, RELAY_SECRET)
+      const grantB = mintRelayGrant({ ...scope, exp: now + 60_000 }, RELAY_SECRET)
+      expect(handler.register(scope.scanId, grantA, undefined, ownerA)).toEqual({ ok: true })
+      expect(handler.revokeOwned(scope.scanId, ownerB, grantB)).toEqual({ ok: true })
+      expect(handler.register(scope.scanId, grantA, undefined, ownerA)).toEqual({ ok: true })
+      for (let i = 0; i < 201; i++) {
+        const other = { ...scope, scanId: `history_${i}` }
+        expect(handler.register(other.scanId, mintRelayGrant(other, RELAY_SECRET))).toEqual({
+          ok: true,
+        })
+      }
+      clock.mockReturnValue(now + 2000)
+      handler._sweep()
+      expect(handler.getAudit(scope.scanId)).toBeNull()
+      expect(handler.register(scope.scanId, grantB, undefined, ownerB)).toEqual({
+        ok: false,
+        reason: "revoked",
+      })
+      expect(handler.register(scope.scanId, grantB, undefined, randomUUID())).toEqual({ ok: true })
+    } finally {
+      clock.mockRestore()
+    }
   })
 
   it("aborts an active response immediately on revocation", async () => {

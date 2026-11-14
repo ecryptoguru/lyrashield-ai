@@ -104,6 +104,49 @@ function afterMigration(f) {
   f.set({ candidate: true, active: true, worker: true })
   f.pass("verify")
 }
+test("actual retained controller verifies new producer access without granting access to the old worker", (t) => {
+  const f = fixture(t)
+  f.env.RETAINED_WORKER_SOURCE = "b".repeat(40)
+  f.set({ schema: true, grants: true, delegatedSchema: true })
+  f.pass("prepare")
+  f.pass("retained-schema")
+  assert.deepEqual(f.get().delegatedPrincipals, ["app_runtime"])
+  assert.deepEqual(f.get().grantedSql, [])
+  assert.equal(f.get().stop, null)
+  f.set({ candidate: true })
+  f.pass("retained-schema")
+})
+test("actual retained controller rejects missing migrations, isolation or producer privileges", async (t) => {
+  for (const options of [
+    { delegatedSchema: false },
+    { delegatedRlsDisabled: true },
+    { delegatedSelectMissing: true },
+    { delegatedInsertMissing: true },
+    { delegatedDeletePresent: true },
+    { grants: false },
+  ])
+    await t.test(JSON.stringify(options), (t) => {
+      const f = fixture(t)
+      f.env.RETAINED_WORKER_SOURCE = "b".repeat(40)
+      f.set({ schema: true, grants: true, delegatedSchema: true, ...options })
+      f.pass("prepare")
+      const result = f.run("retained-schema")
+      assert.notEqual(result.status, 0)
+      assert.doesNotMatch(
+        result.stdout + result.stderr,
+        /app_runtime|worker_runtime|postgresql:|redis:\/\//
+      )
+      assert.deepEqual(f.get().grantedSql, [])
+      assert.equal(f.get().stop, null)
+    })
+})
+test("new schema verification cannot be invoked through ordinary worker promotion", (t) => {
+  const f = fixture(t)
+  f.set({ schema: true, grants: true, delegatedSchema: true })
+  f.pass("prepare")
+  assert.notEqual(f.run("retained-schema").status, 0)
+  assert.deepEqual(f.get().grantedSql, [])
+})
 test("actual controller and VM-state CLIs complete with distinct derived runtime roles and real durable receipt", (t) => {
   const f = fixture(t)
   afterMigration(f)
@@ -119,6 +162,96 @@ test("actual controller and VM-state CLIs complete with distinct derived runtime
   assert.equal(f.get().grantedSql.length, 2)
   assert.ok(f.get().grantedSql.some((sql) => sql.includes('TO "app_runtime"')))
   assert.ok(f.get().grantedSql.some((sql) => sql.includes('TO "worker_runtime"')))
+})
+test("candidate verification rejects replicas on an inactive historical revision", (t) => {
+  const f = fixture(t)
+  beforeMigration(f)
+  f.set({ schema: true })
+  f.pass("after-migrate")
+  f.set({ candidate: true, active: true, worker: true, orphanReplica: true })
+  assert.notEqual(f.run("verify").status, 0)
+  assert.notEqual(f.get().stop, null)
+})
+test("actual CLI completes when Azure deletes an inactive saved baseline with both authoritative proofs", (t) => {
+  const f = fixture(t)
+  for (const phase of ["prepare", "claim", "quiesce"]) f.pass(phase)
+  f.set({ deletedBaseline: true })
+  f.pass("before-migrate")
+  f.set({ schema: true })
+  f.pass("after-migrate")
+  f.set({ candidate: true, active: true, worker: true })
+  f.pass("verify")
+  f.pass("release")
+  assert.equal(f.get().stop, null)
+  for (const app of [f.env.APP_NAME, f.env.SCANNER_NAME]) {
+    const calls = f.get().revisionProbes.filter((args) => args.includes(`${app}-old1`))
+    assert.ok(calls.some((args) => args[1] === "revision" && args[2] === "show"))
+    assert.ok(calls.some((args) => args[1] === "replica" && args[2] === "list"))
+  }
+  assert.ok(
+    f
+      .get()
+      .revisionProbes.filter((args) => args[1] === "revision" && args[2] === "list")
+      .every((args) => args.includes("--all"))
+  )
+})
+test("actual CLI missing baseline cannot use ambiguous or inaccessible revision observations", async (t) => {
+  for (const options of [
+    { deletionShowMode: "auth" },
+    { deletionShowMode: "resource" },
+    { deletionShowMode: "present" },
+    { deletionShowMode: "timeout" },
+    { deletionShowMode: "buffer" },
+    { deletionShowMode: "signal" },
+    { deletionShowMode: "wrong-exit" },
+    { deletionShowMode: "mixed" },
+    { deletionReplicaMode: "auth" },
+    { deletionReplicaMode: "empty" },
+    { deletionReplicaMode: "replicas" },
+  ])
+    await t.test(JSON.stringify(options), (t) => {
+      const f = fixture(t)
+      for (const phase of ["prepare", "claim", "quiesce"]) f.pass(phase)
+      f.set({ deletedBaseline: true, ...options })
+      const held = f.get().stop
+      const result = f.run("before-migrate")
+      assert.notEqual(result.status, 0)
+      assert.doesNotMatch(
+        result.stdout + result.stderr,
+        /postgresql:|AuthorizationFailed|private provider/
+      )
+      assert.equal(f.get().stop, held)
+      assert.equal(f.get().schema, false)
+      assert.equal(f.get().active, false)
+    })
+})
+test("deleted baseline proof never excuses unexpected live replicas or invalid full inventory counts", async (t) => {
+  for (const options of [
+    { orphanReplica: true },
+    { orphanReplicaReportedOnly: true },
+    { invalidReplicaCount: null },
+    { invalidReplicaCount: -1 },
+    { invalidReplicaCount: "0" },
+  ])
+    await t.test(JSON.stringify(options), (t) => {
+      const f = fixture(t)
+      for (const phase of ["prepare", "claim", "quiesce"]) f.pass(phase)
+      f.set({ deletedBaseline: true, ...options })
+      assert.notEqual(f.run("before-migrate").status, 0)
+      assert.notEqual(f.get().stop, null)
+      assert.equal(f.get().schema, false)
+    })
+})
+test("candidate verification rereads deletion evidence and preserves admission on an ambiguous replica probe", (t) => {
+  const f = fixture(t)
+  for (const phase of ["prepare", "claim", "quiesce"]) f.pass(phase)
+  f.set({ deletedBaseline: true })
+  f.pass("before-migrate")
+  f.set({ schema: true })
+  f.pass("after-migrate")
+  f.set({ candidate: true, active: true, worker: true, deletionReplicaMode: "empty" })
+  assert.notEqual(f.run("verify").status, 0)
+  assert.notEqual(f.get().stop, null)
 })
 test("actual CLI migration failure, candidate failure and foreign stop retain ownership without restoring old writers", (t) => {
   const f = fixture(t)
@@ -218,4 +351,23 @@ test("workflow tag@digest controller inputs remain usable for the next release w
   assert.equal(prepared.schema, "current")
   assert.match(prepared.webImage, /lyrashield-web:[a-f0-9]{40}@sha256:/)
   assert.match(prepared.workerImage, /lyrashield-worker:[a-f0-9]{40}@sha256:/)
+})
+
+test("actual controller composes mixed source image checks and refuses retained-worker schema maintenance", (t) => {
+  const f = fixture(t)
+  f.env.RETAINED_WORKER_SOURCE = "b".repeat(40)
+  const rejected = f.run("prepare")
+  assert.notEqual(rejected.status, 0)
+  assert.equal(f.get().stop, null)
+  assert.equal(f.get().active, true)
+  assert.equal(f.get().worker, true)
+  assert.equal(f.get().imageQualificationArgs, undefined)
+  f.set({ schema: true })
+  f.pass("prepare")
+  assert.equal(f.get().imageQualificationArgs[3], f.env.DEPLOY_SHA)
+  assert.equal(f.get().imageQualificationArgs[4], f.env.ENGINE_REVISION)
+  assert.equal(f.get().imageQualificationArgs[5], f.env.RETAINED_WORKER_SOURCE)
+  assert.equal(f.get().stop, null)
+  assert.equal(f.get().active, true)
+  assert.equal(f.get().worker, true)
 })

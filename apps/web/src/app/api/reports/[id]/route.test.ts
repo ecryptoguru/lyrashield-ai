@@ -5,6 +5,8 @@ const revokeShareToken = vi.fn()
 const getShareableReport = vi.fn()
 const getLaunchReportDetail = vi.fn()
 const resolveReportDelegationTarget = vi.fn()
+const resolveDelegatedTargetReadScope = vi.hoisted(() => vi.fn())
+const withDelegatedReadAuthority = vi.hoisted(() => vi.fn())
 
 vi.mock("@lyrashield/db", () => ({
   generateShareToken: (...args: unknown[]) => generateShareToken(...args),
@@ -12,6 +14,7 @@ vi.mock("@lyrashield/db", () => ({
   getShareableReport: (...args: unknown[]) => getShareableReport(...args),
   getLaunchReportDetail: (...args: unknown[]) => getLaunchReportDetail(...args),
   resolveReportDelegationTarget: (...args: unknown[]) => resolveReportDelegationTarget(...args),
+  withDelegatedReadAuthority,
 }))
 
 // The delegated-scope assertion is a pure function of the session's OAuth
@@ -39,6 +42,29 @@ vi.mock("@lyrashield/auth/server", () => ({
 vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}))
+vi.mock("../../../../lib/delegated-target-read-scope", () => ({
+  resolveDelegatedTargetReadScope,
+  delegatedReadPrincipal: (session: {
+    oauth?: {
+      connectionId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+    }
+  }) =>
+    session.oauth?.connectionId
+      ? {
+          workspaceId: "ws-1",
+          userId: "user-1",
+          memberId: "member-1",
+          memberRole: "OWNER",
+          memberUpdatedAt: new Date("2026-11-05T10:00:00Z"),
+          connectionId: session.oauth.connectionId,
+          authorizationVersion: 2,
+          allTargets: session.oauth.allTargets,
+          allowedTargetIds: session.oauth.allowedTargetIds ?? [],
+        }
+      : null,
 }))
 
 import { GET, POST } from "./route"
@@ -92,6 +118,21 @@ const postParams = { params: Promise.resolve({ id: "report-1" }) }
 describe("POST /api/reports/[id]", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resolveDelegatedTargetReadScope.mockImplementation((session, _workspace, targetId) =>
+      delegatedScopeCheck(session as never, targetId as never)
+    )
+    withDelegatedReadAuthority.mockImplementation(async (params, run) => {
+      const principal = params as { allTargets?: boolean; allowedTargetIds?: string[] }
+      return run(
+        {},
+        {
+          targetIds: principal.allTargets
+            ? ["target-a", "target-b"]
+            : (principal.allowedTargetIds ?? []),
+          allowedProfiles: ["STANDARD"],
+        }
+      )
+    })
     vi.mocked(requirePermission).mockResolvedValue({ session: cookieSession } as never)
     getShareableReport.mockResolvedValue({ id: "report-1", status: "generated" })
     resolveReportDelegationTarget.mockResolvedValue({ targetId: "target-a" })
@@ -150,6 +191,20 @@ describe("POST /api/reports/[id]", () => {
     })
   })
 
+  it.each(["share", "revoke"])(
+    "404s when the type-bound %s mutation rejects a packet",
+    async (action) => {
+      const mutate = action === "share" ? generateShareToken : revokeShareToken
+      mutate.mockRejectedValueOnce(new Error("Report not found"))
+      const response = await POST(actionRequest({ workspaceId: "ws-1", action }), postParams)
+      expect(response.status).toBe(404)
+      await expect(response.json()).resolves.toMatchObject({
+        success: false,
+        error: { code: "REPORT_NOT_FOUND" },
+      })
+    }
+  )
+
   it("denies sharing or revoking without report:create", async () => {
     vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
     const response = await POST(actionRequest({ workspaceId: "ws-1", action: "share" }), postParams)
@@ -203,7 +258,14 @@ describe("POST /api/reports/[id]", () => {
       const response = await shareFor(narrowSession)
 
       expect(response.status).toBe(200)
-      expect(generateShareToken).toHaveBeenCalledWith("report-1", "ws-1")
+      expect(generateShareToken).toHaveBeenCalledWith(
+        "report-1",
+        "ws-1",
+        expect.objectContaining({
+          targetId: "target-a",
+          requireActiveTarget: true,
+        })
+      )
     })
 
     it("allows share for an all-targets grant", async () => {
@@ -220,6 +282,16 @@ describe("POST /api/reports/[id]", () => {
       expect(generateShareToken).toHaveBeenCalledOnce()
     })
 
+    it("denies an all-targets grant when live target lifecycle is unavailable", async () => {
+      resolveReportDelegationTarget.mockResolvedValue({ targetId: "target-b" })
+      withDelegatedReadAuthority.mockRejectedValueOnce(new Error("FORBIDDEN"))
+
+      const response = await shareFor(allTargetsSession)
+
+      expect(response.status).toBe(403)
+      expect(generateShareToken).not.toHaveBeenCalled()
+    })
+
     it("denies a narrowed grant when the persisted target cannot be resolved (legacy/unbound report)", async () => {
       resolveReportDelegationTarget.mockResolvedValue({ targetId: null })
 
@@ -230,7 +302,7 @@ describe("POST /api/reports/[id]", () => {
       expect(revokeShareToken).not.toHaveBeenCalled()
     })
 
-    it("still allows an unresolvable report for an all-targets grant", async () => {
+    it("denies an unresolvable report even for an all-targets grant", async () => {
       resolveReportDelegationTarget.mockResolvedValue({ targetId: null })
       revokeShareToken.mockResolvedValue(new Date("2026-08-16T00:00:00Z"))
       vi.mocked(requirePermission).mockResolvedValue({ session: allTargetsSession } as never)
@@ -240,8 +312,8 @@ describe("POST /api/reports/[id]", () => {
         postParams
       )
 
-      expect(response.status).toBe(200)
-      expect(revokeShareToken).toHaveBeenCalledOnce()
+      expect(response.status).toBe(403)
+      expect(revokeShareToken).not.toHaveBeenCalled()
     })
 
     it("ignores a conflicting request-body targetId — the persisted binding is authoritative", async () => {
@@ -261,6 +333,9 @@ describe("POST /api/reports/[id]", () => {
 describe("GET /api/reports/[id] — authenticated private detail", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resolveDelegatedTargetReadScope.mockImplementation((session, _workspace, targetId) =>
+      delegatedScopeCheck(session as never, targetId as never)
+    )
     vi.mocked(requirePermission).mockResolvedValue({ session: cookieSession } as never)
     getShareableReport.mockResolvedValue({ id: "report-1", status: "generated" })
   })
@@ -289,6 +364,7 @@ describe("GET /api/reports/[id] — authenticated private detail", () => {
     getLaunchReportDetail.mockResolvedValue({
       verdictLabel: "Ready to launch",
       stale: false,
+      currentApplicability: "UNKNOWN",
       provenance: PROVENANCE,
     })
 
@@ -296,9 +372,11 @@ describe("GET /api/reports/[id] — authenticated private detail", () => {
 
     expect(response.status).toBe(200)
     const body = await response.json()
+    expect(body.data.launchReport.currentApplicability).toBe("UNKNOWN")
+    expect(body.data.launchReport.stale).toBe(false)
     expect(body.data.launchReport.provenance.gateVerdictId).toBe("verdict-1")
     expect(body.data.launchReport.provenance.assessedIdentity.value).toBe("b".repeat(40))
-    expect(getLaunchReportDetail).toHaveBeenCalledWith("report-1", "ws-1")
+    expect(getLaunchReportDetail).toHaveBeenCalledWith("report-1", "ws-1", undefined)
     expect(resolveReportDelegationTarget).not.toHaveBeenCalled()
   })
 
@@ -335,8 +413,29 @@ describe("GET /api/reports/[id] — authenticated private detail", () => {
     const response = await GET(getRequest(), { params: Promise.resolve({ id: "report-1" }) })
 
     expect(response.status).toBe(403)
-    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(narrowSession, "target-b")
+    expect(getShareableReport).not.toHaveBeenCalled()
+    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
     expect(getLaunchReportDetail).not.toHaveBeenCalled()
+  })
+
+  it("requires strict snapshot binding before delegated report detail is returned", async () => {
+    vi.mocked(requirePermission).mockResolvedValue({ session: narrowSession } as never)
+    resolveReportDelegationTarget.mockResolvedValue({ targetId: "target-a" })
+    getShareableReport.mockResolvedValue(null)
+
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "report-1" }) })
+
+    expect(response.status).toBe(404)
+    expect(resolveReportDelegationTarget).toHaveBeenCalledWith(
+      "report-1",
+      "ws-1",
+      expect.objectContaining({ requireExplicitSnapshotBinding: true })
+    )
+    expect(getShareableReport).toHaveBeenCalledWith(
+      "report-1",
+      "ws-1",
+      expect.objectContaining({ requireExplicitSnapshotBinding: true })
+    )
   })
 
   it("allows a connection to read a report when its persisted target is in the grant", async () => {
@@ -346,6 +445,11 @@ describe("GET /api/reports/[id] — authenticated private detail", () => {
     const response = await GET(getRequest(), { params: Promise.resolve({ id: "report-1" }) })
 
     expect(response.status).toBe(200)
+    expect(getShareableReport).toHaveBeenCalledWith(
+      "report-1",
+      "ws-1",
+      expect.objectContaining({ requireExplicitSnapshotBinding: true })
+    )
     expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(narrowSession, "target-a")
   })
 
@@ -356,8 +460,8 @@ describe("GET /api/reports/[id] — authenticated private detail", () => {
     const response = await GET(getRequest(), { params: Promise.resolve({ id: "report-1" }) })
 
     expect(response.status).toBe(200)
-    expect(resolveReportDelegationTarget).not.toHaveBeenCalled()
-    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
+    expect(resolveReportDelegationTarget).toHaveBeenCalled()
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(allTargetsSession, "target-b")
   })
 
   it("denies read-only OAuth report reads outside selected targets", async () => {
@@ -368,7 +472,8 @@ describe("GET /api/reports/[id] — authenticated private detail", () => {
 
     expect(response.status).toBe(403)
     expect(resolveReportDelegationTarget).toHaveBeenCalled()
-    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(readOnlySession, "target-b")
+    expect(getShareableReport).not.toHaveBeenCalled()
+    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
   })
 
   it("returns an ETag on 200 and a bodyless 304 for a matching If-None-Match (W2.4)", async () => {

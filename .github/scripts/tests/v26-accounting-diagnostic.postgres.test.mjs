@@ -54,7 +54,8 @@ test(
         );
         CREATE TABLE public."UsageRecord" (
           id text PRIMARY KEY, "workspaceId" text, "accountId" text, kind text NOT NULL,
-          "idempotencyKey" text UNIQUE, "deletedAt" timestamp(3), metadata jsonb
+          "idempotencyKey" text UNIQUE, "deletedAt" timestamp(3), metadata jsonb,
+          quantity integer NOT NULL DEFAULT 1, "createdAt" timestamp(3) NOT NULL DEFAULT now(), "cycleStart" timestamp(3)
         );
         ALTER TABLE public."Scan" ENABLE ROW LEVEL SECURITY;
         ALTER TABLE public."Scan" FORCE ROW LEVEL SECURITY;
@@ -174,6 +175,102 @@ test(
       )
 
       await t.test(
+        "historical nine-row cohort retains four unresolved FAILED receipts without ledger writes",
+        async () => {
+          try {
+            await client.query(`INSERT INTO public."Scan" (id,"workspaceId","createdById",status,"startedAt","endedAt")
+          SELECT 'historic-' || n, 'history-workspace', 'history-account',
+            CASE WHEN n <= 4 THEN 'FAILED' ELSE 'COMPLETED' END::public."ScanStatus",
+            '2026-08-28 23:58:00'::timestamp, '2026-08-28 23:59:59'::timestamp
+          FROM generate_series(1,9) n;
+          INSERT INTO public."UsageRecord" (id,"workspaceId","accountId",kind,"idempotencyKey",metadata,quantity,"createdAt","cycleStart")
+          SELECT 'historic-usage-' || n, 'history-workspace', 'history-account', 'agent_minutes',
+            'history-workspace:historic-' || n || ':engine_run', jsonb_build_object('scanId','historic-' || n),
+            1, '2026-08-28 23:59:58'::timestamp, NULL FROM generate_series(1,9) n`)
+            await client.query("SET TIME ZONE 'Asia/Kolkata'")
+            const readRows = async () =>
+              (
+                await client.query(
+                  `SELECT row_to_json(u) AS row FROM public."UsageRecord" u WHERE id LIKE 'historic-%' ORDER BY id`
+                )
+              ).rows
+            const before = await readRows()
+            const observed = await collectLegacyAccountingDiagnostic(client)
+            assert.equal(observed.status, "NO_DETECTED_DB_BLOCKERS")
+            assert.equal(observed.counts.legacyHistoricalReceipts, 9)
+            assert.equal(observed.counts.legacyFailedReceipts, 4)
+            assert.equal(observed.counts.failedScanReceipts, 0)
+            assert.equal(observed.counts.settledReceipts, 0)
+            assert.equal(observed.counts.unknownDisposition, 10)
+            assert.equal(observed.historyDispositionComplete, false)
+            assert.equal(observed.cutoverReady, false)
+            assert.deepEqual(await readRows(), before)
+            assert.doesNotMatch(
+              JSON.stringify(observed),
+              /historic-|history-workspace|history-account/
+            )
+
+            for (const metadata of [
+              { scanId: "historic-1", accountId: null },
+              { scanId: "historic-1", accountId: 1 },
+              { scanId: "historic-1", accountId: "other" },
+              { scanId: "historic-1", accountId: "history-account" },
+            ]) {
+              await client.query(
+                `UPDATE public."UsageRecord" SET metadata=$1 WHERE id='historic-usage-1'`,
+                [JSON.stringify(metadata)]
+              )
+              const rejected = await collectLegacyAccountingDiagnostic(client)
+              assert.equal(rejected.status, "REVIEW_REQUIRED")
+              assert.equal(rejected.counts.legacyHistoricalReceipts, 8)
+              assert.equal(rejected.counts.legacyFailedReceipts, 3)
+            }
+            await client.query(
+              `UPDATE public."UsageRecord" SET metadata='{"scanId":"historic-1"}' WHERE id='historic-usage-1'`
+            )
+            for (const [table, column, value] of [
+              ["Scan", "endedAt", "2026-08-29T00:00:00.000Z"],
+              ["UsageRecord", "createdAt", "2026-08-29T00:00:00.000Z"],
+            ]) {
+              const field = column === "endedAt" ? "historic-1" : "historic-usage-1"
+              await client.query(`UPDATE public."${table}" SET "${column}"=$1 WHERE id=$2`, [
+                value,
+                field,
+              ])
+              assert.equal(
+                (await collectLegacyAccountingDiagnostic(client)).status,
+                "REVIEW_REQUIRED"
+              )
+              await client.query(`UPDATE public."${table}" SET "${column}"=$1 WHERE id=$2`, [
+                column === "endedAt" ? "2026-08-28T23:59:59.000Z" : "2026-08-28T23:59:58.000Z",
+                field,
+              ])
+            }
+            await client.query(
+              `INSERT INTO public."ScanEvent" VALUES ('historic-intent','historic-1','billing_settlement_intent',$1,NULL)`,
+              [
+                JSON.stringify({
+                  workspaceId: "history-workspace",
+                  accountId: "history-account",
+                  idempotencyKey: "history-workspace:historic-1:engine_run",
+                  automaticReplayAllowed: false,
+                }),
+              ]
+            )
+            const intent = await collectLegacyAccountingDiagnostic(client)
+            assert.equal(intent.status, "REVIEW_REQUIRED")
+            assert.equal(intent.counts.unsettledIntents, 1)
+            assert.equal(intent.counts.legacyHistoricalReceipts, 8)
+          } finally {
+            await client.query(
+              `DELETE FROM public."ScanEvent" WHERE id='historic-intent'; DELETE FROM public."UsageRecord" WHERE id LIKE 'historic-%'; DELETE FROM public."Scan" WHERE id LIKE 'historic-%'`
+            )
+            await client.query("SET TIME ZONE 'UTC'")
+          }
+        }
+      )
+
+      await t.test(
         "a wrong-kind receipt occupying a scan key blocks without an intent",
         async () => {
           await client.query(
@@ -212,6 +309,27 @@ test(
         assert.equal(observed.counts.malformedSnapshot, 1)
         await client.query(`DELETE FROM public."UsageRecord"`)
       })
+
+      await t.test(
+        "missing historical provenance columns never degrade to permissive classification",
+        async () => {
+          for (const column of ["quantity", "createdAt", "cycleStart"]) {
+            await client.query(
+              `ALTER TABLE public."UsageRecord" RENAME COLUMN "${column}" TO "historicalUnavailable"`
+            )
+            try {
+              const observed = await collectLegacyAccountingDiagnostic(client)
+              assert.equal(observed.status, "REVIEW_REQUIRED")
+              assert.equal(observed.counts.malformedSnapshot, 1)
+              assert.equal(observed.counts.legacyHistoricalReceipts, 0)
+            } finally {
+              await client.query(
+                `ALTER TABLE public."UsageRecord" RENAME COLUMN "historicalUnavailable" TO "${column}"`
+              )
+            }
+          }
+        }
+      )
 
       await t.test("a partial schema or more than the bounded inventory fails closed", async () => {
         await client.query('ALTER TABLE public."Scan" RENAME COLUMN "endedAt" TO "oldEndedAt"')

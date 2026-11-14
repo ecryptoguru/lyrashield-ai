@@ -3,6 +3,7 @@ set -euo pipefail
 
 engine_checkout="${1:?engine checkout path is required}"
 app_checkout="${2:?app checkout path is required}"
+engine_checkout="$(cd "$engine_checkout" && pwd -P)"
 pin_file="$engine_checkout/.lyrashield-worker-pin"
 tests_file="$engine_checkout/scripts/worker-contract-tests.txt"
 
@@ -51,8 +52,10 @@ if [[ ! -f "$engine_threat_fixture" || ! -f "$app_threat_fixture" ]] ||
 fi
 
 help="$(cd "$engine_checkout" && uv run lyrashield --help)"
-for flag in --non-interactive --target --scan-mode --instruction --max-budget-usd --runtime-budget-seconds; do
-  if ! grep -Fq -- "$flag" <<< "$help"; then
+for flag in --non-interactive --run-name --target --target-type --scan-mode --instruction \
+  --max-budget-usd --runtime-budget-seconds --scope-mode --diff-base --diff-head \
+  --repository-revision --repository-branch; do
+  if ! grep -Eq -- "^[[:space:]]+(-{1,2}[[:alnum:]][[:alnum:]-]*([[:space:]]+[^[:space:]]+)?[,]?[[:space:]]+)?${flag}([[:space:]=,]|$)" <<< "$help"; then
     echo "Pinned engine is missing worker CLI flag: $flag" >&2
     exit 1
   fi
@@ -65,5 +68,7 @@ done
     BETTER_AUTH_SECRET="dummy-ci-only-secret-not-a-real-credential-32chars" \
     BETTER_AUTH_URL="http://127.0.0.1:3100" \
     NEXT_PUBLIC_APP_URL="http://127.0.0.1:3100" \
-    corepack pnpm exec vitest run "${contract_tests[@]}"
+    LYRASHIELD_ENGINE_CHECKOUT="$engine_checkout" \
+    LYRASHIELD_ENGINE_PYTHON="$engine_checkout/.venv/bin/python" \
+    corepack pnpm exec vitest run "${contract_tests[@]}" apps/provider-gateway/src/engine-bridge.integration.test.ts
 )

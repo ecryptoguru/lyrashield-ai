@@ -116,7 +116,7 @@ A content-filter, model-error or runtime truncation can preserve findings as PAR
 
 ### 1.4 URL/API scan pipeline
 
-URL/API Safe is deterministic-only. Standard and Deep are engine-backed, with deterministic collection/probing retained alongside the engine.
+URL/API Safe is deterministic-only. Standard and Deep are engine-backed, with deterministic collection/probing retained alongside the engine. Those engine-backed URL/API profiles are removed from the launch offering: launch admission covers deterministic Safe and Quick only, and this section remains a source contract rather than a statement of launch availability.
 
 ```text
 Validated URL/API target

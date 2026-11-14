@@ -1,14 +1,19 @@
-import { resolveEngineRuntimeBudgetMs } from "./lifecycle-utils"
+import { assertColdDatabaseEpoch } from "../../cold-database-epoch"
+import {
+  isConfirmedScanClaimRollback,
+  ScanBillableClaimError,
+} from "@lyrashield/db/src/scan-billable-claim"
+import { enterEngineBillablePhase, resolveEngineRuntimeBudgetMs } from "./lifecycle-utils"
 import { DelayedError, type Job } from "bullmq"
 import {
   reserveScanCapacity,
+  resetUnstartedScanCapacity,
   startUnmeteredScanCapacity,
   confirmScanCapacityStopped,
   ScanCapacityWaitingError,
   type ScanBillingDisposition,
 } from "@lyrashield/billing"
 import {
-  prisma,
   requeueScanForRetry,
   releaseStoppedScanSlot,
   releaseUnstartedScanSlot,
@@ -69,7 +74,13 @@ export async function finalizeScanCapacity({
     ((!recoveringPreviousExecution && !billablePhaseStarted) || executorReturned)
   ) {
     try {
-      await confirmScanCapacityStopped(workspaceId, scanId, noBillableWork, billingDisposition)
+      await confirmScanCapacityStopped(
+        workspaceId,
+        scanId,
+        noBillableWork,
+        billingDisposition,
+        !billablePhaseStarted
+      )
       await releaseStoppedScanSlot(workspaceId, scanId)
     } catch (accountingError) {
       logger.error("Scan admission remains held pending accounting review", {
@@ -108,16 +119,56 @@ export async function deferScanCapacityWait(
     workspaceId,
     attempt: 1,
     maxAttempts: 1,
+    clearStartedAt: true,
     errorCategory: "WAITING_CAPACITY",
     errorMessage: "Waiting for account review capacity",
   })
   // A capacity wait is not analysis time and does not consume an attempt.
-  await prisma.scan.updateMany({
-    where: { id: scanId, workspaceId, status: "QUEUED" },
-    data: { startedAt: null },
-  })
   await job.moveToDelayed(Date.now() + 5_000, job.token)
   throw new DelayedError()
+}
+
+/** Returns true when a competing paid owner won before the guarded requeue. */
+export async function requeueUnbilledScan(
+  params: ScanCapacityIdentity & {
+    job: Job<ScanJobData, ScanJobResult>
+    maxAttempts: number
+    recoveringPreviousExecution: boolean
+    errorCategory: string
+    errorMessage: string
+  }
+): Promise<boolean> {
+  const { job, scanId, workspaceId, maxAttempts } = params
+  try {
+    const requeue = await requeueScanForRetry({
+      scanId,
+      workspaceId,
+      attempt: (job.attemptsMade ?? 0) + 1,
+      maxAttempts,
+      errorCategory: params.errorCategory,
+      errorMessage: params.errorMessage,
+    })
+    if (requeue.requeued && params.accountingVersion === 2 && !params.recoveringPreviousExecution) {
+      await resetUnstartedScanCapacity(workspaceId, scanId)
+    }
+    if (!requeue.requeued) {
+      logger.warn("Scan left an active status before retry requeue", {
+        scanId,
+        workspaceId,
+        currentStatus: requeue.currentStatus,
+      })
+    }
+    logger.warn("Scan job failed and will be retried", {
+      scanId,
+      workspaceId,
+      attempt: (job.attemptsMade ?? 0) + 1,
+      maxAttempts,
+    })
+    return false
+  } catch (error) {
+    if (error instanceof ScanBillableClaimError) return true
+    throw error
+  }
 }
 
 export function isCapacityStop(execution: Extract<ScanExecutionResult, { ok: true }>): boolean {
@@ -152,6 +203,13 @@ export async function claimEngineCapacity(
     scanId,
     maxRuntimeMs: engineTimeoutMs,
     start: true,
+    claimBillable: true,
+  }).catch((cause: unknown) => {
+    if (isConfirmedScanClaimRollback(cause)) throw cause
+    throw new ScanBillableClaimError(
+      "Funded billable admission was refused or its commit is uncertain",
+      { cause }
+    )
   })
   if (capacity.state === "WAITING") throw new ScanCapacityWaitingError()
   if (capacity.state === "LEGACY") throw new Error("capacity_version_mismatch")
@@ -173,6 +231,7 @@ export async function claimBoundedEngineCapacity(
     | "elapsedScanMs"
     | "executionPlan"
     | "markGlobalScanTimeout"
+    | "markBillablePhaseStarted"
   >
 ) {
   const { mode, target, scanRuntimeBudgetMs, elapsedScanMs, executionPlan, markGlobalScanTimeout } =
@@ -187,10 +246,15 @@ export async function claimBoundedEngineCapacity(
     throw new Error("Scan analysis deadline exhausted before engine execution")
   }
 
-  return claimEngineCapacity(
+  await assertColdDatabaseEpoch()
+  const capacity = await claimEngineCapacity(
     params.accountingVersion,
     params.workspaceId,
     params.scanId,
     engineTimeoutMs
   )
+  // Funded admission commits the lifetime claim in the reservation transaction.
+  if (params.accountingVersion === 2) params.markBillablePhaseStarted()
+  else await enterEngineBillablePhase(params.scanId, params.markBillablePhaseStarted)
+  return capacity
 }

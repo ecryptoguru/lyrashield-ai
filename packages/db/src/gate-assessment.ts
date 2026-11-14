@@ -74,30 +74,6 @@ export function snapshotFromManifest(input: {
   }
 }
 
-export function isTrustedRetestReceipt(
-  receipt: {
-    status: string
-    method: string
-    scanId: string
-    verifierVersion: string | null
-    evidence: unknown
-  },
-  sourceScanId: string
-): boolean {
-  if (
-    receipt.status !== "VALIDATED" ||
-    receipt.method !== "RETEST" ||
-    !receipt.verifierVersion?.startsWith("result-integrity-")
-  ) {
-    return false
-  }
-  const evidence = receipt.evidence as {
-    baseline?: { scanId?: unknown } | null
-    retest?: { scanId?: unknown } | null
-  } | null
-  return evidence?.baseline?.scanId === sourceScanId && evidence.retest?.scanId === receipt.scanId
-}
-
 export function parseAssessmentSnapshot(value: unknown): GateAssessmentSnapshot | null {
   if (!value || typeof value !== "object") return null
   const snapshot = value as Partial<GateAssessmentSnapshot>

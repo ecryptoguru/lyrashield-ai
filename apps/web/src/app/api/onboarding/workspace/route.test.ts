@@ -43,6 +43,22 @@ it("uses the browser principal and one validated choose-or-create request", asyn
     expectedUpdatedAt: stamp,
   })
 })
+it("does not expose the internal audit delivery marker", async () => {
+  mocks.choose.mockResolvedValueOnce({
+    state: {
+      updatedAt: new Date(stamp),
+      workspaceId: "ws-selected",
+      pendingWorkspaceCreatedAuditId: "ws-internal",
+    },
+    workspace: { id: "ws-selected", name: "Beta", role: "OWNER" },
+    trialStarted: false,
+  })
+  const response = await POST(
+    request({ kind: "select", workspaceId: "ws-selected", expectedUpdatedAt: stamp })
+  )
+  const body = await response.json()
+  expect(body.data.state).not.toHaveProperty("pendingWorkspaceCreatedAuditId")
+})
 it.each([
   null,
   { userId: "user", apiKey: { workspaceId: "ws" } },

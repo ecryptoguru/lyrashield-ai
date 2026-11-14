@@ -40,12 +40,12 @@ overrides:
   "ip-address@<10.7.4": "10.7.4"
   # GHSA-2v37-7h3g-55p8: keep postcss on the patched nanoid 3.x line.
   "nanoid@<3.3.18": "^3.3.19"
-  # GHSA-9mqv-5hh9-4cgg and GHSA-frvp-7c67-39w9: patch node-server 2.x.
-  "@hono/node-server@<2.0.10": "^2.0.10"
+  # GHSA-9mqv-5hh9-4cgg, GHSA-frvp-7c67-39w9 and GHSA-rmxm-3fg6-px4f.
+  "@hono/node-server@<2.1.3": "2.1.3"
   # GHSA-cg2g-xh64-v4q7 and GHSA-mrv2-3pqr-j5jr: patch DOMPurify 3.x.
   "dompurify@>=3 <3.4.17": "3.4.17"
-  # Keep the auth package family aligned for GHSA-965c-763c-88jm and GHSA-r4xp-prcw-77qf.
-  "@better-auth/core": "1.7.7"
+  # Keep vulnerable core versions out while allowing grouped auth upgrades.
+  "@better-auth/core@<1.7.7": "1.7.7"
   # GHSA-gv7w-rqvm-qjhr and GHSA-g7r4-m6w7-qqqr: keep affected esbuild below 0.28.1 out.
   "esbuild@<0.28.1": "^0.28.1"
   # fast-uri 3.x fixes: GHSA-v2hh-gcrm-f6hx, GHSA-7p8r-x3mc-p8w7,
@@ -67,14 +67,23 @@ overrides:
   # GHSA-7r86-cg39-jmmj and GHSA-23c5-xmqv-rm74: keep affected minimatch lines patched.
   "minimatch@<3.1.4": "^3.1.5"
   "minimatch@>=10 <10.2.3": "^10.2.3"
+  # GHSA-g3hv-75wg-m249: typescript-estree uses only minimatch's shared function API.
+  "@typescript-eslint/typescript-estree>minimatch": "11.0.1"
+  # GHSA-3g3m-2fjr-6pw4 and GHSA-g3hv-75wg-m249: patch Sentry's build-time traversal chain.
+  "@sentry/bundler-plugin-core@5.3.0>glob": "14.0.2"
+  "@sentry/bundler-plugins@10.70.0>glob": "14.0.2"
+  "glob@14.0.2>minimatch": "11.0.1"
+  # GHSA-474x-hrwr-fgx4: bound the XML parser used for the prerendered RSS feed.
+  "@astrojs/rss@4.0.19>fast-xml-parser": "5.12.0"
   # GHSA-ggr8-5vv4-36mx: @prisma/config pins an affected pre-8 release.
   "deepmerge-ts@<8.0.0": "^8.0.0"
   # GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r, and GHSA-673q-mjm6-r5xr.
   "next@>=16 <16.4.1": "16.4.1"
   # GHSA-587h-7wmj-h5pm: patch the affected Vite 8.2.x editor handling.
   "vite@>=8.2.0 <8.2.4": "8.2.4"
-  # GHSA-q3jh-wrc6-jgq8 and GHSA-8r9p-f939-6h3c: preserve redirect header isolation.
-  "follow-redirects@>=1.16.0 <1.16.1": "1.16.1"
+  # GHSA-q3jh-wrc6-jgq8, GHSA-8r9p-f939-6h3c and GHSA-mrwp-f3q8-3g9p:
+  # preserve redirect header isolation, including cross-realm header lists.
+  "follow-redirects@>=1.16.0 <1.16.2": "1.16.2"
   # GHSA-r7fv-28h4-cvq7 and GHSA-gfr2-rv44-r23c: bound Markdown parser work.
   "markdown-it@>=14 <14.3.3": "14.3.3"
   # GHSA-fxqj-rqcc-2cmp: patched PostCSS starts at 8.5.23.
@@ -92,8 +101,8 @@ overrides:
   "js-yaml@>=5 <5.4.1": "5.4.1"
   # GHSA-w27v-7q3p-w38r: Astro still admits vulnerable svgo.
   "svgo@<4.1.0": "^4.1.0"
-  # GHSA-4mjr-xmp4-gh2g: Express admits vulnerable qs.
-  "qs@<6.16.0": "^6.16.0"
+  # GHSA-4mjr-xmp4-gh2g and GHSA-6pq8-jhm2-2vcw: Express admits vulnerable qs.
+  "qs@<6.16.1": "6.16.1"
   # GHSA-jqcg-44mw-7w3h: patch Express's proxy trust-subnet handling.
   "proxy-addr@<2.0.8": "^2.0.8"
   # GHSA-68fv-2mgg-jv7q: patch indexed source-map section offset handling.
@@ -146,6 +155,8 @@ minimumReleaseAgeExclude:
   # Four URI security fixes; official v3.1.9 tag/registry gitHead 0def703 verified.
   # https://github.com/fastify/fast-uri/releases/tag/v3.1.9
   - "fast-uri@3.1.9"
+  # GHSA-mrwp-f3q8-3g9p: allow only the patched redirect release.
+  - "follow-redirects@1.16.2"
 # GHSA-ch52-4w7c-c8xp has no patched npm version as of 2026-10-03. Astro's
 # remote asset helper creates a fresh Request(src) and only asks its cache
 # policy for storable/timeToLive; it does not invoke the vulnerable

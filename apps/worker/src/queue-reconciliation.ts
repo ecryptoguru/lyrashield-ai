@@ -5,11 +5,12 @@ import {
   getSystemPrisma,
   type ScanStatus,
   TERMINAL_SCAN_STATUSES,
-  updateScanStatus,
+  updateUnclaimedScanStatus,
 } from "@lyrashield/db"
 import { getRedis } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 import { getScanQueue } from "./queue"
+import { legacyWorkerLifecycleEnabled } from "./worker-authority-startup"
 
 const RECONCILIATION_LOCK_KEY = "lyrashield:scan-queue:reconciliation"
 const RECONCILIATION_LOCK_MS = 55_000
@@ -35,6 +36,7 @@ export async function reconcileScanQueueIfNeeded(
   lastReconciliationAtMs: number,
   now = new Date()
 ): Promise<QueueReconciliationResult | null> {
+  if (!legacyWorkerLifecycleEnabled()) return reconcileScanQueue(now)
   try {
     const nonterminalScanCount = await getSystemPrisma().scan.count({
       where: {
@@ -169,7 +171,7 @@ async function reconcileOrphanedScanCandidate(
   }
 
   lease.assertOwned()
-  await updateScanStatus(
+  await updateUnclaimedScanStatus(
     scan.id,
     "FAILED",
     {
@@ -192,6 +194,8 @@ export async function reconcileExactQueuedScanOrphan(
   workspaceId: string,
   now = new Date()
 ): Promise<{ leaseAcquired: boolean; reconciled: boolean; jobState: string | null }> {
+  if (!legacyWorkerLifecycleEnabled())
+    return { leaseAcquired: false, reconciled: false, jobState: "authority-held" }
   const redis = getRedis()
   if (!redis) return { leaseAcquired: false, reconciled: false, jobState: null }
 
@@ -223,6 +227,10 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
     removedOrphanedJobs: 0,
     queueDepth: 0,
     oldestWaitingJobAgeMs: 0,
+  }
+  if (!legacyWorkerLifecycleEnabled()) {
+    logger.warn("Legacy queue lifecycle held; broker reconciliation bridge required")
+    return result
   }
   const redis = getRedis()
   if (!redis) return result
@@ -326,6 +334,7 @@ export async function reconcileFailedQueueJob(
   attemptsMade: number,
   maxAttempts: number
 ): Promise<void> {
+  if (!legacyWorkerLifecycleEnabled()) return
   if (attemptsMade < maxAttempts) return
 
   try {
@@ -335,7 +344,7 @@ export async function reconcileFailedQueueJob(
     })
     if (!scan || !ACTIVE_SCAN_STATUSES.has(scan.status)) return
 
-    await updateScanStatus(
+    await updateUnclaimedScanStatus(
       jobId,
       "FAILED",
       {

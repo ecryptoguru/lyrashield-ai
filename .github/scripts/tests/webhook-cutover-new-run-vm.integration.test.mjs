@@ -95,7 +95,7 @@ function fixture(t, options = {}) {
     writeFileSync(receiptPath, JSON.stringify(receipt), { mode: 0o600 })
   writeFileSync(
     configPath,
-    `LYRASHIELD_WORKER_IMAGE=${currentImage}\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/ecryptoguru/sandbox:fixture@sha256:${"f".repeat(64)}\n`
+    `LYRASHIELD_WORKER_IMAGE=${currentImage}\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/ecryptoguru/sandbox:fixture@sha256:${"f".repeat(64)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=${"a".repeat(40)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=${"b".repeat(40)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n`
   )
   writeFileSync(environmentPath, "")
   writeFileSync(envLibPath, "lyrashield_worker_env_args() { :; }\n")
@@ -822,8 +822,15 @@ test("held recovery skips migration execution and keeps promotion failure forwar
     'if [ "$promotion_complete" -ne 1 ];',
     heldFailureStart + 1
   )
-  assert.ok(heldFailureStart >= 0 && genericRollbackStart > heldFailureStart)
-  const heldFailure = promoter.slice(heldFailureStart, genericRollbackStart)
+  const heldFailureEnd = promoter.indexOf("\n  fi\n", heldFailureStart)
+  assert.ok(
+    heldFailureStart >= 0 &&
+      heldFailureEnd > heldFailureStart &&
+      genericRollbackStart > heldFailureEnd
+  )
+  // End at maintenance's own closing guard; paired promotion has its own policy.
+  const heldFailure = promoter.slice(heldFailureStart, heldFailureEnd + "\n  fi\n".length)
+  assert.match(heldFailure, /\n    exit "\$status"\n  fi\n$/)
   assert.match(heldFailure, /webhook maintenance held, no legacy rollback/)
   assert.doesNotMatch(
     heldFailure,

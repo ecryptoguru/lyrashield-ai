@@ -67,8 +67,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/admin/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 79,
-      "maxExcess": 79
+      "totalExcess": 67,
+      "maxExcess": 67
     },
     "apps/web/src/app/(dashboard)/dashboard/admin/support/support-case-detail.tsx|max-lines-per-function": {
       "count": 1,
@@ -110,19 +110,14 @@
       "totalExcess": 225,
       "maxExcess": 225
     },
-    "apps/web/src/app/(dashboard)/dashboard/findings/finding-detail-drawer.tsx|max-lines": {
-      "count": 1,
-      "totalExcess": 24,
-      "maxExcess": 24
-    },
     "apps/web/src/app/(dashboard)/dashboard/findings/finding-detail-drawer.tsx|max-lines-per-function": {
       "count": 1,
       "totalExcess": 252,
       "maxExcess": 252
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/finding-detail-tabs.tsx|max-lines-per-function": {
-      "count": 2,
-      "totalExcess": 161,
+      "count": 1,
+      "totalExcess": 84,
       "maxExcess": 84
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/findings-client.tsx|max-lines-per-function": {
@@ -147,8 +142,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/launch-readiness/launch-readiness-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 252,
-      "maxExcess": 252
+      "totalExcess": 213,
+      "maxExcess": 213
     },
     "apps/web/src/app/(dashboard)/dashboard/licenses/licenses-client.tsx|max-lines-per-function": {
       "count": 1,
@@ -162,8 +157,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 246,
-      "maxExcess": 246
+      "totalExcess": 241,
+      "maxExcess": 241
     },
     "apps/web/src/app/(dashboard)/dashboard/projects/projects-client.tsx|max-lines-per-function": {
       "count": 1,
@@ -172,8 +167,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/reports/reports-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 351,
-      "maxExcess": 351
+      "totalExcess": 304,
+      "maxExcess": 304
     },
     "apps/web/src/app/(dashboard)/dashboard/reports/reports-views.tsx|max-lines-per-function": {
       "count": 1,
@@ -202,8 +197,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/create-scan-sheet.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 344,
-      "maxExcess": 344
+      "totalExcess": 275,
+      "maxExcess": 275
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scan-list.tsx|max-lines-per-function": {
       "count": 1,
@@ -217,13 +212,13 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx|max-lines": {
       "count": 1,
-      "totalExcess": 172,
-      "maxExcess": 172
+      "totalExcess": 130,
+      "maxExcess": 130
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 551,
-      "maxExcess": 551
+      "totalExcess": 513,
+      "maxExcess": 513
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/use-scan-list-state.ts|max-lines-per-function": {
       "count": 1,
@@ -237,18 +232,13 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/settings/api-keys.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 145,
-      "maxExcess": 145
+      "totalExcess": 103,
+      "maxExcess": 103
     },
     "apps/web/src/app/(dashboard)/dashboard/settings/two-factor-security.tsx|max-lines-per-function": {
       "count": 1,
       "totalExcess": 23,
       "maxExcess": 23
-    },
-    "apps/web/src/app/(dashboard)/dashboard/targets/[id]/page.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 104,
-      "maxExcess": 104
     },
     "apps/web/src/app/(dashboard)/dashboard/targets/[id]/scorecard-controls.tsx|max-lines-per-function": {
       "count": 1,
@@ -287,8 +277,8 @@
     },
     "apps/web/src/app/api/findings/[id]/retests/route.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 27,
-      "maxExcess": 27
+      "totalExcess": 25,
+      "maxExcess": 25
     },
     "apps/web/src/app/api/licenses/issue/route.ts|max-lines-per-function": {
       "count": 1,
@@ -305,20 +295,15 @@
       "totalExcess": 259,
       "maxExcess": 172
     },
-    "apps/web/src/app/api/scans/eligibility/route.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 64,
-      "maxExcess": 64
-    },
     "apps/web/src/app/api/scans/route.ts|max-lines": {
       "count": 1,
-      "totalExcess": 192,
-      "maxExcess": 192
+      "totalExcess": 68,
+      "maxExcess": 68
     },
     "apps/web/src/app/api/scans/route.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 482,
-      "maxExcess": 482
+      "totalExcess": 441,
+      "maxExcess": 441
     },
     "apps/web/src/app/api/sync/findings/route.ts|max-lines-per-function": {
       "count": 1,
@@ -359,11 +344,6 @@
       "count": 1,
       "totalExcess": 52,
       "maxExcess": 52
-    },
-    "apps/web/src/app/reports/shared/[id]/launch-report-view.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 1,
-      "maxExcess": 1
     },
     "apps/web/src/app/reports/shared/[id]/shared-report-view.tsx|max-lines-per-function": {
       "count": 1,
@@ -427,8 +407,8 @@
     },
     "apps/web/src/lib/mcp-tasks.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 160,
-      "maxExcess": 160
+      "totalExcess": 124,
+      "maxExcess": 124
     },
     "apps/web/src/lib/webmcp/register.ts|max-lines-per-function": {
       "count": 1,
@@ -447,13 +427,13 @@
     },
     "apps/worker/src/engine/finding-persister.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 87,
-      "maxExcess": 71
+      "totalExcess": 72,
+      "maxExcess": 67
     },
     "apps/worker/src/engine/output-parser-findings.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 18,
-      "maxExcess": 18
+      "totalExcess": 17,
+      "maxExcess": 17
     },
     "apps/worker/src/engine/result-integrity/retest-completion.ts|max-lines-per-function": {
       "count": 2,
@@ -462,8 +442,8 @@
     },
     "apps/worker/src/engine/runner-process.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 60,
-      "maxExcess": 41
+      "totalExcess": 42,
+      "maxExcess": 32
     },
     "apps/worker/src/engine/scanner-orchestrator.ts|max-lines": {
       "count": 1,
@@ -507,28 +487,28 @@
     },
     "apps/worker/src/jobs/run-scan.job.ts|max-lines": {
       "count": 1,
-      "totalExcess": 87,
-      "maxExcess": 87
+      "totalExcess": 82,
+      "maxExcess": 82
     },
     "apps/worker/src/jobs/run-scan.job.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 908,
-      "maxExcess": 458
+      "totalExcess": 899,
+      "maxExcess": 453
     },
     "apps/worker/src/jobs/run-scan/admission.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 21,
-      "maxExcess": 21
+      "totalExcess": 15,
+      "maxExcess": 15
     },
     "apps/worker/src/jobs/run-scan/execution.ts|max-lines": {
       "count": 1,
-      "totalExcess": 184,
-      "maxExcess": 184
+      "totalExcess": 105,
+      "maxExcess": 105
     },
     "apps/worker/src/jobs/run-scan/execution.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 283,
-      "maxExcess": 209
+      "totalExcess": 218,
+      "maxExcess": 193
     },
     "apps/worker/src/jobs/run-scan/finalization.ts|max-lines-per-function": {
       "count": 1,
@@ -630,16 +610,6 @@
       "totalExcess": 62,
       "maxExcess": 62
     },
-    "packages/db/src/gate-evaluation-service.ts|max-lines-per-function": {
-      "count": 2,
-      "totalExcess": 57,
-      "maxExcess": 31
-    },
-    "packages/db/src/gate-verdict-batch.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 2,
-      "maxExcess": 2
-    },
     "packages/db/src/notification-service.ts|max-lines-per-function": {
       "count": 1,
       "totalExcess": 7,
@@ -660,20 +630,10 @@
       "totalExcess": 72,
       "maxExcess": 72
     },
-    "packages/db/src/scan-service.ts|max-lines": {
-      "count": 1,
-      "totalExcess": 28,
-      "maxExcess": 28
-    },
-    "packages/egress-proxy/src/index.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 1,
-      "maxExcess": 1
-    },
     "packages/egress-proxy/src/relay.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 264,
-      "maxExcess": 212
+      "totalExcess": 260,
+      "maxExcess": 208
     },
     "packages/gate/src/index.ts|max-lines-per-function": {
       "count": 1,

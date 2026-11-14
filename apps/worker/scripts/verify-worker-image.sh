@@ -51,6 +51,7 @@ docker run --rm --entrypoint sh "$image" -c '
     refresh-secrets.sh \
     refresh-egress.sh \
     capture-stop-provenance.sh \
+    cold-start-barrier.py \
     lyrashield-worker.service \
     lyrashield-worker-secrets.service \
     lyrashield-worker-egress.service \

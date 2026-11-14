@@ -39,6 +39,7 @@
     "admin:provision": "pnpm --filter @lyrashield/db exec tsx scripts/provision-platform-admins.ts"
   },
   "devDependencies": {
+    "@astrojs/compiler": "2.13.1",
     "@playwright/test": "^1.62.1",
     "eslint": "catalog:",
     "eslint-config-next": "16.3.6",

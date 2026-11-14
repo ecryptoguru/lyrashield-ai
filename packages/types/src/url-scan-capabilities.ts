@@ -234,7 +234,9 @@ export function getUrlModeAvailability(
   hasApiSpec: boolean,
   releasedIds: ReadonlySet<string> = RELEASED_URL_PROFILE_IDS
 ): UrlModeAvailability {
-  const normalized = normalizeMode(mode)
+  // Omitted profile is Safe/Quick — the deterministic-only tier.
+  const requested = mode.trim().toUpperCase() || "QUICK"
+  const normalized = normalizeMode(requested)
 
   if (!isUrlScanMode(normalized)) {
     return {
@@ -296,12 +298,10 @@ export function resolveTargetScanMode(
     return { ok: true, profile: null }
   }
 
-  const availability = getUrlModeAvailability(
-    input.targetType,
-    input.mode,
-    input.hasApiSpec,
-    releasedIds
-  )
+  // Omitted profile defaults to Quick (the deterministic Safe tier).
+  const mode = input.mode.trim() || "QUICK"
+
+  const availability = getUrlModeAvailability(input.targetType, mode, input.hasApiSpec, releasedIds)
 
   if (!availability.available) {
     return {
@@ -311,6 +311,6 @@ export function resolveTargetScanMode(
     }
   }
 
-  const profile = getUrlScanProfile(input.targetType, input.mode)
+  const profile = getUrlScanProfile(input.targetType, mode)
   return { ok: true, profile }
 }

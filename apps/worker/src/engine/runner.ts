@@ -249,7 +249,9 @@ export async function runEngine(
     ? await readEngineOutput(outputDir)
     : { vulnerabilitiesRaw: "", runJsonRaw: "", artifacts: {} }
 
-  const output = parseEngineOutput(vulnerabilitiesRaw, runJsonRaw, artifacts)
+  const output = parseEngineOutput(vulnerabilitiesRaw, runJsonRaw, artifacts, {
+    expectedRunName: config.scanId,
+  })
   const sourceCheckoutPath = await resolveEngineSourceCheckout(output.runRecord, scanId)
   const sourceRevision = await resolveEngineSourceRevision(sourceCheckoutPath)
   const sandboxRemoved = await verifySandboxRemoved(scanId)

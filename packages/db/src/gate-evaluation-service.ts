@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util"
 import {
   computeGateVerdict,
   computeInputChecksum,
@@ -6,20 +7,87 @@ import {
   isTargetTypeCovered,
   type GateEvidenceInput,
   type GateVerdictResult,
+  type GateAssessmentSnapshot,
 } from "@lyrashield/gate"
-import {
-  fingerprintPolicy,
-  isTrustedRetestReceipt,
-  snapshotFromManifest,
-  toEpochMs,
-} from "./gate-assessment"
-import { withWorkspaceRLS } from "./rls"
+import { fingerprintPolicy, snapshotFromManifest, toEpochMs } from "./gate-assessment"
+import { loadVerifiedAssessedScans, MAX_EVIDENCE_BYTES } from "./gate-assessed-scan-evidence"
+import { loadGateFindings, prepareGateFindingInputs } from "./gate-retest-input"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
 export interface GateEvaluationResult {
   verdict: GateVerdictResult
   gateVerdictId: string
   /** Present when the gate could not evaluate at all (e.g. no completed scan). */
   note?: string
+}
+
+export async function loadBoundedCandidateManifest(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  targetId: string,
+  scanId: string
+): Promise<Parameters<typeof snapshotFromManifest>[0]["manifest"]> {
+  const rows = await tx.$queryRaw<
+    { candidateManifest: Parameters<typeof snapshotFromManifest>[0]["manifest"] }[]
+  >`
+    SELECT CASE WHEN octet_length(m."checksumInput") <= ${MAX_EVIDENCE_BYTES}
+      AND octet_length(m."manifest"::text) <= ${MAX_EVIDENCE_BYTES}
+      AND octet_length(m."checksum") = 64 AND m."checksum" ~ '^[0-9a-f]{64}$'
+      AND jsonb_typeof(m."manifest") = 'object'
+      THEN jsonb_build_object('version', m."version", 'checksum', m."checksum", 'manifest', m."manifest")
+      ELSE NULL END AS "candidateManifest"
+    FROM "ScanResultManifest" m JOIN "Scan" s ON s."id" = m."scanId"
+    WHERE s."id" = ${scanId} AND s."workspaceId" = ${workspaceId}
+      AND s."targetId" = ${targetId} AND s."deletedAt" IS NULL AND s."status" = 'COMPLETED'
+  `
+  return rows[0]?.candidateManifest ?? null
+}
+
+async function persistGateEvaluation(
+  tx: ScopedTransaction,
+  context: {
+    workspaceId: string
+    targetId: string
+    scanId: string | null
+    assessmentSnapshot: GateAssessmentSnapshot | null
+    reuseEquivalentVerdict: boolean
+  },
+  evidence: GateEvidenceInput,
+  verdict: GateVerdictResult
+) {
+  const data = {
+    workspaceId: context.workspaceId,
+    targetId: context.targetId,
+    scanId: context.scanId,
+    standardVersion: verdict.standardVersion,
+    state: verdict.state,
+    coverageStatement: verdict.coverageStatement,
+    nonCoverage: verdict.nonCoverage,
+    blockingReasons: verdict.blockingReasons,
+    evidenceSummary: verdict.evidenceSummary,
+    staleness: verdict.staleness,
+    inputChecksum: computeInputChecksum(evidence),
+    verdictChecksum: computeVerdictChecksum(verdict),
+    assessmentVersion: context.assessmentSnapshot?.version ?? null,
+    assessmentSnapshot: context.assessmentSnapshot ?? undefined,
+  }
+  if (context.reuseEquivalentVerdict) {
+    const existing = await tx.gateVerdict.findFirst({
+      where: { workspaceId: data.workspaceId, targetId: data.targetId },
+      orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
+    })
+    // Compare every persisted input, verdict field and assessment binding,
+    // rather than trusting the stored state or its claimed checksums alone.
+    if (
+      existing &&
+      Object.entries(data).every(([field, value]) =>
+        isDeepStrictEqual(existing[field as keyof typeof existing] ?? null, value ?? null)
+      )
+    ) {
+      return { id: existing.id }
+    }
+  }
+  return tx.gateVerdict.create({ data, select: { id: true } })
 }
 
 /**
@@ -31,9 +99,16 @@ export interface GateEvaluationResult {
  */
 export async function evaluateGateForTarget(
   workspaceId: string,
-  targetId: string
+  targetId: string,
+  options: { transaction?: ScopedTransaction; reuseEquivalentVerdict?: boolean } = {}
 ): Promise<GateEvaluationResult | null> {
-  return withWorkspaceRLS(workspaceId, async (tx) => {
+  // Packet issuance supplies its RepeatableRead transaction so assessment and
+  // remediation observe the same evidence without opening a nested transaction.
+  const runConsistent = (fn: (tx: ScopedTransaction) => Promise<GateEvaluationResult | null>) =>
+    options.transaction
+      ? fn(options.transaction)
+      : withWorkspaceRLS(workspaceId, fn, { isolationLevel: "RepeatableRead" })
+  return runConsistent(async (tx) => {
     const target = await tx.target.findFirst({
       where: { id: targetId, workspaceId, deletedAt: null },
       select: { id: true, type: true },
@@ -49,7 +124,6 @@ export async function evaluateGateForTarget(
         status: true,
         mode: true,
         policyId: true,
-        resultManifest: { select: { version: true, checksum: true, manifest: true } },
       },
     })
 
@@ -76,83 +150,30 @@ export async function evaluateGateForTarget(
         })
       : null
     const policyFingerprint = fingerprintPolicy(policy as Record<string, unknown> | null)
-    const assessmentSnapshot = latestCompletedScan
+    const candidateManifest = latestCompletedScan
+      ? await loadBoundedCandidateManifest(tx, workspaceId, targetId, latestCompletedScan.id)
+      : null
+    const candidateSnapshot = latestCompletedScan
       ? snapshotFromManifest({
           scanId: latestCompletedScan.id,
           endedAt: latestCompletedScan.endedAt,
           policyId: latestCompletedScan.policyId,
           policyFingerprint,
-          manifest: latestCompletedScan.resultManifest,
+          manifest: candidateManifest,
         })
       : null
 
-    const coverageReceipts = latestCompletedScan
-      ? await tx.scanCoverageReceipt.findMany({
-          where: { scanId: latestCompletedScan.id },
-          select: { controlId: true, scanner: true, status: true, reason: true },
-        })
-      : []
+    const verifiedScan = candidateSnapshot
+      ? (
+          await loadVerifiedAssessedScans(tx, workspaceId, [
+            { targetId, scanId: candidateSnapshot.scanId, assessmentSnapshot: candidateSnapshot },
+          ])
+        ).verified.get(targetId)
+      : undefined
+    const assessmentSnapshot = verifiedScan ? candidateSnapshot : null
+    const coverageReceipts = verifiedScan?.coverageReceipts ?? []
 
-    const findings = await tx.finding.findMany({
-      where: { workspaceId, targetId, deletedAt: null },
-      select: {
-        id: true,
-        severity: true,
-        status: true,
-        verificationStatus: true,
-        lastSeenAt: true,
-        scanId: true,
-        disposition: true,
-        dispositionActorUserId: true,
-        dispositionReason: true,
-        dispositionAssessmentId: true,
-        dispositionAt: true,
-        canonicalFindingId: true,
-        verificationReceipts: {
-          where: { status: { in: ["VALIDATED", "VERIFIED"] } },
-          select: {
-            status: true,
-            method: true,
-            scanId: true,
-            verifierVersion: true,
-            evidence: true,
-          },
-        },
-      },
-    })
-
-    const preparedFindings = findings.map((finding) => {
-      const trustedRetest = finding.verificationReceipts.some((receipt) =>
-        isTrustedRetestReceipt(receipt, finding.scanId)
-      )
-      const positiveReceipt = latestCompletedScan
-        ? finding.verificationReceipts.some(
-            (receipt) =>
-              receipt.scanId === latestCompletedScan.id &&
-              (receipt.status === "VALIDATED" || receipt.status === "VERIFIED") &&
-              Boolean(receipt.method)
-          )
-        : false
-      const applicableDisposition =
-        Boolean(finding.dispositionActorUserId) &&
-        Boolean(finding.dispositionReason) &&
-        Boolean(finding.dispositionAt) &&
-        finding.dispositionAssessmentId === latestCompletedScan?.id &&
-        (finding.disposition === "ACCEPTED_RISK" || finding.disposition === "FALSE_POSITIVE")
-      return { finding, trustedRetest, positiveReceipt, applicableDisposition }
-    })
-    const byFindingId = new Map(preparedFindings.map((entry) => [entry.finding.id, entry]))
-    const duplicateResolved = (
-      entry: (typeof preparedFindings)[number],
-      seen = new Set<string>()
-    ): boolean => {
-      if (entry.trustedRetest || entry.applicableDisposition) return true
-      if (entry.finding.status !== "DUPLICATE" || !entry.finding.canonicalFindingId) return false
-      if (seen.has(entry.finding.id)) return false
-      seen.add(entry.finding.id)
-      const canonical = byFindingId.get(entry.finding.canonicalFindingId)
-      return canonical ? duplicateResolved(canonical, seen) : false
-    }
+    const { findings, trustedRetests } = await loadGateFindings(tx, workspaceId, targetId)
 
     const evidence: GateEvidenceInput = {
       targetId,
@@ -168,22 +189,9 @@ export async function evaluateGateForTarget(
         controlId: r.controlId,
         scanner: r.scanner,
         status: r.status as GateEvidenceInput["coverageReceipts"][number]["status"],
-        reason: r.reason,
+        reason: r.reason ?? null,
       })),
-      findings: preparedFindings.map((entry) => ({
-        id: entry.finding.id,
-        severity: entry.finding.severity,
-        status: entry.finding.status,
-        verificationStatus: entry.finding.verificationStatus,
-        retestConfirmedResolved: entry.finding.status === "FIXED" && entry.trustedRetest,
-        hasPositiveEvidence: entry.positiveReceipt || entry.trustedRetest,
-        hasApplicableDisposition: entry.applicableDisposition,
-        applicableDisposition: entry.applicableDisposition
-          ? (entry.finding.disposition as "ACCEPTED_RISK" | "FALSE_POSITIVE")
-          : null,
-        duplicateCanonicalResolved: duplicateResolved(entry),
-        lastSeenAtMs: entry.finding.lastSeenAt.getTime(),
-      })),
+      findings: prepareGateFindingInputs(findings, trustedRetests, latestCompletedScan?.id ?? null),
       requiredScanners: isTargetTypeCovered(target.type)
         ? requiredScannersForTarget(target.type, latestCompletedScan?.mode)
         : [],
@@ -193,28 +201,18 @@ export async function evaluateGateForTarget(
     }
 
     const verdict = computeGateVerdict(evidence)
-    const inputChecksum = computeInputChecksum(evidence)
-    const verdictChecksum = computeVerdictChecksum(verdict)
-
-    const record = await tx.gateVerdict.create({
-      data: {
+    const record = await persistGateEvaluation(
+      tx,
+      {
         workspaceId,
         targetId,
         scanId: latestCompletedScan?.id ?? null,
-        standardVersion: verdict.standardVersion,
-        state: verdict.state,
-        coverageStatement: verdict.coverageStatement,
-        nonCoverage: verdict.nonCoverage,
-        blockingReasons: verdict.blockingReasons,
-        evidenceSummary: verdict.evidenceSummary,
-        staleness: verdict.staleness,
-        inputChecksum,
-        verdictChecksum,
-        assessmentVersion: assessmentSnapshot?.version ?? null,
-        assessmentSnapshot: assessmentSnapshot ?? undefined,
+        assessmentSnapshot,
+        reuseEquivalentVerdict: options.reuseEquivalentVerdict ?? false,
       },
-      select: { id: true },
-    })
+      evidence,
+      verdict
+    )
 
     return { verdict, gateVerdictId: record.id }
   })

@@ -437,6 +437,16 @@ describe("reproducibility (load-bearing determinism guarantee)", () => {
     })
     expect(computeInputChecksum(clean)).not.toBe(computeInputChecksum(withFinding))
   })
+
+  it("binds prototype-named properties in evidence to its checksum", () => {
+    const normal = baseInput()
+    const altered = baseInput()
+    Object.defineProperty(altered.latestCompletedScan!, "__proto__", {
+      value: { forged: true },
+      enumerable: true,
+    })
+    expect(computeInputChecksum(altered)).not.toBe(computeInputChecksum(normal))
+  })
 })
 
 describe("GATE-0 target-type coverage", () => {

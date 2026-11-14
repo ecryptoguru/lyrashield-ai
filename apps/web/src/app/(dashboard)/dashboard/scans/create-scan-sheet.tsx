@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRef, type Dispatch, type SetStateAction } from "react"
-import { AlertCircle, Check, ChevronDown, ChevronRight, Clock } from "lucide-react"
+import { AlertCircle, Check, ChevronRight, Clock } from "lucide-react"
 import { Badge, Button, cn, FormField, Input, Select } from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -18,9 +18,18 @@ import type { ManualScanOption } from "@/lib/scan-presets"
 import { SCAN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
 import { getReviewSetupGuidance } from "./scans-client.utils"
 import { ScanSubmissionFooter, useScanSheetErrorVisibility } from "./scan-submission-feedback"
+import { ScanAdvancedOptions } from "./scan-advanced-options"
 import { ScanEligibilityRecovery } from "./scan-eligibility-recovery"
 import type { ScanEligibilityState, TargetItem } from "./scan-types"
 import type { ScanAttachmentItem } from "@/lib/api-schemas"
+
+function getModeAdvisory(eligibility: ScanEligibilityState, optionId: string) {
+  return eligibility.status === "ready"
+    ? eligibility.eligibility.supportedModes?.find(
+        (mode) => mode.id === optionId.replace(/_LAUNCH_REVIEW$/, "")
+      )
+    : undefined
+}
 
 function ScanMinuteDisclosure({ option }: { option: ManualScanOption }) {
   return (
@@ -117,6 +126,8 @@ export function CreateScanSheet({
   selectedOption,
   choosePreset,
   modeResetNotice,
+  engineBudgetCeiling,
+  setEngineBudgetCeiling,
   selectedFocus,
   setSelectedFocus,
   reviewSetupGuidance,
@@ -152,6 +163,8 @@ export function CreateScanSheet({
   selectedOption: ManualScanOption | undefined
   choosePreset: (id: string) => void
   modeResetNotice: string | null
+  engineBudgetCeiling: string
+  setEngineBudgetCeiling: (value: string) => void
   selectedFocus: string | null
   setSelectedFocus: Dispatch<SetStateAction<string | null>>
   reviewSetupGuidance: ReturnType<typeof getReviewSetupGuidance>
@@ -179,10 +192,7 @@ export function CreateScanSheet({
     errorMessage
   )
   const displayedOptions = availableOptions.map((option) => {
-    const advisory =
-      eligibility.status === "ready"
-        ? eligibility.eligibility.supportedModes?.find((mode) => mode.id === option.id)
-        : undefined
+    const advisory = getModeAdvisory(eligibility, option.id)
     return advisory?.available === false
       ? {
           ...option,
@@ -512,84 +522,13 @@ export function CreateScanSheet({
               ) : null}
             </div>
 
-            <div>
-              <button
-                type="button"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                aria-expanded={showAdvanced}
-                aria-controls="scan-advanced-panel"
-                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex min-h-11 items-center gap-1 rounded-md px-1 text-xs font-medium focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
-              >
-                <ChevronDown
-                  className={cn(
-                    "size-4 transition-transform duration-(--duration-fast) ease-out",
-                    showAdvanced ? "rotate-180" : ""
-                  )}
-                  aria-hidden="true"
-                />
-                What this covers
-              </button>
-
-              {showAdvanced && selectedOption && (
-                <div
-                  id="scan-advanced-panel"
-                  className="bg-muted/40 border-border mt-2 rounded-lg border p-4"
-                >
-                  <dl className="space-y-3 text-xs leading-relaxed">
-                    <div>
-                      <dt className="text-sm font-medium">What this review covers</dt>
-                      <dd className="text-muted-foreground mt-1">{selectedOption.hint}</dd>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <div>
-                        <dt className="text-muted-foreground font-medium">Workflow</dt>
-                        <dd>
-                          {selectedOption.workflow === "REVIEW_CHANGES"
-                            ? "Scan changes"
-                            : "Scan target"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground font-medium">Depth</dt>
-                        <dd>{getScanModeLabel(selectedOption.mode)}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground font-medium">Effective scope</dt>
-                        <dd>{selectedOption.scopeSummary}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground font-medium">Limits</dt>
-                        <dd>{selectedOption.limitsSummary}</dd>
-                      </div>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground font-medium">Applicable checks</dt>
-                      <dd>
-                        <ul className="text-muted-foreground mt-1 list-inside list-disc">
-                          {selectedOption.applicableChecks.map((check) => (
-                            <li key={check}>{check}</li>
-                          ))}
-                        </ul>
-                      </dd>
-                    </div>
-                    {selectedOption.authorizationHint ? (
-                      <div>
-                        <dt className="text-muted-foreground font-medium">
-                          Authorization required
-                        </dt>
-                        <dd className="text-muted-foreground">
-                          {selectedOption.authorizationHint}
-                        </dd>
-                      </div>
-                    ) : null}
-                    <dd className="text-muted-foreground">
-                      The completed scan records the applicable evidence and any limitations so you
-                      can decide what to fix or retest next.
-                    </dd>
-                  </dl>
-                </div>
-              )}
-            </div>
+            <ScanAdvancedOptions
+              selectedOption={selectedOption}
+              showAdvanced={showAdvanced}
+              setShowAdvanced={setShowAdvanced}
+              engineBudgetCeiling={engineBudgetCeiling}
+              setEngineBudgetCeiling={setEngineBudgetCeiling}
+            />
           </div>
         </div>
 
@@ -599,7 +538,7 @@ export function CreateScanSheet({
           recoveryError={scanRecoveryError}
           canManageBilling={canManageBilling}
           creating={creating}
-          startDisabled={startDisabled}
+          startDisabled={startDisabled || !selectedIsAvailable}
           onStart={handleCreateScan}
           onCancel={() => onOpenChange(false)}
           submissionErrorRef={submissionErrorRef}

@@ -1,6 +1,24 @@
+import { assertColdDatabaseEpoch } from "../../cold-database-epoch"
+import { resolveScanBudgetUsd } from "../../engine/command-builder"
 import { withWorkspaceRLS, updateScanStatus, type ScanStatus } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { notifyScanFailed } from "../../notifications"
+
+/** Effective amount plus the authority that narrowed this invocation. */
+export function effectiveEngineBudget(
+  mode: string,
+  targetType: string,
+  policyBudget: number | null | undefined,
+  storedBudget: number | undefined
+) {
+  const current = resolveScanBudgetUsd(mode, policyBudget, targetType)
+  if (storedBudget !== undefined && storedBudget < current)
+    return { amount: storedBudget, source: "execution_plan" }
+  return {
+    amount: current,
+    source: typeof policyBudget === "number" && policyBudget > 0 ? "policy" : "mode_default",
+  }
+}
 
 export async function readExecutionPolicy(policyId: string | undefined, workspaceId: string) {
   return policyId
@@ -37,4 +55,10 @@ export async function failScanWithTimeout(
         notificationError instanceof Error ? notificationError.message : String(notificationError),
     })
   }
+}
+
+/** Confirm database incarnation and fresh cancellation state before handing inputs to the engine. */
+export async function engineDispatchStatus(isScanCancelled: (force?: boolean) => Promise<boolean>) {
+  await assertColdDatabaseEpoch()
+  return isScanCancelled(true).catch(() => null)
 }

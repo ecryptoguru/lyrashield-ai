@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { beforeAll, describe, expect, it, vi } from "vitest"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import * as creation from "./workspace-creation"
+import * as audit from "./onboarding-workspace-audit"
 import { chooseOrCreateOnboardingWorkspace, listOnboardingWorkspaces } from "./onboarding-workspace"
 import { getOrCreateOnboardingState } from "./onboarding-state"
 
@@ -131,6 +132,39 @@ describe.skipIf(!enabled)("atomic onboarding workspace selection", () => {
     expect(
       (await prisma.onboardingState.findUnique({ where: { userId: owner.id } }))?.workspaceId
     ).toBe(workspaceId)
+  })
+  it("retains and repairs a failed creation audit across a retry without changing progress", async () => {
+    const owner = await user()
+    const delivery = vi.spyOn(audit, "deliverOnboardingWorkspaceAudit")
+    delivery.mockRejectedValueOnce(new Error("audit unavailable"))
+    try {
+      await expect(
+        chooseOrCreateOnboardingWorkspace(owner.id, {
+          kind: "create",
+          name: `Audit ${randomUUID()}`,
+          expectedUpdatedAt: owner.state.updatedAt.toISOString(),
+        })
+      ).rejects.toThrow("audit unavailable")
+    } finally {
+      delivery.mockRestore()
+    }
+
+    const pending = await prisma.onboardingState.findUniqueOrThrow({ where: { userId: owner.id } })
+    const workspaceId = pending.workspaceId!
+    expect(pending.pendingWorkspaceCreatedAuditId).toBe(workspaceId)
+    await Promise.all([getOrCreateOnboardingState(owner.id), getOrCreateOnboardingState(owner.id)])
+    const recovered = await prisma.onboardingState.findUniqueOrThrow({
+      where: { userId: owner.id },
+    })
+    expect(recovered.pendingWorkspaceCreatedAuditId).toBeNull()
+    expect(recovered.updatedAt).toEqual(pending.updatedAt)
+    await withWorkspaceRLS(workspaceId, async (tx) => {
+      const entries = await tx.auditLog.findMany({
+        where: { workspaceId, action: "workspace.created", resourceId: workspaceId },
+      })
+      expect(entries).toHaveLength(1)
+      expect(entries[0]).toMatchObject({ id: workspaceId, actorUserId: owner.id })
+    })
   })
   it("selects the explicit eligible Developer membership without creating a workspace or trial", async () => {
     const owner = await user()

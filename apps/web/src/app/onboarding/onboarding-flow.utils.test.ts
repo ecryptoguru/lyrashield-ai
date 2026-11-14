@@ -42,14 +42,13 @@ describe("getOnboardingReviewOptions", () => {
       { label: "Release check", mode: "QUICK" },
       { label: "Code scan", mode: "STANDARD" },
       { label: "Deep security scan", mode: "DEEP" },
+      { label: "Standard launch review", mode: "STANDARD" },
     ])
   })
 
-  it("uses URL-specific safe, standard, and deep choices", () => {
+  it("uses only the deterministic Safe choice for a URL target", () => {
     expect(getOnboardingReviewOptions("url").map(({ label, mode }) => ({ label, mode }))).toEqual([
       { label: "Surface Review", mode: "SAFE" },
-      { label: "Engine Review", mode: "STANDARD" },
-      { label: "Deep Live Review", mode: "DEEP" },
     ])
   })
 
@@ -57,6 +56,19 @@ describe("getOnboardingReviewOptions", () => {
     expect(getOnboardingReviewOptions("api").map(({ label, mode }) => ({ label, mode }))).toEqual([
       { label: "Endpoint Review", mode: "SAFE" },
     ])
+  })
+
+  it("binds the launch choice to Standard launch-review intent", () => {
+    expect(
+      getOnboardingReviewOptions("github").find(
+        (option) => option.label === "Standard launch review"
+      )
+    ).toMatchObject({
+      goal: "LAUNCH_REVIEW",
+      mode: "STANDARD",
+      workflow: "REVIEW_TARGET",
+      isDefault: false,
+    })
   })
 })
 

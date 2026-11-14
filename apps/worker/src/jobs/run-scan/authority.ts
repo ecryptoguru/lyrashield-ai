@@ -1,7 +1,7 @@
 import type { Job } from "bullmq"
 import {
   getSystemPrisma,
-  updateScanStatus,
+  updateUnclaimedScanStatus,
   verifyStoredScanExecutionPlan,
   type ScanStatus,
 } from "@lyrashield/db"
@@ -52,8 +52,25 @@ export type ScanAuthorityResult =
     }
   | { ok: false; result: ScanJobResult }
 
+async function recordAuthorityFailure(
+  scanId: string,
+  workspaceId: string,
+  error: { errorCategory: string; errorMessage: string },
+  label: string
+) {
+  try {
+    await updateUnclaimedScanStatus(scanId, "FAILED" as ScanStatus, error, workspaceId)
+  } catch (statusErr) {
+    logger.warn(label, {
+      scanId,
+      errorType: statusErr instanceof Error ? statusErr.name : "UNKNOWN",
+    })
+  }
+}
+
 export async function verifyScanJobAuthority(
-  job: Job<ScanJobData, ScanJobResult>
+  job: Job<ScanJobData, ScanJobResult>,
+  options: { recordFailure?: boolean } = {}
 ): Promise<ScanAuthorityResult> {
   // Prompt-injection checks happen before any schema trust: an attacker could
   // place arbitrary text in the queue payload and the goal field is later used
@@ -134,23 +151,16 @@ export async function verifyScanJobAuthority(
     scanRecord.mode !== mode ||
     scanRecord.policyId !== (policyId ?? null)
   ) {
-    if (scanRecord) {
-      try {
-        await updateScanStatus(
-          scanId,
-          "FAILED" as ScanStatus,
-          {
-            errorCategory: "INVALID_JOB",
-            errorMessage: "Scan job does not match the stored scan record",
-          },
-          scanRecord.workspaceId
-        )
-      } catch (statusErr) {
-        logger.warn("Failed to mark invalid scan job as failed", {
-          scanId,
-          errorType: statusErr instanceof Error ? statusErr.name : "UNKNOWN",
-        })
-      }
+    if (scanRecord && options.recordFailure !== false) {
+      await recordAuthorityFailure(
+        scanId,
+        scanRecord.workspaceId,
+        {
+          errorCategory: "INVALID_JOB",
+          errorMessage: "Scan job does not match the stored scan record",
+        },
+        "Failed to mark invalid scan job as failed"
+      )
     }
     return {
       ok: false,
@@ -191,22 +201,13 @@ export async function verifyScanJobAuthority(
         jobId: job.id,
         errorCategory: denial.errorCategory,
       })
-      try {
-        await updateScanStatus(
+      if (options.recordFailure !== false)
+        await recordAuthorityFailure(
           scanId,
-          "FAILED" as ScanStatus,
-          {
-            errorCategory: denial.errorCategory,
-            errorMessage: denial.errorMessage,
-          },
-          scanRecord.workspaceId
+          scanRecord.workspaceId,
+          denial,
+          "Failed to mark invalid-plan scan as failed"
         )
-      } catch (statusErr) {
-        logger.warn("Failed to mark invalid-plan scan as failed", {
-          scanId,
-          errorType: statusErr instanceof Error ? statusErr.name : "UNKNOWN",
-        })
-      }
       return {
         ok: false,
         result: { status: "failed", ...denial },

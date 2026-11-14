@@ -1,4 +1,13 @@
-import type { DeterminismMode, ScanWorkflow } from "@lyrashield/types"
+import type { prisma } from "./client"
+import type { DeterminismMode, ScanFocus, ScanWorkflow } from "@lyrashield/types"
+
+export type ScanTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+/** Internal server options, deliberately separate from scan request input. */
+export interface ScanAdmissionOptions {
+  /** Qualification only: both durable records remain quarantined as UNKNOWN. */
+  dispatchAuthority?: "shadow"
+}
 
 export interface CreateScanParams {
   workspaceId: string
@@ -6,8 +15,13 @@ export interface CreateScanParams {
   goal: string
   mode?: string
   policyId?: string
+  /** Revalidate the default (including its absence) selected by manual admission. */
+  verifyWorkspaceDefaultPolicy?: boolean
+  engineBudgetCeilingUsd?: number
   createdById: string
   triggerType?: string
+  /** Server-normalized emphasis, bound into immutable queue payload bytes. */
+  focus?: ScanFocus
   determinismMode?: DeterminismMode
   /**
    * Optional workflow input (defaults to REVIEW_TARGET). The server constructs
@@ -36,4 +50,16 @@ export interface CreateScanParams {
    * inherited blindly by the queued job.
    */
   delegatedConnection?: { connectionId: string; authorizationVersion: number }
+  /**
+   * Server-issued capability from a hosted MCP claim. When present, the same
+   * scan transaction must reserve the outer operation result and persist the
+   * immutable operation→scan→target provenance row.
+   */
+  delegatedOperation?: {
+    operationId: string
+    operationName?: "scan.create" | "retest.create"
+    admissionProof: string
+    connectionId: string
+    authorizationVersion: number
+  }
 }

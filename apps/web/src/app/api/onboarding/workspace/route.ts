@@ -47,10 +47,12 @@ async function post(request: Request) {
     return failure("VALIDATION_ERROR", "Choose a workspace or enter a valid workspace name", 400)
   try {
     const result = await chooseOrCreateOnboardingWorkspace(session.userId, parsed.data)
+    const { pendingWorkspaceCreatedAuditId, ...state } = result.state
+    void pendingWorkspaceCreatedAuditId
     return NextResponse.json({
       success: true,
       data: {
-        state: { ...result.state, updatedAt: result.state.updatedAt.toISOString() },
+        state: { ...state, updatedAt: state.updatedAt.toISOString() },
         workspace: result.workspace,
         trialStarted: result.trialStarted,
       },

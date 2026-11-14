@@ -1,18 +1,12 @@
-import { createRequire } from "node:module"
-import { realpathSync } from "node:fs"
 import { readFile, writeFile } from "node:fs/promises"
 import { execFileSync } from "node:child_process"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { ESLint } from "eslint"
+import { parse } from "@astrojs/compiler"
 import { collectSizeDebt, findSizeRegressions, findStaleSizeBaseline } from "./size-ratchet.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const requireAstro = createRequire(
-  realpathSync(path.join(root, "apps/marketing/node_modules/astro/package.json"))
-)
-const { parse } = requireAstro("@astrojs/compiler")
-
 export async function astroCodeBlocks(source) {
   const { ast, diagnostics = [] } = await parse(source)
   if (diagnostics.some((diagnostic) => diagnostic.severity === 1))

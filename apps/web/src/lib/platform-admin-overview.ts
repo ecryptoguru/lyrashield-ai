@@ -5,6 +5,7 @@ import { paidAccountMetricsFromAggregate, THIRTY_DAYS_MS } from "./growth-metric
 
 export type PlatformHealthStatus = "healthy" | "degraded" | "unknown"
 const ACTIVATION_MINIMUM_SAMPLE = 20
+const SETUP_QUALITY_METRIC_VERSION = "setup-quality/2.0.0" as const
 
 type ActivationRow = {
   accountsCreated: bigint
@@ -12,6 +13,9 @@ type ActivationRow = {
   validAssessments: bigint
   ttfvMedianMinutes: number | null
   ttfvP90Minutes: number | null
+  usefulAssessments: bigint
+  ttfuMedianMinutes: number | null
+  ttfuP95Minutes: number | null
   githubConnectStarted: bigint
   githubConnected: bigint
   targetsZero: bigint
@@ -36,7 +40,7 @@ function sampledRate(numerator: number, denominator: number) {
   }
 }
 
-async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) {
+async function fetchActivationRow(prisma: ReturnType<typeof getSystemPrisma>) {
   const [row] = await prisma.$queryRaw<ActivationRow[]>`
     WITH first_scan AS (
       SELECT "createdById" AS user_id, MIN("createdAt") AS started_at
@@ -51,6 +55,24 @@ async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) 
         AND status::text IN ('COMPLETED', 'PARTIAL')
         AND "endedAt" IS NOT NULL
       GROUP BY "createdById"
+    ),
+    first_useful AS (
+      SELECT
+        scan."createdById" AS user_id,
+        MIN(verdict."evaluatedAt") AS completed_at
+      FROM "Scan" scan
+      LEFT JOIN "GateVerdict" verdict
+        ON verdict."scanId" = scan.id AND verdict."workspaceId" = scan."workspaceId"
+      LEFT JOIN "ScanResultManifest" manifest ON manifest."scanId" = scan.id
+      WHERE scan."deletedAt" IS NULL
+        AND scan.status::text IN ('COMPLETED', 'PARTIAL')
+        AND verdict.id IS NOT NULL
+        AND manifest.id IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM "ScanCoverageReceipt" receipt
+          WHERE receipt."scanId" = scan.id AND receipt.status::text = 'COMPLETED'
+        )
+      GROUP BY scan."createdById"
     ),
     completed_ranked AS (
       SELECT "createdById" AS user_id, "endedAt" AS completed_at,
@@ -108,6 +130,13 @@ async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) 
       PERCENTILE_CONT(0.9) WITHIN GROUP (
         ORDER BY EXTRACT(EPOCH FROM (first_valid.completed_at - users."createdAt")) / 60
       ) FILTER (WHERE first_valid.completed_at IS NOT NULL)::double precision AS "ttfvP90Minutes",
+      COUNT(DISTINCT first_useful.user_id)::bigint AS "usefulAssessments",
+      PERCENTILE_CONT(0.5) WITHIN GROUP (
+        ORDER BY EXTRACT(EPOCH FROM (first_useful.completed_at - users."createdAt")) / 60
+      ) FILTER (WHERE first_useful.completed_at IS NOT NULL)::double precision AS "ttfuMedianMinutes",
+      PERCENTILE_CONT(0.95) WITHIN GROUP (
+        ORDER BY EXTRACT(EPOCH FROM (first_useful.completed_at - users."createdAt")) / 60
+      ) FILTER (WHERE first_useful.completed_at IS NOT NULL)::double precision AS "ttfuP95Minutes",
       COALESCE((SELECT started_actors FROM connection_events), 0)::bigint AS "githubConnectStarted",
       COALESCE((SELECT connected_actors FROM connection_events), 0)::bigint AS "githubConnected",
       COUNT(*) FILTER (WHERE target_counts.target_count = 0)::bigint AS "targetsZero",
@@ -131,12 +160,18 @@ async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) 
     FROM users
     LEFT JOIN first_scan ON first_scan.user_id = users.id
     LEFT JOIN first_valid ON first_valid.user_id = users.id
+    LEFT JOIN first_useful ON first_useful.user_id = users.id
     LEFT JOIN target_counts ON target_counts.user_id = users.id
   `
 
   if (!row) throw new Error("Activation metrics query returned no row")
+  return row
+}
+
+function projectActivationMetrics(row: ActivationRow) {
   const accountsCreated = Number(row.accountsCreated)
   const validAssessments = Number(row.validAssessments)
+  const usefulAssessments = Number(row.usefulAssessments)
   const targetDistribution = {
     denominator: accountsCreated,
     zero: Number(row.targetsZero),
@@ -147,6 +182,7 @@ async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) 
   }
 
   return {
+    metricVersion: SETUP_QUALITY_METRIC_VERSION,
     minimumSample: ACTIVATION_MINIMUM_SAMPLE,
     activation: sampledRate(validAssessments, accountsCreated),
     setupAbandonment: sampledRate(accountsCreated - Number(row.setupStarted), accountsCreated),
@@ -154,6 +190,11 @@ async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) 
       denominator: validAssessments,
       medianMinutes: validAssessments >= ACTIVATION_MINIMUM_SAMPLE ? row.ttfvMedianMinutes : null,
       p90Minutes: validAssessments >= ACTIVATION_MINIMUM_SAMPLE ? row.ttfvP90Minutes : null,
+    },
+    timeToFirstUsefulResult: {
+      denominator: usefulAssessments,
+      medianMinutes: usefulAssessments >= ACTIVATION_MINIMUM_SAMPLE ? row.ttfuMedianMinutes : null,
+      p95Minutes: usefulAssessments >= ACTIVATION_MINIMUM_SAMPLE ? row.ttfuP95Minutes : null,
     },
     connectionSuccess: sampledRate(Number(row.githubConnected), Number(row.githubConnectStarted)),
     repeatedInput: targetDistribution,
@@ -166,6 +207,10 @@ async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) 
       ),
     },
   }
+}
+
+async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) {
+  return projectActivationMetrics(await fetchActivationRow(prisma))
 }
 
 function countStatus(

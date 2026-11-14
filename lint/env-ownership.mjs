@@ -8,16 +8,34 @@ export const externalEnvOwners = {
   CI: ["packages/cli/src/output.ts"],
   HOSTNAME: ["apps/worker/src/index.ts"],
   LOG_ANALYTICS_WORKSPACE_ID: ["apps/worker/src/operations/review-terminal-cost-disposition.ts"],
+  // The protected worker host loader owns these cold-profile values and clears
+  // inherited overrides before supplying them to this specific worker guard.
+  LYRASHIELD_COLD_DATABASE_EPOCH_SHA256: ["apps/worker/src/cold-database-epoch.ts"],
+  LYRASHIELD_COLD_SINGLE_WORKER: ["apps/worker/src/cold-database-epoch.ts"],
   TERMINAL_COST_AZURE_RESOURCE_ID: [
     "apps/worker/src/operations/review-terminal-cost-disposition.ts",
   ],
   LYRASHIELD_LOG_DESTINATION: ["packages/mcp/src/stdio-transport.ts"],
   LYRASHIELD_OAUTH_ACCESS_TOKEN: ["packages/credentials/src/index.ts"],
   LYRASHIELD_WORKER_STOP_RECEIPT: ["apps/worker/src/operations/verify-queue-orphan-fixture.ts"],
+  DISPATCH_AUTHORITY_REVOKER_PASSWORD: ["packages/db/scripts/tests/scan-preparation-fixture.ts"],
+  DISPATCH_PREPARATION_BROKER_PASSWORD: ["packages/db/scripts/tests/scan-preparation-fixture.ts"],
+  DISPATCH_PREPARATION_BROKER_DATABASE_URL: [
+    "packages/db/scripts/tests/scan-preparation-fixture.ts",
+    "packages/db/scripts/tests/supervisor-native-fixture.ts",
+    "packages/db/scripts/tests/supervisor-receipt-fixture.ts",
+  ],
+  GITHUB_ACTIONS: [
+    "packages/db/src/disposable-preparation-execution-capability.ts",
+    "packages/db/src/managed-disposable-preparation-issuer.ts",
+  ],
   LYRASHIELD_TEST_DB_DISPOSABLE: [
     "packages/config/src/env.ts",
     "packages/auth/src/password-reset-capture.ts",
     "packages/myra/src/server/password-reset-capture.ts",
+    "packages/db/scripts/tests/scan-preparation-fixture.ts",
+    "packages/db/scripts/tests/supervisor-receipt-fixture.ts",
+    "packages/db/src/scan-supervisor-command-history-reader.ts",
   ],
   NEXT_PHASE: ["packages/config/src/env.ts", "packages/auth/src/auth.ts"],
   NEXT_RUNTIME: ["apps/web/src/instrumentation.ts"],

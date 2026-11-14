@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({ getCurrentGateVerdicts: vi.fn(), findMany: vi.fn() }))
 vi.mock("@lyrashield/db", () => ({
   getCurrentGateVerdicts: mocks.getCurrentGateVerdicts,
+  MAX_GATE_READ_BATCH_TARGETS: 5,
   // Minimal shape mirror: the real parser validates and returns null for
   // anything that is not a supported snapshot; tests pass plain objects.
   parseAssessmentSnapshot: (value: unknown) =>
@@ -57,7 +58,7 @@ describe("getGateReadinessTargets", () => {
     expect(result[0]).toMatchObject({ state: "READY", applicable: true })
   })
 
-  it("reads every target's verdict in ONE batched call instead of a per-target fan-out", async () => {
+  it("bounds one batched read and returns an explicit continuation", async () => {
     const targets = Array.from({ length: 10 }, (_, index) => ({
       id: `target-${index}`,
       name: `Target ${index}`,
@@ -84,10 +85,35 @@ describe("getGateReadinessTargets", () => {
     expect(mocks.getCurrentGateVerdicts).toHaveBeenCalledTimes(1)
     expect(mocks.getCurrentGateVerdicts).toHaveBeenCalledWith(
       "workspace-1",
-      targets.map((target) => target.id),
+      targets.slice(0, 5).map((target) => target.id),
       { expectedCommit: undefined, expectedArtifactDigest: undefined }
     )
-    expect(result.map((target) => target.targetId)).toEqual(targets.map((target) => target.id))
+    expect(result.map((target) => target.targetId)).toEqual(
+      targets.slice(0, 5).map((target) => target.id)
+    )
+    expect(result.nextCursor).toBe("target-4")
+    expect(result.partial).toBe(true)
+  })
+
+  it("continues after the cursor without applying it to a selected target", async () => {
+    mocks.findMany.mockResolvedValue([{ id: "target-6", name: "Next" }])
+    mocks.getCurrentGateVerdicts.mockResolvedValue(new Map())
+    const page = await getGateReadinessTargets("workspace-1", undefined, {}, "target-4")
+    expect(mocks.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { workspaceId: "workspace-1", deletedAt: null, id: { gt: "target-4" } },
+        take: 6,
+      })
+    )
+    expect(page.partial).toBe(true)
+    expect(page.nextCursor).toBeNull()
+    await getGateReadinessTargets("workspace-1", "target-6", {}, "target-4")
+    expect(mocks.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { workspaceId: "workspace-1", deletedAt: null, id: "target-6" },
+        take: 1,
+      })
+    )
   })
 
   it("surfaces the evaluated identity per target for read-only labelling", async () => {

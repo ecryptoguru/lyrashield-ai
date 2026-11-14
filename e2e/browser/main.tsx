@@ -5,6 +5,15 @@ if (new URLSearchParams(location.search).has("v26-dashboard")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: V26DashboardHarness } = await import("./v26-dashboard-harness")
   root.render(<V26DashboardHarness />)
+} else if (
+  new URLSearchParams(location.search).has("target-assessment") ||
+  new URLSearchParams(location.search).has("release-packet")
+) {
+  ;(globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process ??=
+    { env: {} }
+  await import("../../apps/web/src/app/globals.css")
+  const { default: CustomerSetupQualityHarness } = await import("./customer-setup-quality-harness")
+  root.render(<CustomerSetupQualityHarness />)
 } else if (new URLSearchParams(location.search).has("approvals")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: ApprovalsHarness } = await import("./approvals-harness")
@@ -13,6 +22,10 @@ if (new URLSearchParams(location.search).has("v26-dashboard")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: GitHubConnectionHarness } = await import("./github-connection-harness")
   root.render(<GitHubConnectionHarness />)
+} else if (new URLSearchParams(location.search).has("api-keys")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: ApiKeysHarness } = await import("./api-keys-harness")
+  root.render(<ApiKeysHarness />)
 } else if (new URLSearchParams(location.search).has("notification-integrations")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: NotificationIntegrationsHarness } =

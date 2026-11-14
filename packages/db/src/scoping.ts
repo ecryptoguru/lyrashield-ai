@@ -114,6 +114,7 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "GateVerdict",
   "AgentConnection",
   "AgentOperation",
+  "DelegatedScanProvenance",
   "LoopClosure",
   "SyncCursor",
   "ScanAttachment",
@@ -128,6 +129,16 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
 export const WORKSPACE_SCOPE_EXCLUSIONS = new Set<string>([
   "UserScanSlot", // initiating-user RLS, independent of selected workspace
   "ScanCapacityReservation", // account-owned retained accounting
+  // Durable-dispatch authority rows are guarded by the dedicated dispatch
+  // authority RLS role and its CI denial policy; the CI runtime role is denied
+  // every authority table. Their workspaceId is a correlation column for the
+  // authority transaction, never a tenant-facing read boundary.
+  "ScanDispatchOperation",
+  "ScanDispatchAttempt",
+  "ScanPhysicalExecution",
+  "ScanSupervisorJournalRecord",
+  "ScanExecutionActionIntent",
+  "ScanExecutionInvocationGuard",
   "WorkspaceMember",
   "OnboardingState",
   "WebhookEventTrack",

@@ -28,12 +28,27 @@ const policyFingerprint = createHash("sha256")
 
 vi.mock("./client", () => ({
   prisma: {
+    $queryRaw: vi.fn(),
     gateVerdict: { findFirst: vi.fn() },
     policy: { findFirst: vi.fn() },
     scan: { findFirst: vi.fn() },
     finding: { findFirst: vi.fn() },
     findingVerification: { findFirst: vi.fn() },
   },
+}))
+vi.mock("./gate-assessed-scan-evidence", () => ({
+  loadVerifiedAssessedScans: async (
+    _tx: unknown,
+    _workspaceId: string,
+    rows: { targetId: string }[]
+  ) => ({
+    unverified: new Set<string>(),
+    verified: new Map(rows.map((row) => [row.targetId, {}])),
+  }),
+}))
+vi.mock("./gate-reader-evidence", async (original) => ({
+  ...(await original<typeof import("./gate-reader-evidence")>()),
+  findMismatchedGateEvidence: async () => new Set<string>(),
 }))
 vi.mock("./rls", () => ({
   withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) => {
@@ -56,20 +71,24 @@ describe("getCurrentGateVerdict", () => {
   })
 
   it("returns READY only for the bound commit before expiry", async () => {
-    vi.mocked(prisma.gateVerdict.findFirst).mockResolvedValue({
-      state: "READY",
-      evaluatedAt: new Date(1_000),
-      assessmentSnapshot: {
-        version: 2,
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      {
+        targetId: "target-1",
         scanId: "scan-1",
-        completedAtMs: 1_000,
-        manifestChecksum: "a".repeat(64),
-        manifestVersion: 7,
-        policyId: "policy-1",
-        policyFingerprint,
-        identity: { kind: "COMMIT", value: "b".repeat(40) },
+        state: "READY",
+        evaluatedAt: new Date(1_000),
+        assessmentSnapshot: {
+          version: 2,
+          scanId: "scan-1",
+          completedAtMs: 1_000,
+          manifestChecksum: "a".repeat(64),
+          manifestVersion: 7,
+          policyId: "policy-1",
+          policyFingerprint,
+          identity: { kind: "COMMIT", value: "b".repeat(40) },
+        },
       },
-    } as never)
+    ] as never)
 
     const result = await getCurrentGateVerdict("workspace-1", "target-1", {
       expectedCommit: "b".repeat(40),
@@ -77,14 +96,24 @@ describe("getCurrentGateVerdict", () => {
     })
 
     expect(result).toMatchObject({ state: "READY", applicability: { applicable: true } })
+    expect(
+      await getCurrentGateVerdict("workspace-1", "target-1", {
+        expectedCommit: "c".repeat(40),
+        now: new Date(1_001),
+      })
+    ).toMatchObject({ state: "INSUFFICIENT_EVIDENCE", applicability: { applicable: false } })
   })
 
   it("fails closed for legacy history and a changed release", async () => {
-    vi.mocked(prisma.gateVerdict.findFirst).mockResolvedValue({
-      state: "READY",
-      evaluatedAt: new Date(1_000),
-      assessmentSnapshot: null,
-    } as never)
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      {
+        targetId: "target-1",
+        scanId: null,
+        state: "READY",
+        evaluatedAt: new Date(1_000),
+        assessmentSnapshot: null,
+      },
+    ] as never)
     const legacy = await getCurrentGateVerdict("workspace-1", "target-1", {
       expectedCommit: "b".repeat(40),
       now: new Date(1_001),

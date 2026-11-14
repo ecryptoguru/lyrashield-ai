@@ -1,5 +1,5 @@
 import { withCookieMutation } from "../../../lib/api-auth"
-import { createApproval, listApprovals } from "@lyrashield/db"
+import { ApprovalMutationError, createApproval, listApprovals } from "@lyrashield/db"
 import { checkApprovalCreateRateLimit } from "../../../lib/rate-limit"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -101,6 +101,9 @@ async function post(request: Request) {
     })
     return apiSuccess(approval, 201)
   } catch (err) {
+    if (err instanceof ApprovalMutationError && err.code === "UNSUPPORTED_INPUT") {
+      return apiError("VALIDATION_ERROR", err.message, 422)
+    }
     const authErr = authErrorResponse(err)
     if (authErr) return authErr
     logger.error("Failed to create agent approval", { error: String(err) })
