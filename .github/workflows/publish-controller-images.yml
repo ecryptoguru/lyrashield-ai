@@ -23,9 +23,6 @@ permissions:
   contents: read
   packages: write
 
-env:
-  ENGINE_REVISION: 0793bcb9644a1985165963375586124c993c020a
-
 jobs:
   publish:
     name: Build and publish controller images
@@ -39,6 +36,8 @@ jobs:
           set -euo pipefail
           [[ "$CONFIRMATION" == "publish-controller-images" ]]
 
+      # Ancestry, not tip equality: main keeps moving, and publishing an earlier
+      # merged commit is legitimate. A commit reachable only from a branch is not.
       - name: Require the source commit to be on main
         env:
           GH_TOKEN: ${{ github.token }}
@@ -46,13 +45,22 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
-          gh api "repos/${GITHUB_REPOSITORY}/commits/${SOURCE_SHA}/branches-where-head" \
-            --jq '.[].name' | grep -Fx main
+          status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${SOURCE_SHA}...main" --jq .status)"
+          [[ "$status" == "ahead" || "$status" == "identical" ]]
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           ref: ${{ inputs.source_sha }}
           persist-credentials: false
+
+      # One copy of the immutable engine pin, read the same way CI does.
+      - name: Read pinned engine revision
+        id: engine
+        run: |
+          set -euo pipefail
+          revision="$(sed -nE 's/^  ENGINE_REVISION: ([0-9a-f]{40})$/\1/p' .github/workflows/deploy-azure.yml)"
+          [[ "$revision" =~ ^[a-f0-9]{40}$ ]]
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
@@ -88,8 +96,8 @@ jobs:
           tags: ${{ steps.tags.outputs.broker }}
           build-args: |
             PRODUCT_REVISION=${{ inputs.source_sha }}
-            ENGINE_REVISION=${{ env.ENGINE_REVISION }}
-          cache-from: type=gha,scope=release-controller
+            ENGINE_REVISION=${{ steps.engine.outputs.revision }}
+          cache-from: type=gha,scope=controller
           cache-to: type=gha,mode=max,scope=controller
 
       - name: Build supervisor
@@ -103,8 +111,8 @@ jobs:
           tags: ${{ steps.tags.outputs.supervisor }}
           build-args: |
             PRODUCT_REVISION=${{ inputs.source_sha }}
-            ENGINE_REVISION=${{ env.ENGINE_REVISION }}
-          cache-from: type=gha,scope=release-controller
+            ENGINE_REVISION=${{ steps.engine.outputs.revision }}
+          cache-from: type=gha,scope=controller
           cache-to: type=gha,mode=max,scope=controller
 
       - name: Build provider gateway
@@ -118,14 +126,15 @@ jobs:
           tags: ${{ steps.tags.outputs.gateway }}
           build-args: |
             PRODUCT_REVISION=${{ inputs.source_sha }}
-            ENGINE_REVISION=${{ env.ENGINE_REVISION }}
-          cache-from: type=gha,scope=release-controller
+            ENGINE_REVISION=${{ steps.engine.outputs.revision }}
+          cache-from: type=gha,scope=controller
           cache-to: type=gha,mode=max,scope=controller
 
       - name: Emit exact digests
         env:
           BROKER: ${{ steps.broker.outputs.digest }}
           SUPERVISOR: ${{ steps.supervisor.outputs.digest }}
+          ENGINE_REVISION: ${{ steps.engine.outputs.revision }}
           GATEWAY: ${{ steps.gateway.outputs.digest }}
           SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
