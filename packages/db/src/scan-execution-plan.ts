@@ -1,4 +1,3 @@
-import { env } from "@lyrashield/config"
 import type { CreateScanParams, ScanTransaction } from "./scan-service-types"
 import { canonicalizeJson, sha256Sync } from "@lyrashield/security/webmcp"
 import {
@@ -18,6 +17,21 @@ import {
  */
 export function canonicalizeScanExecutionPlan(plan: ScanExecutionPlan): string {
   return canonicalizeJson(plan)
+}
+
+/**
+ * The platform budget ceiling with the same default and fail-closed validation
+ * as `PLATFORM_MAX_SCAN_BUDGET_USD`, read without importing the whole
+ * application env contract. This module is consumed by the control plane, which
+ * must not require web/auth secrets to verify a stored plan.
+ */
+function platformMaxBudgetUsd(): number {
+  const raw = process.env.PLATFORM_MAX_SCAN_BUDGET_USD?.trim()
+  if (!raw) return 50
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value <= 0 || value > 1000)
+    throw new ScanExecutionPlanInputError("Platform scan budget configuration is invalid.")
+  return value
 }
 
 export function computeScanExecutionPlanHash(plan: ScanExecutionPlan): string {
@@ -114,7 +128,7 @@ export async function buildAdmittedScanPlan(
     throw new ScanExecutionPlanInputError("Assigned scan policy is unavailable.")
   return buildScanExecutionPlan({
     policyMaxBudgetUsd: policy?.maxBudgetUsd?.toNumber(),
-    platformMaxBudgetUsd: env.PLATFORM_MAX_SCAN_BUDGET_USD,
+    platformMaxBudgetUsd: platformMaxBudgetUsd(),
     engineBudgetCeilingUsd: params.engineBudgetCeilingUsd,
     workflow: params.workflow,
     targetType,
