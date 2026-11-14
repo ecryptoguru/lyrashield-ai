@@ -127,6 +127,7 @@ describe("detached sandbox tool invocation", () => {
       "tool_started",
     ])
     expect(f.events[1]?.tool.execId).toBe("e".repeat(64))
+    expect(f.events.every((event) => Reflect.get(event.tool, "maxOutputBytes") === 1024)).toBe(true)
     expect(f.docker.start).toHaveBeenCalledOnce()
   })
 

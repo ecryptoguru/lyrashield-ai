@@ -30,6 +30,7 @@ export function projectSandboxToolHistory(
           first.tool.actionChecksum !== event.tool.actionChecksum ||
           first.tool.handleChecksum !== event.tool.handleChecksum ||
           first.tool.containerId !== event.tool.containerId ||
+          first.tool.maxOutputBytes !== event.tool.maxOutputBytes ||
           (existing[1] && existing[1].tool.execId !== event.tool.execId) ||
           (event.type === "tool_ack" &&
             (existing[4]?.tool.responseChecksum !== event.tool.responseChecksum ||

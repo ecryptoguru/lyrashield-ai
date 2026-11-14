@@ -46,6 +46,7 @@ const event: SandboxToolEvent = {
     actionChecksum: "a".repeat(64),
     handleChecksum: "b".repeat(64),
     containerId: "c".repeat(64),
+    maxOutputBytes: 1024,
   },
 }
 afterEach(async () => {
@@ -210,6 +211,55 @@ describe("independent sandbox tool journal", () => {
     expect(
       (await f.journal.load()).filter((record) => record.payload.type === "tool_ack")
     ).toHaveLength(1)
+    await f.source.close()
+    await f.local.close()
+  })
+
+  it("rejects oversized retained output before recovering a pending mirror acknowledgement", async () => {
+    const f = await setup()
+    const requestId = "1d5b3040-b775-43a0-a7fb-ac5965fb91fa"
+    const binding = {
+      attemptId: "attempt-1",
+      operationId: "operation-1",
+      authorityEpochId: "epoch-1",
+      sandboxHandle: "sandbox-1",
+    }
+    const first: SandboxToolEvent = {
+      ...event,
+      tool: {
+        ...event.tool,
+        requestId,
+        commandId: requestId,
+        handleChecksum: "bc2cc17bf72365e870812896e41b82f5a76bd9dc9484e3dca61952c194563fd4",
+      },
+    }
+    await f.journal.append(first)
+    for (const type of ["tool_created", "tool_starting", "tool_started"] as const)
+      await f.journal.append({ ...first, type, tool: { ...first.tool, execId: "e".repeat(64) } })
+    const responses = new SandboxToolResponses(f.store, "r".repeat(48))
+    const proof = await responses.retain(binding, requestId, {
+      binding,
+      requestId,
+      status: "COMPLETED",
+      exitCode: 0,
+      stdoutBase64: Buffer.alloc(1025).toString("base64"),
+      stderrBase64: "",
+    })
+    const responseEvent: SandboxToolEvent = {
+      ...first,
+      type: "tool_response",
+      tool: { ...first.tool, execId: "e".repeat(64), ...proof },
+    }
+    await f.journal.append(responseEvent)
+    f.mirror.loseAck = true
+    await expect(f.journal.append({ ...responseEvent, type: "tool_ack" })).rejects.toThrow()
+    f.mirror.loseAck = false
+    const recoverMirror = vi.spyOn(f.mirror, "compareAndAppend")
+    const ledger = new SandboxToolAcknowledgements(f.journal, responses)
+    await expect(ledger.acknowledge(binding, requestId, proof.responseChecksum)).rejects.toThrow(
+      "sandbox output is too large"
+    )
+    expect(recoverMirror).not.toHaveBeenCalled()
     await f.source.close()
     await f.local.close()
   })

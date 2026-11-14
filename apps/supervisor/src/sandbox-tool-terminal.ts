@@ -57,6 +57,25 @@ function bytes(value: string): number {
   return decoded.byteLength
 }
 
+export function validateSandboxToolOutput(input: unknown, original: SandboxToolEvent) {
+  const outputLimit = original.tool.maxOutputBytes
+  if (
+    typeof outputLimit !== "number" ||
+    !Number.isSafeInteger(outputLimit) ||
+    outputLimit < 1 ||
+    outputLimit > 1024 * 1024
+  )
+    throw new Error("sandbox tool output limit is unavailable")
+  const response =
+    original.tool.kind === "exec" ? execResponse.parse(input) : ptyResponse.parse(input)
+  const total =
+    "stdoutBase64" in response
+      ? bytes(response.stdoutBase64) + bytes(response.stderrBase64)
+      : bytes(response.outputBase64)
+  if (total > outputLimit) throw new Error("sandbox output is too large")
+  return response
+}
+
 export async function observeSandboxToolTerminal(
   observer: SandboxToolTerminalObserver,
   binding: SandboxToolResponseBinding,
@@ -74,10 +93,7 @@ export async function observeSandboxToolTerminal(
     observation.actionChecksum !== original.tool.actionChecksum
   )
     throw new Error("sandbox terminal identity differs")
-  const response =
-    original.tool.kind === "exec"
-      ? execResponse.parse(observation.response)
-      : ptyResponse.parse(observation.response)
+  const response = validateSandboxToolOutput(observation.response, original)
   if (
     response.requestId !== original.tool.requestId ||
     canonicalJson(response.binding) !== canonicalJson(expectedBinding) ||
@@ -88,10 +104,5 @@ export async function observeSandboxToolTerminal(
     (observation.state === "RUNNING" && observation.exitCode !== null)
   )
     throw new Error("sandbox terminal observation differs")
-  const total =
-    "stdoutBase64" in response
-      ? bytes(response.stdoutBase64) + bytes(response.stderrBase64)
-      : bytes(response.outputBase64)
-  if (total > 1024 * 1024) throw new Error("sandbox output is too large")
   return response
 }

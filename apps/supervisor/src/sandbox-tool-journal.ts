@@ -41,6 +41,12 @@ const tool = z
     actionChecksum: hash,
     handleChecksum: hash,
     containerId: hash,
+    maxOutputBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(1024 * 1024)
+      .optional(),
     execId: hash.optional(),
     responseChecksum: z
       .string()
@@ -172,7 +178,7 @@ export class SandboxToolJournal {
     binding: SandboxToolResponseBinding,
     requestId: string,
     responseChecksum: string,
-    verifyRetained: (proof: SandboxToolRetainedResponse) => Promise<void>
+    verifyRetained: (proof: SandboxToolRetainedResponse, event: SandboxToolEvent) => Promise<void>
   ): Promise<void> {
     const checked = sandboxToolResponseBindingSchema.parse(binding)
     const selected = await this.exclusive(async () => {
@@ -199,9 +205,10 @@ export class SandboxToolJournal {
         sequence: original.sequence,
         hash: original.hash,
         objectDigest: event.tool.objectDigest,
+        event: structuredClone(event),
       }
     })
-    await verifyRetained({ responseChecksum, objectDigest: selected.objectDigest })
+    await verifyRetained({ responseChecksum, objectDigest: selected.objectDigest }, selected.event)
     await this.recoverExactTail(selected)
   }
 

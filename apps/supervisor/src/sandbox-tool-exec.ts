@@ -143,6 +143,7 @@ export async function startSandboxToolExec(
         actionChecksum: action.actionChecksum,
         handleChecksum: digest(request.binding.sandboxHandle),
         containerId,
+        maxOutputBytes: request.maxOutputBytes,
       },
     }
     const history = await dependencies.journal.load()

@@ -69,6 +69,7 @@ async function fixture(installed = true) {
     actionChecksum: "a".repeat(64),
     handleChecksum: "bc2cc17bf72365e870812896e41b82f5a76bd9dc9484e3dca61952c194563fd4",
     containerId: "c".repeat(64),
+    maxOutputBytes: 1024,
   }
   const base = {
     supervisorInstanceId: "supervisor-1.tools",
