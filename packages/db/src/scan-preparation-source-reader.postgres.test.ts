@@ -12,12 +12,13 @@ import { buildScanExecutionPlan } from "@lyrashield/types"
 import { canonicalJson } from "@lyrashield/runtime-control"
 
 await vi.hoisted(async () => {
-  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1") return
+  const runtime = process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1" || !runtime) return
   const { assertDisposableDatabasePair } =
     await import("../../../.github/scripts/vitest-database-env.mjs")
   assertDisposableDatabasePair({
     ...process.env,
-    RLS_RUNTIME_DATABASE_URL: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL,
+    RLS_RUNTIME_DATABASE_URL: runtime,
   })
 })
 const enabled =
