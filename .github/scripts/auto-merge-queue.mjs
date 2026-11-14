@@ -55,20 +55,12 @@ function isDependabot(pr) {
   return pr.user?.id === dependabotId && pr.user?.login === "dependabot[bot]"
 }
 
-function requireProtection(protection) {
-  requireValue(
-    protection?.requiresStrictStatusChecks === true &&
-      Array.isArray(protection.requiredStatusChecks),
-    "protection unavailable"
+// The installation token lacks the workflows permission, so it cannot update a
+// branch whose diff touches .github/workflows. Skip those behind PRs for a human.
+function touchesWorkflows(api, pr) {
+  return list(api, `${root}/pulls/${pr.number}/files`).some((file) =>
+    file?.filename?.startsWith(".github/workflows/")
   )
-  for (const context of requiredChecks) {
-    requireValue(
-      protection.requiredStatusChecks.some(
-        (check) => check.context === context && check.app?.databaseId === 15368
-      ),
-      `required check ${context} is not bound to GitHub Actions`
-    )
-  }
 }
 
 function latestCi(api, head) {
@@ -185,16 +177,13 @@ function requiredCheckState(api, pr, main) {
 }
 
 /** Decide and execute at most one branch update or verified automatic merge. */
-export function runAutoMergeQueue({
-  api,
-  readProtection,
-  updateBranch,
-  mergeReady,
-  disableAutoMerge,
-}) {
+export function runAutoMergeQueue({ api, updateBranch, mergeReady, disableAutoMerge }) {
   const main = api(`${root}/git/ref/heads/main`)?.object?.sha
   requireValue(sha40.test(main ?? ""), "main identity unavailable")
-  requireProtection(readProtection())
+  // GitHub enforces the live branch protection at merge time. The Actions token
+  // cannot read classic protection (Administration: read is unavailable), so the
+  // queue independently verifies the exact Actions-bound checks and merge base.
+
   const releaseRuns = `${root}/actions/workflows/release-production.yml/runs?branch=main`
   const releases = liveStates.flatMap((state) =>
     list(api, `${releaseRuns}&status=${state}`, "workflow_runs")
@@ -239,6 +228,10 @@ export function runAutoMergeQueue({
       return { action: "disable-auto-merge", number: pr.number }
     }
     if (pr.mergeable_state === "behind") {
+      if (touchesWorkflows(api, pr)) {
+        disableAutoMerge(pr.number, pr.head.sha)
+        return { action: "disable-auto-merge", number: pr.number }
+      }
       updateBranch(pr.number, pr.head.sha)
       return { action: "update", number: pr.number }
     }
@@ -256,7 +249,7 @@ export function runAutoMergeQueue({
     if (pr.mergeable_state === "dirty" || pr.mergeable_state === "unknown" || pr.mergeable === null)
       continue
     if (pr.mergeable_state === "behind") {
-      staleCandidate ??= pr
+      if (!touchesWorkflows(api, pr)) staleCandidate ??= pr
       continue
     }
     if (!["clean", "blocked", "unstable"].includes(pr.mergeable_state)) continue
@@ -355,15 +348,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   )
   const result = runAutoMergeQueue({
     api: (endpoint) => JSON.parse(gh(["api", endpoint], true)),
-    readProtection: () => {
-      const query = `query { repository(owner: "ecryptoguru", name: "lyrashield-ai") {
-        ref(qualifiedName: "refs/heads/main") { branchProtectionRule {
-          requiresStrictStatusChecks requiredStatusChecks { context app { databaseId } }
-        } }
-      } }`
-      return JSON.parse(gh(["api", "graphql", "-f", `query=${query}`], true))?.data?.repository?.ref
-        ?.branchProtectionRule
-    },
     updateBranch: (number, head) =>
       gh([
         "api",
