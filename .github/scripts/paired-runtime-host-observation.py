@@ -2,6 +2,7 @@
 """Read-only root observation of an installed, signed controller authority."""
 
 import base64
+import grp
 import hashlib
 import json
 import os
@@ -74,6 +75,31 @@ const client=new Client({connectionString:process.env.DATABASE_URL,
 def require(value):
     if not value:
         raise ValueError("Protected installed runtime authority unavailable")
+
+
+def verify_controller_role_ids(components, socket_gid):
+    require(set(components) == set(ROLES))
+    for identity in components.values():
+        require(type(identity["uid"]) is int and identity["uid"] > 0)
+        require(type(identity["gid"]) is int and identity["gid"] > 0)
+    require(len({value["uid"] for value in components.values()}) == len(ROLES))
+    supervisor_gid = components["supervisor"]["gid"]
+    require(supervisor_gid == socket_gid)
+    require(
+        all(
+            components[role]["gid"] != supervisor_gid
+            for role in ROLES
+            if role != "supervisor"
+        )
+    )
+
+
+def verify_process_identity(status, identity):
+    require(
+        status["Uid"].split() == [str(identity["uid"])] * 4
+        and status["Gid"].split() == [str(identity["gid"])] * 4
+        and set(status["Groups"].split()) <= {str(identity["gid"])}
+    )
 
 
 def canonical(value):
@@ -424,10 +450,7 @@ def component(role, policy, authority):
         for line in (process / "status").read_text().splitlines()
         if ":" in line
     )
-    require(
-        status["Uid"].split() == [str(identity["uid"])] * 4
-        and status["Gid"].split() == [str(identity["gid"])] * 4
-    )
+    verify_process_identity(status, identity)
     command = identity["processCommand"]
     require(
         isinstance(command, list)
@@ -587,8 +610,8 @@ def observe(expected, pin):
     require(re.fullmatch(r"lyrashield-runtime-[a-z0-9-]{1,40}", policy["network"]))
     networks = json.loads(output(["docker", "network", "inspect", policy["network"]]))
     require(len(networks) == 1 and networks[0]["Internal"] is True)
-    require(
-        len({value["uid"] for value in policy["components"].values()}) == len(ROLES)
+    verify_controller_role_ids(
+        policy["components"], grp.getgrnam("lyrashield-supervisor").gr_gid
     )
     first = {role: component(role, policy, authority) for role in ROLES}
 

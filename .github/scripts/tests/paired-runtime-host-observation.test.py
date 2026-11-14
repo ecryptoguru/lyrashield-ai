@@ -14,6 +14,33 @@ spec.loader.exec_module(module)
 
 
 class RuntimeObservationTest(unittest.TestCase):
+    def test_supervisor_socket_group_is_not_shared_with_other_roles(self):
+        roles = {
+            "broker": {"uid": 12001, "gid": 12001},
+            "supervisor": {"uid": 12002, "gid": 12002},
+            "provider-gateway": {"uid": 12003, "gid": 12003},
+            "worker": {"uid": 12004, "gid": 12004},
+        }
+        module.verify_controller_role_ids(roles, 12002)
+        with self.assertRaises(ValueError):
+            module.verify_controller_role_ids(roles, 12005)
+        for role in ("broker", "provider-gateway", "worker"):
+            with self.subTest(role=role):
+                shared = {name: dict(identity) for name, identity in roles.items()}
+                shared[role]["gid"] = roles["supervisor"]["gid"]
+                with self.assertRaises(ValueError):
+                    module.verify_controller_role_ids(shared, 12002)
+
+    def test_process_cannot_acquire_another_roles_socket_group(self):
+        identity = {"uid": 12004, "gid": 12004}
+        status = {"Uid": "12004 " * 4, "Gid": "12004 " * 4, "Groups": "12004"}
+        module.verify_process_identity(status, identity)
+        module.verify_process_identity({**status, "Groups": ""}, identity)
+        for groups in ("0", "12002", "12004 12002"):
+            with self.subTest(groups=groups):
+                with self.assertRaises(ValueError):
+                    module.verify_process_identity({**status, "Groups": groups}, identity)
+
     @classmethod
     def setUpClass(cls):
         cls.directory = tempfile.TemporaryDirectory()

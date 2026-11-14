@@ -23,7 +23,10 @@ class AuthorityObserverTest(unittest.TestCase):
             with client:
                 client.sendall(request)
                 client.shutdown(socket.SHUT_WR)
-                received = client.recv(9000)
+                try:
+                    received = client.recv(9000)
+                except ConnectionResetError:
+                    received = b""
             thread.join(timeout=5)
             self.assertFalse(thread.is_alive())
             return received, observe.call_count
