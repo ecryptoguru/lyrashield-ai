@@ -5,10 +5,26 @@ import {
   RELEASE_PACKET_VERSION,
   ReleasePacketPayloadSchema,
 } from "@lyrashield/types"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { Prisma, PrismaClient } from "./generated/prisma"
 import { getReleasePacket } from "./release-packet-service"
 import { releasePacketSigningKeyId, signReleasePacketChecksum } from "./release-packet-signing"
+
+// Hoisting runs this guard before imports can construct the runtime client.
+// The fixture pairs the privileged DATABASE_SYSTEM_URL role with the restricted
+// DATABASE_URL role, so bind those two through the shared disposable-pair guard.
+await vi.hoisted(async () => {
+  const owner = process.env.DATABASE_SYSTEM_URL
+  const runtime = process.env.DATABASE_URL
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1" || !owner || !runtime) return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({
+    ...process.env,
+    DATABASE_URL: owner,
+    RLS_RUNTIME_DATABASE_URL: runtime,
+  })
+})
 
 const enabled = process.env.RELEASE_PACKET_RLS_RUNTIME_TEST === "1"
 const ownerUrl = process.env.DATABASE_SYSTEM_URL

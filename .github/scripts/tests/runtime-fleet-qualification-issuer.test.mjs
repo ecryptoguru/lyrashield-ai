@@ -1,9 +1,13 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createHash } from "node:crypto"
-import { createProtectedRuntimeFleetIssuer } from "../issue-runtime-fleet-qualification.mjs"
+import {
+  createProtectedRuntimeFleetIssuer,
+  issueRuntimeFleetQualification,
+} from "../issue-runtime-fleet-qualification.mjs"
 import { canonicalJson } from "../../../packages/runtime-control/src/canonical-json.ts"
 import { runtimeQualificationKeyId } from "../../../packages/security/src/sandbox-publication-record.ts"
+import { pairedReleaseReceipt } from "../../../ops/monitoring/paired-release-hold.mjs"
 
 const source = "1".repeat(40)
 const engine = "2".repeat(40)
@@ -156,6 +160,17 @@ const inventory = {
   engineRevision: engine,
 }
 const common = {
+  preparedFleet: {
+    productRevision: fleet.productRevision,
+    engineRevision: fleet.engineRevision,
+    runId: "42",
+    runAttempt: "1",
+    ...Object.fromEntries(
+      Object.entries(fleet).filter(
+        ([field]) => field.endsWith("Digest") && field !== "runtimePolicyDigest"
+      )
+    ),
+  },
   readIdentity: async () => identity,
   readSource: async () => ({ owner: "42:1", source }),
   readArtifact: async (kind, id) => {
@@ -222,6 +237,9 @@ test("rejects unauthenticated or non-held evidence before any credential exchang
       { verifyInventory: async () => ({ ...inventory, runtimeAuthorityVerified: true }) },
     ],
     ["source tree", { tree: () => "f".repeat(40) }],
+    ["missing preparation", { preparedFleet: undefined }],
+    ["different worker", { preparedFleet: { ...common.preparedFleet, workerDigest: digest("0") } }],
+    ["different run", { preparedFleet: { ...common.preparedFleet, runId: "43" } }],
   ]) {
     const calls = []
     await assert.rejects(
@@ -234,6 +252,54 @@ test("rejects unauthenticated or non-held evidence before any credential exchang
       failure
     )
     assert.deepEqual(calls, [], failure)
+  }
+})
+
+test("rejects incomplete native checks and mismatched rollback tuples before signing", async () => {
+  const badNative = structuredClone(evidence.native)
+  badNative.checks.admission.state = "FAILED"
+  const nativeRaw = rawOf(badNative)
+  const failures = [
+    {
+      selector: { ...selector, native: hash(nativeRaw) },
+      raw: nativeRaw,
+      owner: "42:1",
+      source,
+      kind: "evidence",
+    },
+    ...[
+      { pair: { ...archived.pair, workerDigest: fleet.workerDigest } },
+      { pair: { ...archived.pair, engineRevision: "f".repeat(40) } },
+      { controlPlane: { ...archived.controlPlane, migrationChecksum: digest("f") } },
+      { source: "f".repeat(40) },
+      { owner: "43:1" },
+    ].map((change) => {
+      const { source: artifactSource, owner: artifactOwner, ...fields } = change
+      const body = { ...archived, ...fields }
+      const raw = rawOf(body)
+      return {
+        selector: { ...selector, rollback: hash(raw) },
+        raw,
+        owner: artifactOwner ?? body.pair.owner,
+        source: artifactSource ?? body.pair.productRevision,
+        kind: "qualified-fleet",
+      }
+    }),
+  ]
+  for (const failure of failures) {
+    const calls = []
+    const badId = hash(failure.raw)
+    await assert.rejects(
+      createProtectedRuntimeFleetIssuer({
+        ...common,
+        readArtifact: async (kind, id) =>
+          id === badId
+            ? { raw: failure.raw, owner: failure.owner, source: failure.source }
+            : common.readArtifact(kind, id),
+        run: (args) => calls.push(args[0]),
+      }).issue(failure.selector)
+    )
+    assert.deepEqual(calls, [], failure.kind)
   }
 })
 
@@ -250,4 +316,109 @@ test("stops at signing failure and always logs out without emitting a record", a
     }).issue(selector)
   )
   assert.deepEqual(calls, ["login", "keyvault", "logout"])
+})
+
+test("explicit held rollback requires authenticated closed readback and stays rollback-only", async () => {
+  const baseline = structuredClone(archived)
+  delete baseline.schema
+  delete baseline.kind
+  const readback = {
+    kind: "release-readback",
+    owner: archived.pair.owner,
+    pair: archived.pair,
+    controlPlane: archived.controlPlane,
+    admission: "held",
+    holdReceipt: pairedReleaseReceipt(
+      archived.pair.owner,
+      archived.pair.productRevision,
+      archived.pair.engineRevision,
+      archived.pair.workerDigest
+    ),
+    holdPersistent: true,
+    runRecordV11: "0",
+    pendingHttpEvidence: "0",
+    selectorPresent: false,
+    oldServingReplicas: 0,
+    workerCount: 1,
+    relayCount: 1,
+    readyCode: "200",
+    readyBody: JSON.stringify({ status: "ready", checks: { database: true, redis: true } }),
+    scansCode: "503",
+    scansBody: JSON.stringify({ status: "not_ready", checks: { worker: false } }),
+  }
+  for (const mutation of [null, "open", "hold", "controller", "engine", "missing-proof", "kind"]) {
+    const current = structuredClone(readback)
+    const body = { ...structuredClone(baseline), kind: "held-baseline", purpose: "rollback-only" }
+    if (mutation === "open") current.admission = "open"
+    if (mutation === "hold") current.holdPersistent = false
+    if (mutation === "controller") delete body.controlPlane.providerGatewayDigest
+    if (mutation === "engine") body.pair.engineRevision = "f".repeat(40)
+    const readbackRaw = rawOf(current)
+    body.releaseProof = hash(readbackRaw)
+    const raw = rawOf(body)
+    const calls = []
+    const reads = []
+    const issuing = createProtectedRuntimeFleetIssuer({
+      ...common,
+      readArtifact: async (kind, id) => {
+        reads.push(kind)
+        if (id === hash(raw))
+          return { raw, owner: body.pair.owner, source: body.pair.productRevision }
+        if (id === body.releaseProof && mutation !== "missing-proof")
+          return {
+            raw: readbackRaw,
+            owner: current.pair.owner,
+            source: current.pair.productRevision,
+          }
+        return common.readArtifact(kind, id)
+      },
+      run: (args) => {
+        calls.push(args[0])
+        if (args[0] === "keyvault")
+          return { algorithm: "RS256", keyId: runtimeQualificationKeyId, signature: "fixture" }
+        return null
+      },
+      verifySignature: () => {},
+    }).issue({
+      ...selector,
+      rollback: hash(raw),
+      rollbackKind: mutation === "kind" ? "qualified-fleet" : "held-baseline",
+    })
+    if (mutation === null) {
+      const result = await issuing
+      assert.equal(JSON.parse(result.envelope.raw).evidence.rollback, hash(raw))
+      assert.deepEqual(reads.slice(-2), ["held-baseline", "release-readback"])
+      assert.equal(body.kind, "held-baseline")
+      assert.equal(body.purpose, "rollback-only")
+      assert.deepEqual(calls, ["login", "keyvault", "logout"])
+    } else {
+      await assert.rejects(issuing, undefined, mutation)
+      assert.deepEqual(calls, [], mutation)
+    }
+  }
+})
+
+test("production entry point rejects missing or malformed preparation before authentication", () => {
+  const savedSelector = process.env.RUNTIME_FLEET_EVIDENCE
+  const savedPrepared = process.env.PREPARED_RUNTIME_FLEET
+  try {
+    process.env.RUNTIME_FLEET_EVIDENCE = JSON.stringify(selector)
+    delete process.env.PREPARED_RUNTIME_FLEET
+    assert.throws(
+      () => issueRuntimeFleetQualification(),
+      /Same-run prepared runtime fleet unavailable/
+    )
+    process.env.PREPARED_RUNTIME_FLEET = "x".repeat(4097)
+    assert.throws(
+      () => issueRuntimeFleetQualification(),
+      /Same-run prepared runtime fleet unavailable/
+    )
+    process.env.PREPARED_RUNTIME_FLEET = "{"
+    assert.throws(() => issueRuntimeFleetQualification(), SyntaxError)
+  } finally {
+    if (savedSelector === undefined) delete process.env.RUNTIME_FLEET_EVIDENCE
+    else process.env.RUNTIME_FLEET_EVIDENCE = savedSelector
+    if (savedPrepared === undefined) delete process.env.PREPARED_RUNTIME_FLEET
+    else process.env.PREPARED_RUNTIME_FLEET = savedPrepared
+  }
 })

@@ -27,6 +27,19 @@ COPY packages/mcp/package.json ./packages/mcp/
 COPY packages/security/package.json ./packages/security/
 COPY packages/egress-proxy/package.json ./packages/egress-proxy/
 COPY apps/worker/package.json ./apps/worker/
+COPY apps/broker/package.json ./apps/broker/
+COPY apps/supervisor/package.json ./apps/supervisor/
+COPY apps/provider-gateway/package.json ./apps/provider-gateway/
+COPY packages/gate/package.json ./packages/gate/
+COPY packages/affiliate/package.json ./packages/affiliate/
+COPY packages/agent-plugin/package.json ./packages/agent-plugin/
+COPY packages/billing/package.json ./packages/billing/
+COPY packages/credentials/package.json ./packages/credentials/
+COPY packages/evidence-storage/package.json ./packages/evidence-storage/
+COPY packages/fix/package.json ./packages/fix/
+COPY packages/licenses/package.json ./packages/licenses/
+COPY packages/myra/package.json ./packages/myra/
+COPY packages/pricing/package.json ./packages/pricing/
 
 RUN pnpm install --frozen-lockfile
 
@@ -53,6 +66,24 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     NEXT_PUBLIC_APP_URL="$BUILD_PUBLIC_APP_URL" \
     NEXT_PUBLIC_MARKETING_URL="$BUILD_PUBLIC_MARKETING_URL" \
     pnpm db:generate
+
+# Isolated qualification runner only; this target is never a production role.
+FROM workspace-builder AS disposable-controller-fixture
+ARG PRODUCT_REVISION
+ARG ENGINE_REVISION
+LABEL org.opencontainers.image.source="https://github.com/ecryptoguru/lyrashield-ai" \
+      org.opencontainers.image.revision="$PRODUCT_REVISION" \
+      com.lyrashield.engine.revision="$ENGINE_REVISION" \
+      io.lyrashield.purpose="disposable-linux-native-tests"
+RUN apk add --no-cache docker-cli python3 openssl util-linux && \
+    addgroup -g 10001 lyrashield-broker && \
+    addgroup -g 10002 lyrashield-supervisor && \
+    addgroup -g 10003 lyrashield-provider-gateway && \
+    addgroup -g 10004 lyrashield-worker
+ENV TSX_DISABLE_CACHE=1
+USER root
+ENTRYPOINT ["/usr/bin/python3", "-I", "/app/ops/controller/disposable-candidate-host.py"]
+CMD []
 
 # Materialize only the worker's production dependency closure. This keeps the
 # final image independent of unrelated web, marketing, and test dependencies.
@@ -221,6 +252,8 @@ COPY ops/worker/lyrashield-worker-egress-refresh.timer /opt/lyrashield-worker-ho
 # initialized from the image, so create and own only the runtime-write paths.
 RUN find /app/apps/worker -type f \
       \( -name "*.test.ts" -o -name "*.test.tsx" \) -delete && \
+    chown -R root:root /app/apps/worker && \
+    chmod -R a-w /app/apps/worker && chmod a-w /app /app/apps && \
     mkdir -p /app/lyrashield_runs /app/.lyrashield/evidence && \
     chown lyrashield:lyrashield /app/lyrashield_runs /app/.lyrashield/evidence
 
@@ -252,14 +285,20 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=workspace-builder --chown=lyrashield:lyrashield /app/packages/db/package.json ./packages/db/package.json
 COPY --chown=lyrashield:lyrashield ops/controller/health.mjs /opt/lyrashield-controller/health.mjs
 
-RUN mkdir -p /run/lyrashield && chown lyrashield:lyrashield /run/lyrashield && chmod 750 /run/lyrashield
+RUN mkdir -p /run/lyrashield /opt/lyrashield-runtime && \
+    chown lyrashield:lyrashield /run/lyrashield && \
+    chmod 750 /run/lyrashield && chmod 755 /opt/lyrashield-runtime
 
 USER lyrashield
 CMD ["./node_modules/.bin/tsx", "src/index.ts"]
 
 FROM controller-base AS controller
 
-COPY --from=controller-deps --chown=lyrashield:lyrashield /controller-broker ./
+COPY --from=controller-deps --chown=root:root /controller-broker ./
+USER root
+RUN chown -R root:root /app /opt/lyrashield-controller && chmod -R a-w /app /opt/lyrashield-controller
+USER lyrashield
+ENV TSX_DISABLE_CACHE=1
 # Keep the default bind path identical to the healthcheck probe below; the host
 # may override it, and then must override the probe with the same path.
 ENV LYRASHIELD_BROKER_SOCKET_PATH=/run/lyrashield/broker.sock
@@ -268,13 +307,16 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 FROM controller-base AS supervisor
 
-# The supervisor is the only role that drives the container executor, so the CLI
-# stays out of the broker and provider-gateway images.
+# The supervisor carries the existing native and root-seal dependency closure.
+# Root helpers use this same digest-pinned image under a read-only root filesystem.
 USER root
-RUN apk add --no-cache docker-cli
-USER lyrashield
+RUN apk add --no-cache docker-cli python3 openssl
+ENV TSX_DISABLE_CACHE=1
 
-COPY --from=controller-deps --chown=lyrashield:lyrashield /controller-supervisor ./
+COPY --from=controller-deps --chown=root:root /controller-supervisor ./
+COPY --chown=root:root ops/controller/publish-journal-seal.mjs ops/controller/journal-seal-publication.mjs ops/controller/publisher-runtime.mjs ./src/
+RUN chown -R root:root /app /opt/lyrashield-controller && chmod -R a-w /app /opt/lyrashield-controller
+USER lyrashield
 ENV LYRASHIELD_SUPERVISOR_SOCKET_PATH=/run/lyrashield/supervisor.sock
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["node", "/opt/lyrashield-controller/health.mjs", "/run/lyrashield/supervisor.sock"]

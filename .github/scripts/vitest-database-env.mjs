@@ -130,6 +130,20 @@ export function assertDisposableDatabasePair(env) {
     "RLS_RUNTIME_DATABASE_URL",
     env.RLS_RUNTIME_DATABASE_URL
   )
+  // prisma.config.ts prefers DATABASE_DIRECT_URL over DATABASE_URL, so an
+  // unconstrained direct URL could silently redirect migration or final Prisma
+  // validation to a different database than the fixture asserted on. Bind it to
+  // the same local test database, or leave it unset.
+  if (env.DATABASE_DIRECT_URL) {
+    const direct = assertDisposableDatabaseUrl("DATABASE_DIRECT_URL", env.DATABASE_DIRECT_URL)
+    if (
+      direct.host !== owner.host ||
+      direct.port !== owner.port ||
+      direct.database !== owner.database
+    ) {
+      throw new Error("DATABASE_DIRECT_URL must name the same local test database as DATABASE_URL")
+    }
+  }
   // Do not resolve or conflate localhost/IPv4/IPv6 aliases: they may identify
   // different listeners. Equivalent explicit/default PostgreSQL ports match.
   if (

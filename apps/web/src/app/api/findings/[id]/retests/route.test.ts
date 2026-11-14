@@ -18,6 +18,7 @@ const updateScanStatus = vi.fn()
 const assertScanAllowed = vi.fn()
 const findCurrentDomainProof = vi.fn()
 const isTargetRelayWorkerAvailable = vi.hoisted(() => vi.fn())
+const resolveRepositoryScanSource = vi.hoisted(() => vi.fn())
 const claimOrGetAgentOperation = vi.fn()
 const completeAgentOperation = vi.fn()
 const failAgentOperation = vi.fn()
@@ -37,6 +38,7 @@ const prisma = {
 vi.mock("@lyrashield/integrations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@lyrashield/integrations")>()),
   isTargetRelayWorkerAvailable,
+  resolveRepositoryScanSource,
 }))
 
 vi.mock("@lyrashield/db", () => ({
@@ -117,6 +119,9 @@ describe("POST /api/findings/[id]/retests", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     isTargetRelayWorkerAvailable.mockResolvedValue(true)
+    resolveRepositoryScanSource.mockImplementation(async (target) =>
+      target.type === "REPO" ? { revision: "b".repeat(40) } : undefined
+    )
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
     getFindingReference.mockResolvedValue({
       id: "finding-1",
@@ -159,6 +164,41 @@ describe("POST /api/findings/[id]/retests", () => {
       url: null,
       apiSpecUrl: null,
     })
+  })
+
+  it("pins the trusted current repository source before creating a retest plan", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/findings/finding-1/retests", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: "workspace-1", revision: "attacker-sha" }),
+      }),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+    expect(response.status).toBe(201)
+    expect(resolveRepositoryScanSource).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "target-1", type: "REPO" }),
+      expect.objectContaining({ readActiveConnection: expect.any(Function) })
+    )
+    expect(createScan).toHaveBeenCalledWith(
+      expect.objectContaining({ source: { revision: "b".repeat(40) } })
+    )
+    expect(resolveRepositoryScanSource.mock.invocationCallOrder[0]).toBeLessThan(
+      createScan.mock.invocationCallOrder[0]!
+    )
+  })
+
+  it("leaves a retest unsubmitted when the trusted current source cannot be resolved", async () => {
+    resolveRepositoryScanSource.mockRejectedValueOnce(new Error("provider unavailable"))
+    const response = await POST(
+      new Request("http://localhost/api/findings/finding-1/retests", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: "workspace-1" }),
+      }),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+    expect(response.status).toBe(409)
+    expect(createScan).not.toHaveBeenCalled()
+    expect(prisma.retest.create).not.toHaveBeenCalled()
   })
 
   it("queues a fresh scan from server-owned source-scan configuration", async () => {

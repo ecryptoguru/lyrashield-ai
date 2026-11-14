@@ -10,6 +10,8 @@ import {
   type AuthorityHead,
   type JournalRecord,
   type SupervisorJournalCursor,
+  type SupervisorAttemptProofInput,
+  type SupervisorAttemptProof,
 } from "@lyrashield/runtime-control"
 import { verifySupervisorReceiptHmac } from "./scan-supervisor-receipt-verifier"
 import { ScanDispatchAuthorityError } from "./scan-dispatch-authority-error"
@@ -36,6 +38,14 @@ const wrappedSchema = authorityEventSchema(originalSchema)
 export type IngestedSupervisorRecord = JournalRecord<z.infer<typeof wrappedSchema>>
 
 /** Supplied only by the protected broker installation, never by an HTTP caller. */
+export type SupervisorAttemptProofAuthority = Pick<
+  SupervisorReceiptAuthority,
+  "streamId" | "authorityEpochId" | "supervisorInstanceId" | "originalKeyHash" | "wrapperKeyHash"
+> & {
+  attemptProofPublicKey: string
+  readAttemptProof(input: SupervisorAttemptProofInput): Promise<SupervisorAttemptProof>
+}
+
 export interface SupervisorReceiptAuthority {
   connectionString: string
   streamId: string
@@ -46,6 +56,8 @@ export interface SupervisorReceiptAuthority {
   wrapperSigningSecret: string
   wrapperKeyHash: string
   readJournal(cursor: SupervisorJournalCursor): Promise<unknown>
+  attemptProofPublicKey?: string
+  readAttemptProof?(input: SupervisorAttemptProofInput): Promise<SupervisorAttemptProof>
 }
 
 export function receiptFailure(code: `SUPERVISOR_${string}`): never {

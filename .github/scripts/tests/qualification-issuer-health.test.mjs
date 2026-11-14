@@ -72,7 +72,13 @@ test("isolated issuer verifies optional publication before fixed health signing,
   const input = "fresh_sandbox_publication"
   const inventory = "fresh_sandbox_inventory"
   const fleet = "runtime_fleet_evidence"
-  assert.deepEqual(Object.keys(issuer.on.workflow_call.inputs), [input, inventory, fleet])
+  assert.deepEqual(Object.keys(issuer.on.workflow_call.inputs), [
+    input,
+    inventory,
+    fleet,
+    "prepared_fleet",
+    "runtime_fleet_configuration",
+  ])
   assert.deepEqual(Object.keys(caller.on.workflow_dispatch.inputs), [input, inventory])
   for (const definition of [
     issuer.on.workflow_call.inputs[input],
@@ -80,6 +86,8 @@ test("isolated issuer verifies optional publication before fixed health signing,
     issuer.on.workflow_call.inputs[inventory],
     caller.on.workflow_dispatch.inputs[inventory],
     issuer.on.workflow_call.inputs[fleet],
+    issuer.on.workflow_call.inputs.prepared_fleet,
+    issuer.on.workflow_call.inputs.runtime_fleet_configuration,
   ]) {
     assert.equal(definition.type, "string")
     assert.equal(definition.required, false)
@@ -106,11 +114,11 @@ test("isolated issuer verifies optional publication before fixed health signing,
     [inventory]: "${{ inputs.fresh_sandbox_inventory }}",
   })
   const commands = job.steps.filter((step) => step.run)
-  assert.equal(commands.length, 5)
+  assert.equal(commands.length, 7)
   assert.equal(commands[0].run, "bash .github/scripts/prepare-qualification-verifier.sh")
   assert.equal(
     commands[0].if,
-    "inputs.fresh_sandbox_publication != '' || inputs.fresh_sandbox_inventory != '' || inputs.runtime_fleet_evidence != ''"
+    "inputs.fresh_sandbox_publication != '' || inputs.fresh_sandbox_inventory != '' || inputs.runtime_fleet_evidence != '' || inputs.runtime_fleet_configuration != ''"
   )
   assert.equal(commands[1].run, "node .github/scripts/issue-sandbox-publication.mjs")
   assert.equal(commands[1].if, "inputs.fresh_sandbox_publication != ''")
@@ -118,10 +126,18 @@ test("isolated issuer verifies optional publication before fixed health signing,
   assert.equal(commands[2].run, "node .github/scripts/issue-sandbox-inventory.mjs")
   assert.equal(commands[2].if, "inputs.fresh_sandbox_inventory != ''")
   assert.equal(commands[2].env.FRESH_SANDBOX_INVENTORY, "${{ inputs.fresh_sandbox_inventory }}")
-  assert.equal(commands[3].run, "node .github/scripts/issue-runtime-fleet-qualification.mjs")
-  assert.equal(commands[3].if, "inputs.runtime_fleet_evidence != ''")
-  assert.equal(commands[3].env.RUNTIME_FLEET_EVIDENCE, "${{ inputs.runtime_fleet_evidence }}")
-  assert.equal(commands[4].run, "node .github/scripts/qualification-issuer-health.mjs")
+  assert.equal(commands[3].run, "node .github/scripts/runtime-fleet-evidence-transport.mjs witness")
+  assert.equal(commands[4].run, "node .github/scripts/runtime-fleet-evidence-transport.mjs locate")
+  assert.equal(commands[5].run, "node .github/scripts/issue-runtime-fleet-qualification.mjs")
+  assert.equal(
+    commands[5].if,
+    "inputs.runtime_fleet_evidence != '' || inputs.runtime_fleet_configuration != ''"
+  )
+  assert.equal(
+    commands[5].env.RUNTIME_FLEET_EVIDENCE,
+    "${{ steps.evidence-selectors.outputs.runtime_fleet_evidence || inputs.runtime_fleet_evidence }}"
+  )
+  assert.equal(commands[6].run, "node .github/scripts/qualification-issuer-health.mjs")
   const artifact = job.steps.find((step) => step.with?.path === "sandbox-publication-record.json")
   assert.equal(artifact.if, "inputs.fresh_sandbox_publication != ''")
   assert.equal(artifact.with["if-no-files-found"], "error")
@@ -136,7 +152,10 @@ test("isolated issuer verifies optional publication before fixed health signing,
       "runtime-fleet-qualification-${{ github.run_id }}-${{ github.run_attempt }}"
   )
   assert.ok(fleetArtifact)
-  assert.equal(fleetArtifact.if, "inputs.runtime_fleet_evidence != ''")
+  assert.equal(
+    fleetArtifact.if,
+    "inputs.runtime_fleet_evidence != '' || inputs.runtime_fleet_configuration != ''"
+  )
   assert.equal(fleetArtifact.with["if-no-files-found"], "error")
   assert.deepEqual(Object.keys(job.outputs), [
     "runtime_fleet_qualification",

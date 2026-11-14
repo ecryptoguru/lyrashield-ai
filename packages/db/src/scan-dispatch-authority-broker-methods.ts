@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { createId } from "@paralleldrive/cuid2"
 import type pg from "pg"
+import { type SupervisorAttemptProof } from "@lyrashield/runtime-control"
 import { ScanDispatchAuthorityError } from "./scan-dispatch-authority-error"
 import {
   checkPreparationAuthority,
@@ -12,6 +13,7 @@ import { requirePublishedScanQueueAuthority } from "./scan-queue-outbox-store"
 import { ScanQueueOutboxError, scanQueueDigest } from "./scan-queue-payload"
 import {
   compilePreparationCommand,
+  readStoredDispatchCommand,
   type ScanPreparationCompiler,
 } from "./scan-dispatch-command-descriptor"
 import type {
@@ -19,8 +21,6 @@ import type {
   DispatchOperationState,
   PrepareDispatchInput,
   PrepareDispatchResult,
-  StartUnmeteredDispatchInput,
-  StartUnmeteredDispatchResult,
 } from "./scan-dispatch-authority-broker"
 
 export { ScanDispatchAuthorityError } from "./scan-dispatch-authority-error"
@@ -41,6 +41,7 @@ type TransactionOutcome<T extends object> =
   | Extract<DispatchBrokerResult, { kind: "unknown" }>
 
 export type DispatchBrokerContext = {
+  stageProof?: SupervisorAttemptProof
   preparationAuthority?: "checked-intent-v1"
   compilePreparation?: ScanPreparationCompiler
   transaction: <T>(
@@ -187,7 +188,7 @@ async function createPrepareAttempt(
   input: PrepareDispatchInput,
   expiresAt: string,
   focusDigest: string | null,
-  compilePreparation: ScanPreparationCompiler | undefined,
+  compilePreparation: ScanPreparationCompiler,
   focus: import("@lyrashield/types").ScanJobData["focus"]
 ): Promise<{
   waiting: false
@@ -263,11 +264,31 @@ async function createPrepareAttempt(
       commandId,
       operation.operationId,
       attemptId,
-      descriptor.commandInputChecksum ?? commandDigest("PREPARE", operation.operationId, attemptId),
+      descriptor.commandInputChecksum,
       descriptor.commandInputJson,
       descriptor.commandInputChecksum,
     ]
   )
+  if (compilePreparation.verifyPreparedCommand) {
+    const command = readStoredDispatchCommand(
+      descriptor.commandInputJson,
+      descriptor.commandInputChecksum
+    )
+    if (!command || command.type !== "PREPARE")
+      throw new ScanDispatchAuthorityError(
+        "PREPARATION_AUTHORITY_UNAVAILABLE",
+        "Prepared command is unavailable"
+      )
+    await compilePreparation.verifyPreparedCommand(
+      {
+        query: (text, values) => client.query(text, values),
+        release: () => {
+          throw new Error("Prepared command verification cannot release the live authority gate")
+        },
+      },
+      command
+    )
+  }
   await client.query(
     'UPDATE "ScanDispatchOperation" SET "state"=\'PREPARING\', "updatedAt"=CURRENT_TIMESTAMP WHERE "operationId"=$1',
     [operation.operationId]
@@ -289,11 +310,12 @@ export async function prepareDispatch(
   ctx: DispatchBrokerContext,
   input: PrepareDispatchInput
 ): Promise<PrepareDispatchResult> {
-  if (ctx.preparationAuthority !== "checked-intent-v1")
+  if (ctx.preparationAuthority !== "checked-intent-v1" || !ctx.compilePreparation)
     throw new ScanDispatchAuthorityError(
       "PREPARATION_AUTHORITY_CLOSED",
       "Checked preparation authority is not installed"
     )
+  const compilePreparation = ctx.compilePreparation
   try {
     const expiresAt = timestampWithoutTimeZone(input.expiresAt)
     const outcome = await ctx.transaction(input.operationId, async (client) => {
@@ -343,7 +365,7 @@ export async function prepareDispatch(
           input,
           expiresAt,
           payload.focus === undefined ? null : scanQueueDigest(JSON.stringify(payload.focus)),
-          ctx.compilePreparation,
+          compilePreparation,
           payload.focus
         ),
         authority
@@ -402,220 +424,4 @@ async function requireBrokerQueuePublication(
   }
 }
 
-async function checkStartUnmeteredGrant(
-  client: pg.PoolClient,
-  input: StartUnmeteredDispatchInput
-): Promise<void> {
-  const grant = await client.query(
-    `SELECT 1 FROM "ScanWorkerInstanceGrant"
-     WHERE "id"=$1 AND "authorityEpochId"=$2 AND "instanceId"=$3
-       AND "revokedAt" IS NULL AND "issuedAt" <= CURRENT_TIMESTAMP
-       AND "expiresAt" > CURRENT_TIMESTAMP
-     FOR SHARE`,
-    [input.workerGrantId, input.authorityEpochId, input.workerInstanceId]
-  )
-  if (grant.rowCount !== 1)
-    throw new ScanDispatchAuthorityError(
-      "WORKER_GRANT_INVALID",
-      "Worker instance grant is not live"
-    )
-}
-
-type StartUnmeteredAttemptRow = {
-  attemptId: string
-  scanId: string
-  operationId: string
-  maxBudgetUsd: string
-  maxRuntimeMs: number
-  policyDigest: string
-  workerInstanceGrantId: string
-  authorityEpochId: string
-  scanStatus: string
-}
-
-async function loadStartUnmeteredAttempt(
-  client: pg.PoolClient,
-  input: StartUnmeteredDispatchInput
-): Promise<StartUnmeteredAttemptRow> {
-  const attempt = await client.query<StartUnmeteredAttemptRow>(
-    `SELECT a."attemptId", a."scanId", a."operationId", a."maxBudgetUsd"::text AS "maxBudgetUsd",
-            a."maxRuntimeMs", a."policyDigest", a."workerInstanceGrantId", a."authorityEpochId",
-            s."status"::text AS "scanStatus"
-     FROM "ScanDispatchAttempt" a
-     JOIN "Scan" s ON s."id" = a."scanId"
-     WHERE a."operationId"=$1 AND a."attemptId"=$2
-     FOR UPDATE OF a, s`,
-    [input.operationId, input.attemptId]
-  )
-  const attemptRow = attempt.rows[0]
-  if (!attemptRow)
-    throw new ScanDispatchAuthorityError("OPERATION_NOT_FOUND", "Dispatch attempt not found")
-  if (
-    attemptRow.workerInstanceGrantId !== input.workerGrantId ||
-    attemptRow.authorityEpochId !== input.authorityEpochId
-  )
-    throw new ScanDispatchAuthorityError(
-      "DISPATCH_REPLAY_CONFLICT",
-      "Attempt worker identity changed"
-    )
-  return attemptRow
-}
-
-async function readStartUnmeteredReplay(
-  client: pg.PoolClient,
-  input: StartUnmeteredDispatchInput
-): Promise<{ startId: string; commandId: string } | null> {
-  const existing = await client.query<{ startId: string; commandId: string }>(
-    `SELECT st."startId", o."id" AS "commandId"
-     FROM "ScanDispatchStart" st
-     JOIN "ScanDispatchOutbox" o ON o."operationId"=st."operationId"
-       AND o."attemptId"=st."attemptId" AND o."commandType"='START_UNMETERED'
-     WHERE st."operationId"=$1 AND st."attemptId"=$2`,
-    [input.operationId, input.attemptId]
-  )
-  return existing.rows[0] ?? null
-}
-
-async function checkStartUnmeteredPreparation(
-  client: pg.PoolClient,
-  operation: LockedOperation,
-  input: StartUnmeteredDispatchInput
-): Promise<void> {
-  if (operation.state !== "PREPARED")
-    throw new ScanDispatchAuthorityError(
-      "DISPATCH_OPERATION_STATE_INVALID",
-      `Unmetered start requires PREPARED, found ${operation.state}`
-    )
-  const physical = await client.query<{ state: string }>(
-    'SELECT "state"::text AS state FROM "ScanPhysicalExecution" WHERE "attemptId"=$1 FOR UPDATE',
-    [input.attemptId]
-  )
-  if (physical.rows[0]?.state !== "PREPARING")
-    throw new ScanDispatchAuthorityError(
-      "DISPATCH_OPERATION_STATE_INVALID",
-      "Physical preparation is incomplete"
-    )
-  const preparation = await client.query<{ status: string }>(
-    `SELECT "status"::text AS status FROM "ScanDispatchOutbox"
-     WHERE "operationId"=$1 AND "attemptId"=$2 AND "commandType"='PREPARE' FOR UPDATE`,
-    [input.operationId, input.attemptId]
-  )
-  if (preparation.rows[0]?.status !== "COMPLETED")
-    throw new ScanDispatchAuthorityError(
-      "DISPATCH_OPERATION_STATE_INVALID",
-      "PREPARE is not complete"
-    )
-}
-
-async function writeStartUnmeteredRecords(
-  client: pg.PoolClient,
-  input: StartUnmeteredDispatchInput,
-  attemptRow: StartUnmeteredAttemptRow
-): Promise<{ state: "START_PENDING"; attemptId: string; startId: string; commandId: string }> {
-  const reservation = await client.query<{
-    accountId: string
-    state: string
-    runtimeLimitMs: number
-  }>(
-    `SELECT "accountId", "state", "runtimeLimitMs"
-     FROM "ScanCapacityReservation" WHERE "scanId"=$1 FOR UPDATE`,
-    [attemptRow.scanId]
-  )
-  const funding = reservation.rows[0]
-  if (!funding || funding.state !== "RESERVED")
-    throw new ScanDispatchAuthorityError("CAPACITY_NOT_READY", "Reservation is not ready")
-  if (!["QUEUED", "PREFLIGHT"].includes(attemptRow.scanStatus))
-    throw new ScanDispatchAuthorityError(
-      "DISPATCH_OPERATION_STATE_INVALID",
-      "Scan is not startable"
-    )
-  const maxBudgetUsd = Number(attemptRow.maxBudgetUsd)
-  if (!Number.isFinite(maxBudgetUsd) || maxBudgetUsd !== 0)
-    throw new ScanDispatchAuthorityError(
-      "CAPACITY_NOT_READY",
-      "Unmetered start requires a zero budget"
-    )
-  const maxRuntimeMs = Math.min(attemptRow.maxRuntimeMs, funding.runtimeLimitMs)
-  if (!Number.isInteger(maxRuntimeMs) || maxRuntimeMs <= 0)
-    throw new ScanDispatchAuthorityError(
-      "CAPACITY_NOT_READY",
-      "Unmetered start requires runtime capacity"
-    )
-  const startId = createId()
-  const commandId = createId()
-  const fundingDigest = valueDigest("dispatch-funding/1", {
-    scanId: attemptRow.scanId,
-    maxRuntimeMs,
-    mode: "UNMETERED",
-  })
-
-  await client.query(
-    'UPDATE "Scan" SET "status"=\'RUNNING\', "startedAt"=coalesce("startedAt",CURRENT_TIMESTAMP), "updatedAt"=CURRENT_TIMESTAMP WHERE "id"=$1',
-    [attemptRow.scanId]
-  )
-  await client.query(
-    `INSERT INTO "ScanDispatchStart" (
-      "startId","operationId","attemptId","kind","maxBudgetUsd","maxRuntimeMs",
-      "policyDigest","fundingDigest","billableClaimEventId","providerGrantDigest","createdAt"
-    ) VALUES ($1,$2,$3,'UNMETERED',0,$4,$5,$6,NULL,NULL,CURRENT_TIMESTAMP)`,
-    [
-      startId,
-      input.operationId,
-      input.attemptId,
-      maxRuntimeMs,
-      attemptRow.policyDigest,
-      fundingDigest,
-    ]
-  )
-  await client.query(
-    `INSERT INTO "ScanDispatchOutbox" (
-      "id","operationId","attemptId","commandType","sequence","commandDigest","status",
-      "attempts","availableAt","createdAt","updatedAt"
-    ) VALUES ($1,$2,$3,'START_UNMETERED',2,$4,'PENDING',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-    [
-      commandId,
-      input.operationId,
-      input.attemptId,
-      commandDigest("START_UNMETERED", input.operationId, input.attemptId),
-    ]
-  )
-  await client.query(
-    'UPDATE "ScanDispatchOperation" SET "state"=\'START_PENDING\', "updatedAt"=CURRENT_TIMESTAMP WHERE "operationId"=$1',
-    [input.operationId]
-  )
-  return { state: "START_PENDING" as const, attemptId: input.attemptId, startId, commandId }
-}
-
-export async function startUnmeteredDispatch(
-  ctx: DispatchBrokerContext,
-  input: StartUnmeteredDispatchInput
-): Promise<StartUnmeteredDispatchResult> {
-  try {
-    const outcome = await ctx.transaction(input.operationId, async (client) => {
-      const operation = await ctx.lockOperation(client, input)
-      await checkStartUnmeteredGrant(client, input)
-      const attemptRow = await loadStartUnmeteredAttempt(client, input)
-      const replay = await readStartUnmeteredReplay(client, input)
-      if (replay)
-        return {
-          state: "START_PENDING" as const,
-          attemptId: input.attemptId,
-          startId: replay.startId,
-          commandId: replay.commandId,
-        }
-      await checkStartUnmeteredPreparation(client, operation, input)
-      return await writeStartUnmeteredRecords(client, input, attemptRow)
-    })
-    if (outcome.kind === "unknown") return outcome
-    return { kind: "committed", operationId: input.operationId, ...outcome.value }
-  } catch (error) {
-    if (error instanceof ScanDispatchAuthorityError) throw error
-    throw new ScanDispatchAuthorityError(
-      "DATABASE_REJECTED",
-      "Unmetered-start transaction rejected",
-      {
-        cause: error,
-      }
-    )
-  }
-}
+export { startUnmeteredDispatch } from "./scan-dispatch-start-unmetered"

@@ -3,8 +3,16 @@ import { listenPrivateControlServer } from "@lyrashield/runtime-control"
 import { loadBrokerConfig } from "./config"
 import { createBrokerHandler } from "./http"
 import { createBrokerService } from "./service"
+import { loadInstalledPreparationAuthority } from "./installed-preparation"
 
 const config = loadBrokerConfig()
+if (config.admission === "open") {
+  const preparation = await loadInstalledPreparationAuthority()
+  if (preparation) {
+    config.preparationAuthority = preparation.compiler
+    config.stageOperation = preparation.stageOperation
+  }
+}
 const service = createBrokerService(config)
 const server = createServer(createBrokerHandler(service, config.controlToken))
 const ready = () => {
@@ -12,7 +20,7 @@ const ready = () => {
     JSON.stringify({
       service: "lyrashield-broker",
       status: "ready",
-      admission: config.admission,
+      admission: service.admission,
       receipts: config.receiptAuthority ? "installed" : "closed",
     }) + "\n"
   )
