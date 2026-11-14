@@ -14,6 +14,7 @@
 #   database-services — database-tests or a changed live DB/Redis fixture requires local services
 #   desktop-frontend-tests — Desktop sources, its fixture/toolchain inputs or unknown paths
 #   web-component / worker-component — source consumers, independent of packaging
+#   controller-image — the broker/supervisor/provider-gateway control-plane roles
 #   web-image / worker-image / egress-image — optional packaging qualifications
 #   marketing-deploy — marketing source or a dependency that changes its Worker artifact
 #   azure-deploy — app or shared change requiring an Azure production release
@@ -40,6 +41,9 @@ docs_pattern='^(\.gitignore|\.gitattributes|LICENSE|renovate\.json|.*\.md|\.devi
 marketing_pattern='^apps/(marketing|marketing-motion)/'
 app_pattern='^apps/(web|worker)/'
 desktop_pattern='^apps/desktop/'
+# The control-plane roles run only on a protected host and are published as
+# digest-pinned images; their sources do not enter the Azure web/worker release.
+controller_pattern='^apps/(broker|supervisor|provider-gateway)/'
 shared_pattern='^(docs/marketplace/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|docker-compose\.yml|Dockerfile|action\.yml|\.gitleaks\.toml|\.env\.example|ops/|e2e/|lint/serial-comma-baseline\.json|run-all-tests\.mjs|\.github/)'
 # CI validation is deliberately broader than release routing. Workflow, test,
 # Action, and tooling changes must be checked, but do not alter a production
@@ -84,6 +88,7 @@ worker_component=false
 web_image=false
 worker_image=false
 egress_image=false
+controller_image=false
 
 # Desktop imports the scan-depth fixture directly; it has no workspace package
 # dependency on types. Root JS build/toolchain inputs also affect its frontend.
@@ -128,6 +133,13 @@ while IFS= read -r f || [[ -n "$f" ]]; do
   if [[ "$f" =~ $desktop_pattern ]]; then
     desktop=true
     engine_worker_contract=true
+    path_classified=true
+  fi
+  # Controller sources share the DB/queue closure, so they select the full core
+  # suite, but they add no web/worker image or Azure deployment target.
+  if [[ "$f" =~ $controller_pattern ]]; then
+    shared=true
+    controller_image=true
     path_classified=true
   fi
   if [[ "$f" =~ $shared_pattern ]]; then
@@ -192,6 +204,7 @@ if [[ "$unknown" == "true" ]]; then
   web_image=true
   worker_image=true
   egress_image=true
+  controller_image=true
   marketing_deploy=true
   azure_deploy=true
   marketing_tests=true
@@ -211,6 +224,7 @@ if $force_all; then
   web_image=true
   worker_image=true
   egress_image=true
+  controller_image=true
   docs_only=false
   tooling_only=false
   marketing=true
@@ -258,6 +272,7 @@ emit_flags() {
     "web-image=$web_image" \
     "worker-image=$worker_image" \
     "egress-image=$egress_image" \
+    "controller-image=$controller_image" \
     "desktop-frontend-tests=$desktop_frontend_tests"
 }
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then

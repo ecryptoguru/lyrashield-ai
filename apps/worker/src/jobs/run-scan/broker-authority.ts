@@ -42,7 +42,7 @@ export interface WorkerBrokerInstallation {
   verifyAuthority(authority: WorkerBrokerAuthority): Promise<boolean>
   broker: Pick<
     ReturnType<typeof createScanDispatchAuthorityBroker>,
-    "status" | "stop" | "reconcile" | "consumeSupervisorReceipts"
+    "prepare" | "status" | "stop" | "reconcile" | "consumeSupervisorReceipts"
   >
   publication: Pick<ReturnType<typeof createScanQueueOutboxDispatcher>, "verifyDispatch">
 }
@@ -260,11 +260,28 @@ async function dispatchBoundJob(
       return retainedBrokerScanResult("BROKER_PUBLICATION_UNAVAILABLE")
     if (!(await installationIsCurrent(installation)))
       return retainedBrokerScanResult("BROKER_AUTHORITY_UNAVAILABLE")
-    // Current member/permission/delegation/sponsor checks above are read-only
-    // snapshots. They are not fenced inside the broker's preparation transaction.
-    // Keep PREPARE structurally unavailable until that atomic authority fence is
-    // integrated; another asynchronous recheck would retain the revocation race.
-    return retainedBrokerScanResult("BROKER_PREPARATION_FENCE_UNAVAILABLE")
+    // The rechecks above are advisory snapshots. The fence is the broker's own
+    // transaction: it re-locks the operation, re-reads the live grant FOR SHARE
+    // and runs the SQL authority function, so a revocation between the snapshot
+    // and the write cannot be prepared.
+    const prepared = await bounded(() =>
+      installation.broker.prepare({
+        operationId: operation.operationId,
+        workerInstanceId: installation.authority.workerInstanceId,
+        workerGrantId: installation.authority.workerGrantId,
+        authorityEpochId: installation.authority.authorityEpochId,
+        // SQL clamps this to now+10s; the grant must already cover it.
+        expiresAt: installation.authority.expiresAt,
+      })
+    )
+    if (prepared.operationId !== operation.operationId)
+      return retainedBrokerScanResult("BROKER_OUTCOME_UNKNOWN")
+    if (prepared.kind === "waiting") return retainedBrokerScanResult("BROKER_CAPACITY_PENDING")
+    // Checked intent only. Physical executor and provider dispatch are not
+    // installed, so a prepared attempt is retained rather than executed.
+    return retainedBrokerScanResult(
+      prepared.kind === "committed" ? "BROKER_DISPATCH_PREPARED" : "BROKER_OUTCOME_UNKNOWN"
+    )
   })
 }
 
