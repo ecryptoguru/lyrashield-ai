@@ -123,7 +123,7 @@ pnpm db:generate
 mkdir "$dir/migrations"
 for migration in "$repo_root"/packages/db/prisma/migrations/*; do
   case "$(basename "$migration")" in
-    20261111130000_scan_preparation_authority_fence|20261113140000_scan_dispatch_command_descriptor|20261113150000_supervisor_receipt_ingestion|20261113163000_scan_execution_action_authority|20261113170000_supervisor_execution_receipts|20261113181000_supervisor_native_invocation_resolution|20261113200000_supervisor_preparation_completion) continue ;;
+    20261111130000_scan_preparation_authority_fence|20261113140000_scan_dispatch_command_descriptor|20261113150000_supervisor_receipt_ingestion|20261113163000_scan_execution_action_authority|20261113170000_supervisor_execution_receipts|20261113181000_supervisor_native_invocation_resolution|20261113200000_supervisor_preparation_completion|20261114010000_scope_invocation_guard_to_workspace) continue ;;
   esac
   if [[ -d "$migration" ]]; then
     mkdir "$dir/migrations/$(basename "$migration")"
