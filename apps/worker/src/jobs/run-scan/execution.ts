@@ -318,15 +318,15 @@ export async function executeScanTarget(params: {
   if (deterministicRetest) {
     if (target.repoProvider !== "github")
       throw new Error("Deterministic repository retests require a GitHub source target")
-    await authorizeDeterministicRetest(scanId, workspaceId, params.target.id).catch(
-      async (error) => {
-        // A missing deterministic baseline is an expected refusal: record the
-        // inconclusive verification, then fail the scan so nothing is billed.
-        if (!(error instanceof RetestBaselineUnavailableError)) throw error
-        await inconclusiveRetestsForScan(scanId, error.reason)
-        throw error
-      }
-    )
+    try {
+      await authorizeDeterministicRetest(scanId, workspaceId, params.target.id)
+    } catch (authorizeError) {
+      // A missing deterministic baseline is an expected refusal: record the
+      // inconclusive verification, then fail the scan so nothing is billed.
+      if (!(authorizeError instanceof RetestBaselineUnavailableError)) throw authorizeError
+      await inconclusiveRetestsForScan(scanId, authorizeError.reason)
+      throw authorizeError
+    }
     deterministicCheckout = await checkoutDeterministicRetest({
       scanId,
       workspaceId,

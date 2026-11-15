@@ -136,7 +136,8 @@ describe("fix generation lifecycle", () => {
     )
   })
 
-  it("skips a queued delegated fix when authority was revoked before consumption", async () => {    const delegatedScan = {
+  it("skips a queued delegated fix when authority was revoked before consumption", async () => {
+    const delegatedScan = {
       ...finding.scan,
       delegatedConnectionId: "conn-1",
       delegatedAuthorizationVersion: 2,
