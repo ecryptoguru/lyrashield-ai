@@ -158,6 +158,7 @@ describe("fix-proposal-service", () => {
               severity: true,
               status: true,
               cwe: true,
+              baseCommit: true,
               target: { select: { id: true, name: true, repoFullName: true } },
             },
           },

@@ -34,6 +34,20 @@ export function assertRetestFilesystemCapacity(filesystem: {
     throw new Error("Deterministic retests require the dedicated capped tmpfs mount")
 }
 
+/**
+ * An expected refusal, not an internal failure: the original scan cannot serve
+ * as a deterministic baseline (missing provenance or incomplete coverage), so
+ * verification stays inconclusive instead of claiming or denying a fix.
+ */
+export class RetestBaselineUnavailableError extends Error {
+  readonly reason =
+    "The original scan does not provide a complete deterministic baseline, so this retest cannot confirm or deny the fix."
+  constructor() {
+    super("Deterministic retest baseline provenance is incomplete")
+    this.name = "RetestBaselineUnavailableError"
+  }
+}
+
 /** Authorization comes from persisted lineage, never from queue instructions. */
 export async function authorizeDeterministicRetest(
   scanId: string,
@@ -91,7 +105,7 @@ export async function authorizeDeterministicRetest(
         !/^[a-f0-9]{40}$/i.test(revision) ||
         !/^[a-f0-9]{64}$/i.test(baseline?.checksum ?? "")
       ) {
-        throw new Error("Deterministic retest baseline provenance is incomplete")
+        throw new RetestBaselineUnavailableError()
       }
     }
   })
