@@ -1061,9 +1061,6 @@ importers:
         specifier: 'catalog:'
         version: 4.6.6
     devDependencies:
-      '@lyrashield/db':
-        specifier: workspace:*
-        version: link:../db
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3

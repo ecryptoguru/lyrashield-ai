@@ -22,7 +22,7 @@ test("CSS and marketing edits select their narrow source contracts", () => {
   const source = read(".github/workflows/ci.yml")
   assert.match(
     source,
-    /name: Web presentation contracts\n        if: needs.changes.outputs.app == 'true'[\s\S]*?vitest run --maxWorkers=2 apps\/web\/src\/app\/mobile-shell.contract.test.ts/
+    /name: Web presentation contracts\n        if: needs.changes.outputs.app == 'true' && needs.changes.outputs.database-tests != 'true'[\s\S]*?vitest run --maxWorkers=2 apps\/web\/src\/app\/mobile-shell\.contract\.test\.ts/
   )
   assert.match(
     source,

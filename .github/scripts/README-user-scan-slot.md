@@ -16,11 +16,15 @@ before the Redis marker is installed. Credentials go through a private temporary
 environment file or child environment; runtime SQL goes through stdin. Dedicated
 Prisma and Vitest configs avoid loading the developer's `.env`.
 
-Only the 12 nonfinancial user admission runtime cases and two fixture unit cases
-run. No worker/executor or provider is started. The runtime role is restricted
-and has no financial table grants. The JSON report must contain at least 12 and
-two passing cases respectively, with no skips or failures. Missing reports,
-missing files and skipped suites fail the command.
+Only the 12 nonfinancial user admission runtime cases, two fixture unit cases
+and two scan-journey runtime cases run. The scan journey cases additionally
+exercise normal admission through the shared queue and the selected worker on
+disposable services: a SAFE WEB_APP scan reaches a terminal provider-neutral
+result, and a cancelled scan never executes and never meters provider capacity
+minutes. No provider or engine dispatch occurs for either case. The runtime
+role is restricted and has no financial table grants. The JSON report must
+contain at least 12, two and two passing cases respectively, with no skips or
+failures. Missing reports, missing files and skipped suites fail the command.
 
 The required CI app checks call this launcher when `database-tests` is selected,
 after export prerequisites are built. Separate fresh services are intentional:

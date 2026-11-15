@@ -273,14 +273,11 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   const evaluate = (
     name,
     {
-      cold = false,
       held = false,
       cutover = false,
       v26 = "false",
       failed = false,
       failureStep,
-      contained = "success",
-      finished = "success",
     } = {}
   ) => {
     const stepNames = [
@@ -293,8 +290,6 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
       "smoke-public",
       "ordinary-worker-login",
       "worker-vm",
-      "cold-finish",
-      "cold-contain",
     ]
     const steps = Object.fromEntries(
       stepNames.map((step) => [
@@ -302,13 +297,11 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
         { outcome: "success", outputs: { previous_client_cert_mode: "Ignore" } },
       ])
     )
-    steps["cold-contain"].outcome = contained
-    steps["cold-finish"].outcome = finished
     if (failureStep) steps[failureStep].outcome = "failure"
     return runInNewContext(
       normalizedIf(name).replace(/steps\.([a-z0-9-]+)/g, 'steps["$1"]'),
       {
-        inputs: { cold_release: cold, held_recovery: held, webhook_claims_cutover: cutover },
+        inputs: { held_recovery: held, webhook_claims_cutover: cutover },
         env: { V26_CUTOVER: v26 },
         steps,
         failure: () => failed,
@@ -320,8 +313,6 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   assert.equal(evaluate(revisionCleanup), true)
   assert.equal(evaluate(revisionCleanup, { held: true }), false)
   assert.equal(evaluate(revisionCleanup, { failureStep: "smoke-public" }), false)
-  assert.equal(evaluate(revisionCleanup, { cold: true, finished: "skipped" }), false)
-  assert.equal(evaluate(revisionCleanup, { cold: true }), true)
   const cleanup = [
     "Roll back production traffic on health failure",
     "Restore prior ingress mode after failed rollout",
@@ -346,18 +337,6 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
         name !== cleanup[0],
         name + failureStep
       )
-    for (const contained of ["failure", "cancelled", "skipped"])
-      assert.equal(
-        evaluate(name, { cold: true, failed: true, finished: "failure", contained }),
-        false,
-        name
-      )
-    assert.equal(evaluate(name, { cold: true, failed: true, finished: "failure" }), true, name)
-    assert.equal(
-      evaluate(name, { cold: true, finished: "cancelled" }),
-      true,
-      name + " must handle a lost post-release result only after verified containment"
-    )
   }
 
   for (const name of [
