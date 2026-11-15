@@ -717,8 +717,8 @@ test("Azure and marketing releases route the exact current merged SHA independen
     const release = productionRelease.split(`  deploy-${route}:\n`)[1]?.split(/\n  [a-z-]+:\n/)[0]
     assert.ok(release)
     if (route === "azure") {
-      assert.match(release, /needs: \[routing, qualify-runtime\]/)
-      assert.match(release, /cold_release: true/)
+      assert.match(release, /needs: \[routing\]/)
+      assert.doesNotMatch(release, /cold_release: true/)
     } else {
       assert.match(release, /needs: routing/)
     }

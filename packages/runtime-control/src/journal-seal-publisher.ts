@@ -34,7 +34,7 @@ interface SealMirror {
 export interface JournalSealPublicationFence {
   run<T>(operation: (assertActive: () => void) => Promise<T>): Promise<T>
 }
-export interface JournalRecoverySnapshotProvider {
+interface JournalRecoverySnapshotProvider {
   create(input: {
     epochId: string
     supervisorInstanceId: string

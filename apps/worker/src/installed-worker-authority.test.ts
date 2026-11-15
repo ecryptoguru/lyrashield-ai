@@ -20,6 +20,9 @@ vi.mock("node:fs", async (original) => ({
   lstatSync: io.lstat,
   readFileSync: io.read,
 }))
+vi.mock("@lyrashield/logger", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}))
 vi.mock("node:net", () => ({ createConnection: io.connect }))
 vi.mock("@lyrashield/config", () => ({ resolveWorkerExecutionProvenance: io.provenance }))
 vi.mock("./jobs/run-scan/broker-client", () => ({ createWorkerBrokerClient: io.broker }))
@@ -156,19 +159,35 @@ describe("fixed protected worker installation", () => {
     expect(await installed!.verifyAuthority(installed!.authority)).toBe(true)
     expect(io.close).toHaveBeenCalledWith(7)
   })
-  it("defaults closed when the protected config is absent", async () => {
-    io.open.mockImplementation(() => {
-      throw new Error("ENOENT")
+  it("returns undefined when the protected config is absent", async () => {
+    io.lstat.mockImplementation((path: string) => {
+      if (path === "/opt/lyrashield-runtime/worker-authority.json") {
+        const error = new Error("ENOENT") as NodeJS.ErrnoException
+        error.code = "ENOENT"
+        throw error
+      }
+      return path.endsWith(".sock")
+        ? { isSocket: () => true, isSymbolicLink: () => false, uid: 0, gid: 10004, mode: 0o660 }
+        : { isDirectory: () => true, isSymbolicLink: () => false, uid: 0, mode: 0o755 }
     })
     expect(await loadProtectedWorkerBrokerInstallation()).toBeUndefined()
     expect(io.connect).not.toHaveBeenCalled()
+    expect(io.broker).not.toHaveBeenCalled()
+  })
+  it("fails closed when the protected config vanishes after admission", async () => {
+    io.open.mockImplementation(() => {
+      const error = new Error("ENOENT") as NodeJS.ErrnoException
+      error.code = "ENOENT"
+      throw error
+    })
+    await expect(loadProtectedWorkerBrokerInstallation()).rejects.toThrow()
     expect(io.broker).not.toHaveBeenCalled()
   })
   it.each([{ uid: 10004 }, { gid: 99 }, { nlink: 2 }, { mode: 0o644 }, { size: 20000 }])(
     "rejects unsafe file metadata %j",
     async (changed) => {
       io.stat.mockImplementation(() => ({ ...metadata(), ...changed }))
-      expect(await loadProtectedWorkerBrokerInstallation()).toBeUndefined()
+      await expect(loadProtectedWorkerBrokerInstallation()).rejects.toThrow()
       expect(io.broker).not.toHaveBeenCalled()
     }
   )
@@ -179,15 +198,15 @@ describe("fixed protected worker installation", () => {
       uid: 10004,
       mode: 0o755,
     })
-    expect(await loadProtectedWorkerBrokerInstallation()).toBeUndefined()
+    await expect(loadProtectedWorkerBrokerInstallation()).rejects.toThrow()
     vi.mocked(process.getuid).mockReturnValue(0)
-    expect(await loadProtectedWorkerBrokerInstallation()).toBeUndefined()
+    await expect(loadProtectedWorkerBrokerInstallation()).rejects.toThrow()
   })
   it("rejects tuple substitution and unavailable root observations", async () => {
     descriptor = { ...observed, workerGrantId: "other-grant" }
-    expect(await loadProtectedWorkerBrokerInstallation()).toBeUndefined()
+    await expect(loadProtectedWorkerBrokerInstallation()).rejects.toThrow()
     descriptor = { purpose: "unavailable" }
-    expect(await loadProtectedWorkerBrokerInstallation()).toBeUndefined()
+    await expect(loadProtectedWorkerBrokerInstallation()).rejects.toThrow()
   })
   it("does not accept policy or envelope hashes embedded in stable configuration", async () => {
     body = Buffer.from(
@@ -196,7 +215,7 @@ describe("fixed protected worker installation", () => {
         authority: { ...authority, runtimePolicyDigest: observed.runtimePolicyDigest },
       })
     )
-    expect(await loadProtectedWorkerBrokerInstallation()).toBeUndefined()
+    await expect(loadProtectedWorkerBrokerInstallation()).rejects.toThrow()
   })
   it("withdraws authority after config mutation, expiry, revocation or changed qualified record", async () => {
     const installed = (await loadProtectedWorkerBrokerInstallation())!

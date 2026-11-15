@@ -1,5 +1,8 @@
 import { beforeEach, describe, it, expect, vi } from "vitest"
 const mocked = vi.hoisted(() => ({ load: vi.fn(), adapter: vi.fn() }))
+vi.mock("@lyrashield/logger", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}))
 vi.mock("./installed-worker-authority", () => ({
   loadProtectedWorkerBrokerInstallation: mocked.load,
 }))
@@ -43,11 +46,22 @@ describe("explicit installed worker authority startup", () => {
     expect(await startup.initializeWorkerAuthorityStartup()).toEqual({ kind: "broker", adapter })
     expect(mocked.load).toHaveBeenCalledTimes(1)
   })
-  it("keeps missing or rejected installations closed without retrying through imports", async () => {
-    mocked.load.mockRejectedValue(new Error("root authority unavailable"))
+  it("selects the established production baseline when no installation exists", async () => {
+    const startup = await import("./worker-authority-startup")
+    expect(await startup.initializeWorkerAuthorityStartup()).toEqual({
+      kind: "legacy",
+      compatibility: "existing-production-baseline",
+    })
+    expect(startup.legacyWorkerLifecycleEnabled()).toBe(true)
+    expect(mocked.load).toHaveBeenCalledTimes(1)
+    expect(mocked.adapter).not.toHaveBeenCalled()
+  })
+  it("fails closed when an installation exists but cannot be verified", async () => {
+    mocked.load.mockRejectedValue(new Error("root authority present but unusable"))
     const startup = await import("./worker-authority-startup")
     expect(await startup.initializeWorkerAuthorityStartup()).toEqual({ kind: "closed" })
     expect(await startup.initializeWorkerAuthorityStartup()).toEqual({ kind: "closed" })
+    expect(startup.legacyWorkerLifecycleEnabled()).toBe(false)
     expect(mocked.load).toHaveBeenCalledTimes(1)
     expect(mocked.adapter).not.toHaveBeenCalled()
   })
