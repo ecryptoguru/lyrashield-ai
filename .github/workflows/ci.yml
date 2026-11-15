@@ -420,6 +420,26 @@ jobs:
         if: needs.changes.outputs.database-tests == 'true'
         run: pnpm --filter @lyrashield/db migrate:deploy
 
+      # Production (Supabase) keeps pgcrypto in the `extensions` schema while the
+      # disposable database above keeps it in `public`. Replay the whole chain
+      # into a production-shaped database so an ordering assumption that only
+      # holds for `public` cannot reach a fresh Supabase environment again.
+      # Deliberately no `?schema=public`: that would pin search_path to `public`
+      # and hide the extension schema production actually resolves against.
+      - name: Replay migrations into a production-shaped database
+        if: needs.changes.outputs.database-tests == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec "ci-postgres" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE lyrashield_supabase_shape'
+          docker exec "ci-postgres" psql -U lyrashield -d lyrashield_supabase_shape -v ON_ERROR_STOP=1 \
+            -c 'CREATE SCHEMA extensions' \
+            -c 'CREATE EXTENSION pgcrypto SCHEMA extensions' \
+            -c 'ALTER DATABASE lyrashield_supabase_shape SET search_path = "$user", public, extensions'
+          DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_supabase_shape" \
+            pnpm --filter @lyrashield/db migrate:deploy
+
       # These tests intentionally reject arbitrary DBs and use fixed local
       # database names as a destructive-action guard. Keep each fixture DB
       # disposable and migrate it from the checked-out schema.
