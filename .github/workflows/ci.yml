@@ -34,7 +34,7 @@ jobs:
 
       - name: Setup pnpm
         if: needs.changes.outputs.docs-only != 'true'
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -192,7 +192,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -366,7 +366,7 @@ jobs:
           done
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -419,6 +419,26 @@ jobs:
       - name: Run database migrations
         if: needs.changes.outputs.database-tests == 'true'
         run: pnpm --filter @lyrashield/db migrate:deploy
+
+      # Production (Supabase) keeps pgcrypto in the `extensions` schema while the
+      # disposable database above keeps it in `public`. Replay the whole chain
+      # into a production-shaped database so an ordering assumption that only
+      # holds for `public` cannot reach a fresh Supabase environment again.
+      # Deliberately no `?schema=public`: that would pin search_path to `public`
+      # and hide the extension schema production actually resolves against.
+      - name: Replay migrations into a production-shaped database
+        if: needs.changes.outputs.database-tests == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec "ci-postgres" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE lyrashield_supabase_shape'
+          docker exec "ci-postgres" psql -U lyrashield -d lyrashield_supabase_shape -v ON_ERROR_STOP=1 \
+            -c 'CREATE SCHEMA extensions' \
+            -c 'CREATE EXTENSION pgcrypto SCHEMA extensions' \
+            -c 'ALTER DATABASE lyrashield_supabase_shape SET search_path = "$user", public, extensions'
+          DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_supabase_shape" \
+            pnpm --filter @lyrashield/db migrate:deploy
 
       # These tests intentionally reject arbitrary DBs and use fixed local
       # database names as a destructive-action guard. Keep each fixture DB
@@ -805,7 +825,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -1241,7 +1261,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.

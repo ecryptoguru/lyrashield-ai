@@ -76,7 +76,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup backup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1
         with:
           install: false
 
@@ -308,7 +308,7 @@ jobs:
         run: bash .github/scripts/isolated-restore-private.sh prepare
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -370,6 +370,27 @@ jobs:
             docker exec lyrashield-restore-postgres pg_isready -U restore -d lyrashield_restore && break
             sleep 2
           done
+
+          # Production runs on Supabase, which keeps pgcrypto in the `extensions`
+          # schema, and later migrations reference `extensions.digest(...)` from
+          # ordinary CHECK constraints. A plain PostgreSQL target therefore cannot
+          # restore a current archive. Mirror the production namespace first; the
+          # archive itself still carries no extension objects. RLS policies also
+          # name non-superuser roles that migrations create, so restore needs those
+          # roles to exist. A newly referenced role fails this step loudly.
+          docker exec -i lyrashield-restore-postgres psql -v ON_ERROR_STOP=1 \
+            -U restore -d lyrashield_restore <<'SQL'
+          CREATE SCHEMA IF NOT EXISTS extensions;
+          CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+          ALTER DATABASE lyrashield_restore SET search_path = "$user", public, extensions;
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lyrashield_preparation_source_reader') THEN
+              CREATE ROLE lyrashield_preparation_source_reader
+                NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;
+            END IF;
+          END $$;
+          SQL
+
           docker cp "$dump_path" lyrashield-restore-postgres:/tmp/backup.dump
 
           # Archives created before app was included contain public RLS policies
