@@ -92,7 +92,7 @@ function validPositions(value: z.infer<z.ZodObject<typeof v2BodyFields>>) {
 }
 const v1BodySchema = z.object(bodyFields).strict().refine(validRange)
 const v2BodySchema = z.object(v2BodyFields).strict().refine(validRange).refine(validPositions)
-export const journalSealBodySchema = z.union([v1BodySchema, v2BodySchema])
+const journalSealBodySchema = z.union([v1BodySchema, v2BodySchema])
 const v1SealSchema = z
   .object({ ...bodyFields, sealHash: hash, signature: hash })
   .strict()

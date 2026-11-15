@@ -115,7 +115,7 @@ test("ordinary worker promotion and failure cleanup renew the same OIDC identity
   }
   assert.match(
     promoteLogin.body,
-    /if: \$\{\{ inputs\.cold_release != true && inputs\.retained_worker != true && !cancelled\(\) && steps\.smoke-public\.outcome == 'success' && inputs\.held_recovery != true && inputs\.webhook_claims_cutover != true && env\.V26_CUTOVER != 'true' \}\}/
+    /if: \$\{\{ inputs\.retained_worker != true && !cancelled\(\) && steps\.smoke-public\.outcome == 'success' && inputs\.held_recovery != true && inputs\.webhook_claims_cutover != true && env\.V26_CUTOVER != 'true' \}\}/
   )
   assert.equal(promoteLogin.index + 1, promote.index)
   assert.equal(cleanupLogin.index + 1, rollback.index)
@@ -124,7 +124,6 @@ test("ordinary worker promotion and failure cleanup renew the same OIDC identity
 
 test("ordinary promotion conditions exclude retained mode and require readiness and fresh login", () => {
   const inputs = {
-    cold_release: false,
     retained_worker: false,
     held_recovery: false,
     webhook_claims_cutover: false,
@@ -135,7 +134,6 @@ test("ordinary promotion conditions exclude retained mode and require readiness 
   }
   const cases = [
     { name: "ordinary", login: true, promote: true },
-    { name: "cold release", inputs: { cold_release: true }, login: false, promote: false },
     { name: "retained", inputs: { retained_worker: true }, login: false, promote: false },
     { name: "held recovery", inputs: { held_recovery: true }, login: false, promote: false },
     {
@@ -324,14 +322,7 @@ test("long cutover phases renew OIDC before VM boot, release, and archive", () =
     { webhook_claims_cutover: true, held_recovery: false },
     { webhook_claims_cutover: false, held_recovery: true },
   ]) {
-    assert.equal(
-      evaluateCondition(bootLogin.body, { ...input, cold_release: false }, {}, false),
-      true
-    )
-    assert.equal(
-      evaluateCondition(bootLogin.body, { ...input, cold_release: true }, {}, false),
-      false
-    )
+    assert.equal(evaluateCondition(bootLogin.body, input, {}, false), true)
   }
   assert.equal(
     evaluateCondition(

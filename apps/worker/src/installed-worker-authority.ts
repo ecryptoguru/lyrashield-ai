@@ -1,4 +1,5 @@
 import { constants, openSync, closeSync, fstatSync, lstatSync, readFileSync } from "node:fs"
+import { logger } from "@lyrashield/logger"
 import { createConnection } from "node:net"
 import { createHash } from "node:crypto"
 import { z } from "zod"
@@ -185,9 +186,25 @@ const cleanupOperationInventorySchema = workerOperationInventorySchema.extend({
   authority: cleanupAuthority,
 })
 
+/**
+ * Presence probe: a host with no installation at all runs the established
+ * production baseline. An installation that exists but fails verification is
+ * a hard failure (fail closed through the caller), never a silent downgrade
+ * of paid scanning to the baseline path.
+ */
 export async function loadProtectedWorkerBrokerInstallation(): Promise<
   WorkerBrokerInstallation | undefined
 > {
+  try {
+    lstatSync(installationPath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
+    throw error
+  }
+  return loadVerifiedWorkerBrokerInstallation()
+}
+
+async function loadVerifiedWorkerBrokerInstallation(): Promise<WorkerBrokerInstallation> {
   try {
     const installed = readConfiguration()
     const observed: z.infer<typeof observedAuthority> | z.infer<typeof cleanupAuthority> =
@@ -295,7 +312,10 @@ export async function loadProtectedWorkerBrokerInstallation(): Promise<
       broker: createWorkerBrokerClient(installed.configuration.workerCredential),
       publication: createWorkerBrokerPublicationVerifier(installed.configuration.workerCredential),
     }
-  } catch {
-    return undefined
+  } catch (error) {
+    logger.warn("Worker broker installation present but unusable; remaining closed", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
   }
 }

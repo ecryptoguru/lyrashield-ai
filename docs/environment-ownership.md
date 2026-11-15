@@ -32,7 +32,7 @@ Set hosted writer controls and endpoint modes in the root-owned `/etc/lyrashield
 
 The hosted worker also accepts optional canonical `LLM_API_MODE` and `DEDUPE_LLM_API_MODE` values of `auto`, `responses` or `chat_completions`. Unset main policy uses the engine's automatic policy; unset dedupe policy inherits the main policy. Do not install a default dedupe override merely to populate the environment. Engine-only aliases (`LYRASHIELD_LLM_API_MODE`, `LYRASHIELD_DEDUPE_LLM_API_MODE`), arbitrary request bodies/headers and new dedupe credentials are not forwarded. These options do not replace provider qualification or the existing immutable, owned `LYRASHIELD_IMAGE` digest requirement.
 
-Roll out in this order after the separate release and runtime qualifications pass:
+Roll out in this order after the release path and readiness checks pass:
 
 1. Deploy and qualify reader-capable worker **and web** images first, paired with the previous engine `3001517530300ca5f602536bfadcbd3c95ad3039`. Keep both writer controls at `0`. Retain these exact reader-capable images and this engine pairing as the rollback baseline. Verify existing 1.0/1.1 reads and retained 1.2 fixture reads before allowing 1.2 production writes.
 2. Upgrade to the separately qualified engine with both writer controls still `0`. Verify its immutable image identity, startup, normal runs and reader compatibility. This source change does not alter the engine pin or release workflow and does not itself qualify an engine/runtime image.
