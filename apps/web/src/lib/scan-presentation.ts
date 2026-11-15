@@ -314,6 +314,16 @@ function failedScanPresentation(errorCategory: string | null): ScanPresentation 
         assuranceAvailable: false,
         showFailureDetails: true,
       }
+    case "RETEST_BASELINE_UNAVAILABLE":
+      return {
+        label: "Retest inconclusive",
+        headline: "The original scan cannot serve as a retest baseline",
+        description:
+          "The finding's original scan did not record a complete deterministic baseline, so this retest cannot confirm or deny the fix. No assurance result was produced.",
+        badgeVariant: "warning",
+        assuranceAvailable: false,
+        showFailureDetails: true,
+      }
     default:
       return null
   }
