@@ -4,5 +4,6 @@ export { persistDetectionReceipt } from "./result-integrity/detection-receipt"
 export {
   markRetestsRunning,
   completeRetestsForScan,
+  inconclusiveRetestsForScan,
   failTerminalRetestsForScan,
 } from "./result-integrity/retest-completion"
