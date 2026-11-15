@@ -202,6 +202,14 @@ const SCAN_CODES: Record<string, OperationFailurePresentation> = {
     recovery: "Start the scan again; a current policy will be applied.",
     recoveryHref: "/dashboard/scans?new=1",
   },
+  RETEST_BASELINE_UNAVAILABLE: {
+    cause: "The finding's original scan did not record a complete deterministic baseline.",
+    effect:
+      "This retest is inconclusive: it neither confirms nor denies the fix, and the finding keeps its current state.",
+    recovery:
+      "Run a new scan of this target with complete coverage, then propose and retest the fix from that result.",
+    recoveryHref: "/dashboard/scans?new=1",
+  },
 }
 
 const CONNECTION_STATES: Record<string, OperationFailurePresentation> = {

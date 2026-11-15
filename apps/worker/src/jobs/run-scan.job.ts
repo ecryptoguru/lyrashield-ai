@@ -25,6 +25,7 @@ import {
   resolveWorkerExecutionProvenance,
 } from "@lyrashield/config"
 import type { checkoutDeterministicRetest } from "../engine/deterministic-retest"
+import { RetestBaselineUnavailableError } from "../engine/deterministic-retest"
 
 import { executeScanTarget, resolveEngineTerminalError } from "./run-scan/execution"
 import { createEngineMinuteMeter, type ScanTerminalError } from "./run-scan/settlement"
@@ -649,18 +650,28 @@ async function processStoredScanJob(
       }
       if (error instanceof ScanCapacityWaitingError && !billablePhaseStarted)
         await deferScanCapacityWait(job, workspaceId, scanId)
-      const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
+      // A deterministic-retest refusal is an expected, recorded outcome — the
+      // inconclusive receipts are already written by the authorizer — so it is
+      // terminal before execution: no queue retry and no misleading internal
+      // failure. Every unrelated error keeps the generic classification.
+      const retestBaselineRefusal = error instanceof RetestBaselineUnavailableError ? error : null
+      const isTerminalPrerequisiteFailure =
+        error instanceof EvidenceStorageConfigurationError || Boolean(retestBaselineRefusal)
       const timedOut = globalScanTimeoutReached || isTimeoutError(error)
       const finalErrorCategory = timedOut
         ? "TIMEOUT"
-        : isTerminalPrerequisiteFailure
-          ? "EVIDENCE_STORAGE_CONFIGURATION"
-          : "INTERNAL_ERROR"
+        : retestBaselineRefusal
+          ? "RETEST_BASELINE_UNAVAILABLE"
+          : isTerminalPrerequisiteFailure
+            ? "EVIDENCE_STORAGE_CONFIGURATION"
+            : "INTERNAL_ERROR"
       const finalErrorMessage = timedOut
         ? timeoutErrorMessage(scanRuntimeBudgetMs)
-        : isTerminalPrerequisiteFailure
-          ? "Evidence storage is not configured"
-          : "The scan could not be completed because an internal service failed."
+        : retestBaselineRefusal
+          ? retestBaselineRefusal.reason
+          : isTerminalPrerequisiteFailure
+            ? "Evidence storage is not configured"
+            : "The scan could not be completed because an internal service failed."
 
       log.error("Scan job failed", {
         scanId,

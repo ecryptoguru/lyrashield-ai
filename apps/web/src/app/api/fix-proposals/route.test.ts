@@ -105,17 +105,67 @@ describe("GET /api/fix-proposals", () => {
   it("returns patch availability without disclosing storage references", async () => {
     mocks.listFixProposals.mockResolvedValue({
       items: [
-        { id: "stored", diffRef: "s3://private/patch" },
-        { id: "summary", diffRef: null },
+        {
+          id: "stored",
+          diffRef: "s3://private/patch",
+          finding: { id: "f-1", baseCommit: "a".repeat(40) },
+        },
+        { id: "summary", diffRef: null, finding: { id: "f-2", baseCommit: null } },
       ],
       nextCursor: null,
     })
     const response = await GET(new Request("http://localhost/api/fix-proposals?workspaceId=ws-1"))
     const body = await response.json()
     expect(body.data.items).toEqual([
-      { id: "stored", hasStoredPatch: true },
-      { id: "summary", hasStoredPatch: false },
+      {
+        id: "stored",
+        finding: { id: "f-1", baseCommit: "a".repeat(40) },
+        hasStoredPatch: true,
+        hasPatchBase: true,
+      },
+      {
+        id: "summary",
+        finding: { id: "f-2", baseCommit: null },
+        hasStoredPatch: false,
+        hasPatchBase: false,
+      },
     ])
+  })
+
+  it("keeps a paginated proposal's pull-request action usable", async () => {
+    // Regression: the second page bypasses the server-rendered page, so the
+    // API must carry the derived base-commit flag itself.
+    mocks.listFixProposals.mockResolvedValue({
+      items: [
+        {
+          id: "page-2",
+          status: "ready",
+          diffRef: "s3://private/patch",
+          finding: { id: "f-1", baseCommit: "b".repeat(40) },
+        },
+      ],
+      nextCursor: null,
+    })
+    const response = await GET(
+      new Request("http://localhost/api/fix-proposals?workspaceId=ws-1&cursor=page-1")
+    )
+    const body = await response.json()
+    expect(body.data.items[0]).toMatchObject({
+      id: "page-2",
+      hasStoredPatch: true,
+      hasPatchBase: true,
+    })
+    expect(body.data.items[0]).not.toHaveProperty("diffRef")
+  })
+
+  it("marks a proposal whose scan recorded no base commit", async () => {
+    mocks.listFixProposals.mockResolvedValue({
+      items: [{ id: "no-base", diffRef: "s3://private/patch", finding: { id: "f-1" } }],
+      nextCursor: null,
+    })
+    const response = await GET(new Request("http://localhost/api/fix-proposals?workspaceId=ws-1"))
+    const body = await response.json()
+    expect(body.data.items[0]).toMatchObject({ hasStoredPatch: true, hasPatchBase: false })
   })
 
   it("rejects an unavailable scope before listing fixes", async () => {
