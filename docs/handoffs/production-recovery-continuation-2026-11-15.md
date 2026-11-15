@@ -61,11 +61,11 @@ Three defects made it unrecoverable instead of retryable, all fixed in [#1138](h
 
 Recovery used the reviewed barrier plus the promotion's own compare-and-delete latch release, and is documented in [operations.md](../operations.md#interrupted-worker-promotion-recovery). Admission was reopened only after the worker was healthy with a fresh readiness marker.
 
-Post-fix proof: release [43724862673](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43724862673) promoted normally from the already-burned fence (barrier receipt `oldResources: 1, removedResources: 0`), and a further release for `9fe6bce2` followed — two consecutive ordinary promotions, which the previous code could not do.
+Post-fix proof: release [43724862673](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43724862673) promoted normally from the already-burned fence (barrier receipt `oldResources: 1, removedResources: 0`). A further release for `9fe6bce2` then promoted too — two consecutive ordinary promotions, which the previous code could not do.
 
 ### Repository targets without an installation binding (found live)
 
-The first bounded Standard attempt was refused with `SCAN_REF_UNRESOLVED` ("Could not resolve the repository to an immutable revision") and `OPERATION_NOT_SUBMITTED`, so nothing was billed. The cause was stored state, not the resolver: the fixture target's `installationId` was `null` while the workspace had one active `GITHUB` integration (`150972846`). `resolveRepositoryScanSource` computes `Number(null) === 0`, rejects it as a non-positive installation, and correctly refuses.
+The first bounded Standard attempt was refused with `SCAN_REF_UNRESOLVED` ("Could not resolve the repository to an immutable revision"), returning `OPERATION_NOT_SUBMITTED`; nothing was billed. The cause was stored state, not the resolver: the fixture target's `installationId` was `null` while the workspace had one active `GITHUB` integration (`150972846`). `resolveRepositoryScanSource` computes `Number(null) === 0`, rejects it as a non-positive installation. The refusal is correct.
 
 `POST /api/targets` already falls back to the workspace's newest active GitHub integration, so this only affects targets created before that connection existed — and such a target stays permanently unscannable, with no product path to repair it.
 
