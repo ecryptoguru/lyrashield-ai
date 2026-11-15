@@ -13,11 +13,8 @@ import {
   buildVibeSecurityInstruction,
   normalizeDomainForProof,
 } from "@lyrashield/security"
-import {
-  authorizeDeterministicRetest,
-  checkoutDeterministicRetest,
-  RetestBaselineUnavailableError,
-} from "../../engine/deterministic-retest"
+import { checkoutDeterministicRetest } from "../../engine/deterministic-retest"
+import { authorizeDeterministicRetestOrInconclusive } from "../../engine/retest-authorization"
 import {
   mintScanRelayGrant,
   resolveRelayRuntimeConfig,
@@ -30,7 +27,6 @@ import {
   type EngineRunResult,
 } from "../../engine/runner"
 import { effectiveEngineBudget, engineDispatchStatus } from "./execution-policy"
-import { inconclusiveRetestsForScan } from "../../engine/result-integrity"
 import type { TargetType } from "../../engine/command-builder"
 import {
   AUTHENTICATED_ASSESSMENT_BETA_LIMITS,
@@ -318,15 +314,7 @@ export async function executeScanTarget(params: {
   if (deterministicRetest) {
     if (target.repoProvider !== "github")
       throw new Error("Deterministic repository retests require a GitHub source target")
-    try {
-      await authorizeDeterministicRetest(scanId, workspaceId, params.target.id)
-    } catch (authorizeError) {
-      // A missing deterministic baseline is an expected refusal: record the
-      // inconclusive verification, then fail the scan so nothing is billed.
-      if (!(authorizeError instanceof RetestBaselineUnavailableError)) throw authorizeError
-      await inconclusiveRetestsForScan(scanId, authorizeError.reason)
-      throw authorizeError
-    }
+    await authorizeDeterministicRetestOrInconclusive(scanId, workspaceId, params.target.id)
     deterministicCheckout = await checkoutDeterministicRetest({
       scanId,
       workspaceId,
