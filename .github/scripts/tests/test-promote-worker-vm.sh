@@ -27,10 +27,17 @@ write_mocks() {
     lyrashield-worker-secrets.service \
     lyrashield-worker-egress.service \
     lyrashield-worker-egress-refresh.service \
-    lyrashield-worker-egress-refresh.timer
+    lyrashield-worker-egress-refresh.timer \
+    cold-start-barrier.py \
+    recover-worker.sh \
+    worker-recovery-probe.mjs \
+    lyrashield-worker-recover.service
   do
     printf 'image asset: %s\n' "$asset" > "$case_dir/image-assets/$asset"
   done
+  # The promotion now runs the cold-start barrier on ordinary promotions too, so
+  # the staged copy must be executable Python; its own unit suite covers behavior.
+  printf 'import sys\nsys.exit(0)\n' > "$case_dir/image-assets/cold-start-barrier.py"
   printf 'redis.fixture 13.200.201.38 6379\nredis.fixture 13.234.196.111 6379\n' > "$case_dir/egress-pins"
   local host_script
   for host_script in \

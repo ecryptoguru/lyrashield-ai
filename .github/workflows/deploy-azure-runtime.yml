@@ -201,10 +201,13 @@ jobs:
     name: Deploy Azure Container Apps
     needs: prepare-dependencies
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     # This budget covers migrations, parallel bounded candidate health checks,
-    # production smoke, and bounded traffic recovery. Individual Azure
-    # control-plane calls still have their own tighter limits below.
+    # production smoke, and bounded traffic recovery. It must cover a full
+    # worker promotion: a job killed mid-promotion leaves the one-shot
+    # cold-start fence burned and scan admission held, which is an outage.
+    # Individual Azure control-plane calls still have their own tighter limits
+    # below.
     permissions:
       actions: read
       contents: read
