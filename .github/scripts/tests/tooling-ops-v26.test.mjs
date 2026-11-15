@@ -12,7 +12,7 @@ test("deployment jobs bound runtime by responsibility", () => {
       if (!body.includes("    runs-on:")) continue
       const minutes = /    timeout-minutes: (\d+)/.exec(body)?.[1]
       const expected =
-        job === "build" || job === "prepare-dependencies" ? "60" : job === "deploy" ? "45" : "15"
+        job === "build" || job === "prepare-dependencies" ? "60" : job === "deploy" ? "75" : "15"
       assert.equal(minutes, expected, `${name}/${job}`)
     }
   }

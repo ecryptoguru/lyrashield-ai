@@ -148,7 +148,7 @@ jobs:
         run: bash .github/scripts/assert-current-main.sh
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           install: false
 
@@ -201,10 +201,13 @@ jobs:
     name: Deploy Azure Container Apps
     needs: prepare-dependencies
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     # This budget covers migrations, parallel bounded candidate health checks,
-    # production smoke, and bounded traffic recovery. Individual Azure
-    # control-plane calls still have their own tighter limits below.
+    # production smoke, and bounded traffic recovery. It must cover a full
+    # worker promotion: a job killed mid-promotion leaves the one-shot
+    # cold-start fence burned and scan admission held, which is an outage.
+    # Individual Azure control-plane calls still have their own tighter limits
+    # below.
     permissions:
       actions: read
       contents: read
@@ -410,7 +413,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Dependency preparation already ran in the unprivileged job above.
           # The successor action's install default is true, so opt out.

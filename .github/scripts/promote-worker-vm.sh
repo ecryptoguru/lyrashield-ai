@@ -1021,8 +1021,10 @@ install -m 0644 "$asset_stage/lyrashield-worker-secrets.service" "$systemd_dir/l
 install -m 0644 "$asset_stage/lyrashield-worker-egress.service" "$systemd_dir/lyrashield-worker-egress.service"
 install -m 0644 "$asset_stage/lyrashield-worker-egress-refresh.service" "$systemd_dir/lyrashield-worker-egress-refresh.service"
 install -m 0644 "$asset_stage/lyrashield-worker-egress-refresh.timer" "$systemd_dir/lyrashield-worker-egress-refresh.timer"
+# Every launcher start burns the one-shot cold-start fence, so an ordinary
+# promotion needs the barrier to clear it too; it is not cold-release-only.
+install -m 0755 "$asset_stage/cold-start-barrier.py" "$host_assets_dir/cold-start-barrier.py"
 if [ "$cold_release" -eq 1 ]; then
-  install -m 0755 "$asset_stage/cold-start-barrier.py" "$host_assets_dir/cold-start-barrier.py"
   install -m 0755 "$asset_stage/recover-worker.sh" "$host_libexec_dir/lyrashield-recover-worker"
   install -m 0644 "$asset_stage/worker-recovery-probe.mjs" "$host_assets_dir/worker-recovery-probe.mjs"
   install -m 0644 "$asset_stage/lyrashield-worker-recover.service" "$systemd_dir/lyrashield-worker-recover.service"
@@ -1104,6 +1106,15 @@ if [ "$cold_release" -eq 1 ]; then
   /usr/bin/python3 "$host_assets_dir/cold-start-barrier.py" --worker-image "$prior_worker_ref" \
     --sandbox-image "$LYRASHIELD_COLD_OLD_SANDBOX_IMAGE" --network lyrashield-sandbox --confirm COLD_SINGLE_WORKER
   record_cold_barrier
+else
+  # The launcher burns the one-shot fence on every start, so an ordinary
+  # promotion must clear it through the same daemon barrier before restarting.
+  # Without this, the second promotion on a host can never start the worker.
+  prior_sandbox=$(sed -n 's/^LYRASHIELD_SANDBOX_IMAGE=//p' "$config")
+  [ -n "$prior_sandbox" ] || { echo 'Prior sandbox image is unavailable for the cold barrier' >&2; exit 1; }
+  docker image inspect "$prior_sandbox" >/dev/null 2>&1 || docker pull "$prior_sandbox" >/dev/null
+  /usr/bin/python3 "$host_assets_dir/cold-start-barrier.py" --worker-image "$old_image" \
+    --sandbox-image "$prior_sandbox" --network lyrashield-sandbox --confirm COLD_SINGLE_WORKER
 fi
 
 assert_paired_release_hold

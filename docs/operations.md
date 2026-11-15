@@ -691,3 +691,56 @@ Activation is a separate operator-approved change. Preparing or merging code doe
 5. Use the guarded release/worker promotion path. Verify deployed revisions, `/health/relay`, the worker lease and advisory/POST refusal parity. A boolean capability does not prove domain verification, correct shared-key agreement, actual target transport or a completed scan. Perform any controlled paid URL acceptance only with separate explicit authorization.
 
 For rollback, set the release flag to `0` and the worker activation setting to `0`, then use the guarded rollout/promotion path. The proxy removes the signing environment binding; worker refresh omits the relay URL/signing configuration; relay capability disappears while ordinary scan readiness stays independent. Do not delete or rotate the shared secret as a rollback shortcut. General admission remains protected by the existing queue stop and worker readiness gates.
+
+## Interrupted worker promotion recovery
+
+An interrupted worker promotion (job timeout, cancelled run or lost runner) can
+leave scanning down: the launcher burns a one-shot cold-start fence on every
+start, so a subsequent start exits with `Unresolved cold host barrier; admission
+remains held` and the worker stays failed. Scan admission is also still held by
+the promotion's `worker-promotion` latch, so `/api/ready/scans` returns 503
+while `/api/ready` stays 200. This is the observed 2026-11-15 incident; the
+fence and the latch are working as designed, only their release never ran.
+
+Recover in this order. Do not delete the latch or the fence by hand, and do not
+widen admission while the worker is unhealthy.
+
+1. Confirm the shape: `systemctl is-active lyrashield-worker` is `failed`, the
+   `lyrashield-worker` container is absent, `/api/ready` is 200 and
+   `/api/ready/scans` is 503.
+2. Read the held latch (non-secret): `redis-cli -u "$REDIS_URL" --raw GET
+lyrashield:scan-admission:stopped`. A `github-actions` /
+   `worker-promotion` record belongs to the interrupted promotion.
+3. Clear the fence with the reviewed barrier, which quiesces Docker, verifies no
+   owned container survived and removes `owner-started`/`pending`. It requires
+   the exact immutable worker and sandbox references already pinned in
+   `/etc/lyrashield/worker-runtime.conf`, and `systemctl reset-failed
+lyrashield-worker.service` first, because a `failed` unit cannot reach
+   `inactive`:
+
+   ```sh
+   systemctl reset-failed lyrashield-worker.service
+   python3 /opt/lyrashield-worker-host/cold-start-barrier.py \
+     --worker-image "$LYRASHIELD_WORKER_IMAGE" \
+     --sandbox-image "$LYRASHIELD_SANDBOX_IMAGE" \
+     --network lyrashield-sandbox --confirm COLD_SINGLE_WORKER
+   ```
+
+   A barrier run prints its JSON receipt. If it reports `Native Docker owner
+did not terminate`, Docker had not settled; bring Docker up and retry. It
+   never clears the fence on failure.
+
+4. Start the worker and require a fresh readiness marker plus a healthy
+   container before touching admission (`systemctl start lyrashield-worker`;
+   read `/tmp/lyrashield-worker-ready` in the container).
+5. Release the latch with the promotion's own compare-and-delete: delete only
+   when the stored bytes still equal the record inspected in step 2. A manual
+   `resume` will refuse this shape, which is correct.
+6. Confirm `/api/ready/scans` returns 200 and the worker journal shows
+   `"Worker authority selected"` with `"mode":"legacy"`.
+
+Prevention: ordinary promotions now run the same barrier before restarting the
+worker, the barrier accepts the empty `MainPID` an inactive socket unit reports,
+and the deploy job budget covers a full promotion. A promotion killed mid-flight
+is still an outage until the steps above run, so treat a cancelled release as a
+production incident, not a failed build.
