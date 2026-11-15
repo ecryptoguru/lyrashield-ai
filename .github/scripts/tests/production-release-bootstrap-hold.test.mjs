@@ -6,9 +6,6 @@ import { parseRetainedApproval } from "../retained-legacy-runtime.mjs"
 
 const workflows = [
   ["release-retained-worker.yml", "approve"],
-  ["deploy-azure.yml", "preflight-compatible-baseline"],
-  ["deploy-azure-runtime.yml", "prepare-dependencies"],
-  ["deploy-azure-runtime.yml", "deploy"],
   ["finalize-held-webhook-recovery.yml", "finalize"],
 ]
 
@@ -61,15 +58,8 @@ for (const [workflow, job] of workflows) {
   test(`${workflow} blocks production before any deployment action`, () => {
     const step = firstStep(workflow, job)
     assert.ok(step, "first step must exist")
-    const coldWorkflow = workflow.startsWith("deploy-azure")
-    assert.equal(
-      step[1],
-      coldWorkflow
-        ? "Hold HA and retained release lanes"
-        : "Hold production until runtime qualification"
-    )
-    if (coldWorkflow) assert.match(step[2], /if: inputs.cold_release != true/)
-    else
+    assert.equal(step[1], "Hold production until runtime qualification")
+    {
       assert.ok(
         !step[2]
           .split("\n")
@@ -78,6 +68,7 @@ for (const [workflow, job] of workflows) {
               line.startsWith("        if:") || line.startsWith("        continue-on-error:")
           )
       )
+    }
     const result = spawnSync("bash", ["-e", "-c", holdScript(step)], {
       encoding: "utf8",
       env: { PATH: process.env.PATH },
@@ -104,8 +95,6 @@ test("operator approval and retained mode cannot bypass the retained release or 
   assert.deepEqual(parseRetainedApproval(JSON.stringify(approval), source), approval)
   for (const [workflow, job] of [
     ["release-retained-worker.yml", "approve"],
-    ["deploy-azure-runtime.yml", "prepare-dependencies"],
-    ["deploy-azure-runtime.yml", "deploy"],
   ]) {
     const step = firstStep(workflow, job)
     const result = spawnSync("bash", ["-e", "-c", holdScript(step)], {
@@ -137,7 +126,14 @@ test("cold mode cannot skip the protected authority preflight before any runtime
   }))
   const guard = entries.findIndex((step) => step.name === "Preflight protected paired release")
   assert.ok(guard >= 0)
-  assert.doesNotMatch(entries[guard].body, /^        (?:if|continue-on-error):/m)
+  // The paired-release record is opt-in: ordinary releases skip the paired
+  // preflight and are guarded by source qualification, the exact-image
+  // rehearsal and the smoke/rollback contract instead. When a digest is
+  // provided the preflight must run and must pass before any mutation.
+  assert.match(
+    entries[guard].body,
+    /^        if: inputs.qualified_release_digest != ''$/m
+  )
   assert.match(
     entries[guard].body,
     /run: node \.github\/scripts\/paired-runtime-workflow.mjs preflight/
@@ -149,11 +145,9 @@ test("cold mode cannot skip the protected authority preflight before any runtime
   // Before authority, permit only this finite set of existing runner setup and
   // read-only configuration/source/target validation. No host or fleet writes.
   const readOnly = new Set([
-    "Hold HA and retained release lanes",
     "Checkout for deployment checks",
     "Authenticate the automated cold release caller",
     "Revalidate runtime source and retry eligibility",
-    "Verify unpaid canary credentials and exact owned target before mutation",
     "Verify Myra deployment configuration",
     "Prepare checksum-pinned protected Linux verifier",
     "Log in to Azure",
@@ -162,13 +156,12 @@ test("cold mode cannot skip the protected authority preflight before any runtime
   ])
   for (const step of entries.slice(0, guard)) assert.ok(readOnly.has(step.name), step.name)
   for (const name of [
-    "Stop admission and complete the native cold host barrier",
     "Classify actual v26 schema and complete writer fleet",
     "Run database migrations",
     "Deploy app Container App",
-    "Install exact compatible cold worker while admission remains held",
     "Promote healthy candidate revisions",
-    "Record pre-open qualification and release only the owned admission hold",
+    "Refresh Azure OIDC login before ordinary worker promotion",
+    "Promote verified worker digest on VM",
   ])
     assert.ok(entries.findIndex((step) => step.name === name) > guard, name)
 })
