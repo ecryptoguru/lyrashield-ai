@@ -294,13 +294,14 @@ describe("PATCH /api/targets/[id]", () => {
   })
 
   it("rebinds a repository target only to an owned, reachable GitHub installation", async () => {
-    targetFindFirstMock.mockResolvedValueOnce({
-      id: "t-1",
-      type: "REPO",
-      branch: null,
-      repoFullName: "acme/api",
-      installationId: null,
-    })
+    targetFindFirstMock
+      .mockResolvedValueOnce({ id: "t-1", type: "REPO", apiSpecUrl: null, branch: null })
+      .mockResolvedValueOnce({
+        id: "t-1",
+        type: "REPO",
+        repoFullName: "acme/api",
+        installationId: null,
+      })
     integrationFindFirstMock.mockResolvedValueOnce({ externalId: "404" })
     getDefaultBranchMock.mockResolvedValueOnce("main")
 
@@ -340,12 +341,14 @@ describe("PATCH /api/targets/[id]", () => {
   })
 
   it("refuses an installation that is not an active integration of this workspace", async () => {
-    targetFindFirstMock.mockResolvedValueOnce({
-      id: "t-1",
-      type: "REPO",
-      repoFullName: "acme/api",
-      installationId: "101",
-    })
+    targetFindFirstMock
+      .mockResolvedValueOnce({ id: "t-1", type: "REPO", apiSpecUrl: null, branch: null })
+      .mockResolvedValueOnce({
+        id: "t-1",
+        type: "REPO",
+        repoFullName: "acme/api",
+        installationId: "101",
+      })
     integrationFindFirstMock.mockResolvedValueOnce(null)
 
     const response = await PATCH(
@@ -360,12 +363,14 @@ describe("PATCH /api/targets/[id]", () => {
   })
 
   it("refuses an installation that cannot reach the exact repository", async () => {
-    targetFindFirstMock.mockResolvedValueOnce({
-      id: "t-1",
-      type: "REPO",
-      repoFullName: "acme/api",
-      installationId: null,
-    })
+    targetFindFirstMock
+      .mockResolvedValueOnce({ id: "t-1", type: "REPO", apiSpecUrl: null, branch: null })
+      .mockResolvedValueOnce({
+        id: "t-1",
+        type: "REPO",
+        repoFullName: "acme/api",
+        installationId: null,
+      })
     integrationFindFirstMock.mockResolvedValueOnce({ externalId: "404" })
     getDefaultBranchMock.mockRejectedValueOnce(new Error("Failed to get repo info: 404"))
 
@@ -381,12 +386,9 @@ describe("PATCH /api/targets/[id]", () => {
   })
 
   it("refuses to bind a GitHub connection to a non-repository target", async () => {
-    targetFindFirstMock.mockResolvedValueOnce({
-      id: "t-1",
-      type: "API",
-      apiSpecUrl: null,
-      branch: null,
-    })
+    targetFindFirstMock
+      .mockResolvedValueOnce({ id: "t-1", type: "API", apiSpecUrl: null, branch: null })
+      .mockResolvedValueOnce({ id: "t-1", type: "API", repoFullName: null, installationId: null })
 
     const response = await PATCH(
       patchReq({ workspaceId: "ws-1", installationId: "404" }),

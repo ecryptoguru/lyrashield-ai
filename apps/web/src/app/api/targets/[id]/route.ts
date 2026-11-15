@@ -9,7 +9,7 @@ import {
 } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { purgeAiResultCacheWorkspaceEntries, getDefaultBranch } from "@lyrashield/integrations"
+import { purgeAiResultCacheWorkspaceEntries } from "@lyrashield/integrations"
 import { PatchTargetSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
@@ -17,6 +17,7 @@ import { revalidateDashboardAggregates } from "../../../../lib/cache"
 import { checkScanUrlSafe } from "../../../../lib/ssrf"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError } from "../../../../lib/api-response"
+import { rebindTargetInstallation } from "../../../../lib/target-installation-rebind"
 
 async function patch(request: Request, { params }: { params: Promise<{ id: string }> }) {
   let body: unknown
@@ -103,14 +104,7 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
     const target = await withWorkspaceRLS(workspaceId, (tx) =>
       tx.target.findFirst({
         where: { id, workspaceId, deletedAt: null },
-        select: {
-          id: true,
-          type: true,
-          apiSpecUrl: true,
-          branch: true,
-          repoFullName: true,
-          installationId: true,
-        },
+        select: { id: true, type: true, apiSpecUrl: true, branch: true },
       })
     )
     if (!target) {
@@ -118,71 +112,11 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
     }
 
     if ("installationId" in parsed.data) {
-      // Reconnection: only an active GitHub integration of THIS workspace may
-      // be bound, and it must actually reach the exact repository. The scanned
-      // revision stays pinned in each scan's immutable plan, so rebinding the
-      // transport never rewrites scan provenance.
-      if (target.type !== "REPO" || !target.repoFullName) {
-        return apiError(
-          "INVALID_TARGET_TYPE",
-          "A GitHub connection can only be bound to a repository target",
-          400
-        )
-      }
-      const installationId = parsed.data.installationId
-      const integration = await prisma.integration.findFirst({
-        where: {
-          workspaceId,
-          type: "GITHUB",
-          externalId: installationId,
-          status: "active",
-          deletedAt: null,
-        },
-        select: { externalId: true },
-      })
-      if (!integration) {
-        return apiError(
-          "INSTALLATION_NOT_FOUND",
-          "The selected GitHub connection is not an active integration for this workspace",
-          400
-        )
-      }
-      const [owner, repo] = target.repoFullName.split("/")
-      if (!owner || !repo) {
-        return apiError("INVALID_TARGET_TYPE", "This target has no valid repository name", 400)
-      }
-      try {
-        await getDefaultBranch(Number(installationId), owner, repo)
-      } catch (providerError) {
-        logger.warn("Selected GitHub connection cannot reach the target repository", {
-          targetId: target.id,
-          workspaceId,
-          errorType: providerError instanceof Error ? providerError.name : "unknown",
-        })
-        return apiError(
-          "INSTALLATION_REPOSITORY_ACCESS_DENIED",
-          "That GitHub connection cannot access this repository. Grant it access on GitHub, then choose it again.",
-          400
-        )
-      }
-
-      await withWorkspaceRLS(workspaceId, (tx) =>
-        tx.target.update({ where: { id }, data: { installationId } })
-      )
-      await prisma.auditLog.create({
-        data: {
-          workspaceId,
-          actorUserId: session.userId,
-          action: "target.github_installation_rebound",
-          resourceType: "target",
-          resourceId: target.id,
-          metadata: { previousInstallationId: target.installationId, installationId },
-        },
-      })
-      logger.info("Target GitHub installation rebound", { targetId: target.id, workspaceId })
-      return NextResponse.json({
-        success: true,
-        data: { id: target.id, type: target.type, installationId },
+      return rebindTargetInstallation({
+        workspaceId,
+        actorUserId: session.userId,
+        targetId: id,
+        installationId: parsed.data.installationId,
       })
     }
 
