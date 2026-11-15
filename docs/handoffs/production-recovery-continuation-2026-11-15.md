@@ -7,7 +7,16 @@ Prepared by the production-recovery execution on 2026-11-15 (Asia/Kolkata). This
 
 ## Release identities (verified post-deploy)
 
-- Product main: `9faf5a903090525cfcbc43dde3abd1bc7cedb2db` (#1133 `fa1679b374700ae6b6b866bca29d44aac92d3eb6`, #1134 `c89e1d370ad0875d98372f137163a6eb9b1212dd`, #1135 `9faf5a903090525cfcbc43dde3abd1bc7cedb2db`)
+- Product main at this record: `9fe6bce22408ca85bccd0103207e7ec2891a4364` (scan-outage fix #1138 `848ab90624b84d945cf9b18e9c1a3d0d017c89ea`, dependabot pnpm/setup #1116 `9fe6bce22`)
+- Deployed release for the outage fix: [43724862673](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43724862673) — success, product `848ab90624b84d945cf9b18e9c1a3d0d017c89ea`
+- App/scanner: `lyrashield-app--0000518` / `lyrashield-scanner--0000492` at 100% traffic, web digest `sha256:ea9b97b600b82f99a7758c1fec1ee004d4d438959718883c90e4a3980bcf922b`
+- Egress proxy: `lyrashield-egress-proxy--0000358` at 100% traffic, digest `sha256:5e805fe0973e7236d7a2a00b48841b4620a68390bc60518d2fccd4017e57fb87`
+- Worker: image `sha256:9b2b461c129a418cf986c87d86a2de79504f9157e60b6c0a190a0c0331f4341c`, product `848ab90624b84d945cf9b18e9c1a3d0d017c89ea`, engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`; healthy, `"Worker authority selected"` `mode: legacy`
+- Migrations: production reported _No pending migrations to apply_; the pgcrypto prerequisite `20261113120000` landed during the earlier attempt of [43714316836](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43714316836)
+
+### Superseded identities from the first recovery release
+
+- Product `9faf5a903090525cfcbc43dde3abd1bc7cedb2db` (#1133 `fa1679b374700ae6b6b866bca29d44aac92d3eb6`, #1134 `c89e1d370ad0875d98372f137163a6eb9b1212dd`, #1135 `9faf5a903090525cfcbc43dde3abd1bc7cedb2db`)
 - Candidate release: [43700283334](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43700283334) — success, including source qualification, exact-image build, disposable rehearsal, migration application, web/worker deploy and production smoke
 - Engine: `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c` (engine PR #242 merged)
 - App/scanner revision: `lyrashield-app--0000516` / `lyrashield-scanner--0000490` at 100% traffic, web digest `sha256:afbcc41280aba7e64c475c0a151ad7cc977b3ed387a1562035ee9eac31175a94`, product `9faf5a90…`
@@ -36,6 +45,34 @@ Prepared by the production-recovery execution on 2026-11-15 (Asia/Kolkata). This
 
 The production release failed twice before succeeding. Production's pgcrypto lives in `extensions`, not `public`; two migrations reference `public.digest` at CREATE time and failed: `20261113130000_scan_policy_authority_v2` (2026-11-15T02:30Z) and `20261113140000_scan_dispatch_command_descriptor` (2026-11-15T09:15Z). Forward-only compat migrations `20261113135000_pgcrypto_public_digest_compat` and `20261115120000_scan_policy_compat_pgcrypto_public_digest` (PRs #1134/#1135) supply an idempotent `public.digest` shim; both failed migrations were marked `rolled_back`/`finished_at` so the rerun replayed cleanly. Owner-authorized. No schema was rolled back; no data was modified; the ancient 2026-08-14 `live_ai_safety_foundation` row remains marked `rolled_back` as it was before this release. Other environments (disposable/CI PostgreSQL) install pgcrypto in `public`; the compat migrations are no-op there and the full 154-migration chain replays cleanly against fresh PostgreSQL (verified locally).
 
+## Worker promotion interruption and recovery (2026-11-15)
+
+Release [43714316836](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43714316836) hit the deploy job's 45-minute budget while promoting the worker, which is an outage rather than a failed build:
+
+- `lyrashield-worker.service` `failed`, worker container absent, journal `Unresolved cold host barrier; admission remains held`
+- `/api/ready` 200 but `/api/ready/scans` 503 for roughly 35 minutes; the promotion's `worker-promotion` admission latch was still held with no TTL
+- app revision `0000517` was built but never took traffic, so web stayed on `0000516`
+
+Three defects made it unrecoverable instead of retryable, all fixed in [#1138](https://github.com/ecryptoguru/lyrashield-ai/pull/1138) (`848ab906`):
+
+1. The launcher burns a one-shot cold-start fence on every start, but `cold-start-barrier.py` was installed and run only for cold releases, so the **second** ordinary promotion on a host could never start the worker. The barrier now installs unconditionally and runs before an ordinary restart.
+2. `cold-start-barrier.py` required `MainPID` to be exactly `0` for both Docker units; systemd 255 reports an **empty** `MainPID` for an inactive `.socket`, so the barrier failed deterministically on the real host while the fixture returned `0`. Socket units now accept empty; services stay strict on `0`, and both still require `ActiveState=inactive`.
+3. The 45-minute job budget was too tight for migrations plus a full promotion. Raised to 75 minutes.
+
+Recovery used the reviewed barrier plus the promotion's own compare-and-delete latch release, and is documented in [operations.md](../operations.md#interrupted-worker-promotion-recovery). Admission was reopened only after the worker was healthy with a fresh readiness marker.
+
+Post-fix proof: release [43724862673](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43724862673) promoted normally from the already-burned fence (barrier receipt `oldResources: 1, removedResources: 0`), and a further release for `9fe6bce2` followed — two consecutive ordinary promotions, which the previous code could not do.
+
+### Repository targets without an installation binding (found live)
+
+The first bounded Standard attempt was refused with `SCAN_REF_UNRESOLVED` ("Could not resolve the repository to an immutable revision") and `OPERATION_NOT_SUBMITTED`, so nothing was billed. The cause was stored state, not the resolver: the fixture target's `installationId` was `null` while the workspace had one active `GITHUB` integration (`150972846`). `resolveRepositoryScanSource` computes `Number(null) === 0`, rejects it as a non-positive installation, and correctly refuses.
+
+`POST /api/targets` already falls back to the workspace's newest active GitHub integration, so this only affects targets created before that connection existed — and such a target stays permanently unscannable, with no product path to repair it.
+
+Repair applied this cycle (data only, no code change, no RLS change): for the one workspace holding every affected row, both `REPO` targets with a null binding and no active-connection ambiguity were set to that connection's `externalId`. Refused automatically if the workspace had zero or multiple active integrations. After the repair the Standard scan was accepted (`201`, `QUEUED`).
+
+Remaining gap: a future target created without any active connection, or a workspace that later gains a second installation, still needs either a resolver fallback or an explicit re-bind action. Neither exists yet.
+
 ## Acceptance matrix
 
 | Row                                             | Status                             | Evidence / remaining action                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -51,8 +88,8 @@ The production release failed twice before succeeding. Production's pgcrypto liv
 | Full MCP and distribution                       | blocked-external                   | Local MCP read/write paths are dependency-tested; hosted MCP mutations require a valid browser-confirmed delegation (`connect_required` otherwise); expired CLI credential refresh is edge-rejected (see above)                                                                                                                                                                                                                       |
 | Browser quality                                 | blocked-external                   | Browse relay unavailable; no live desktop/390px/keyboard/screen-reader verification                                                                                                                                                                                                                                                                                                                                                   |
 | Sharing                                         | pending                            | Owner authorization required before any scorecard/public artifact; none created                                                                                                                                                                                                                                                                                                                                                       |
-| Operations                                      | done                               | Readiness 200/200, provenance labels match release inputs (app/scanner/proxy/worker digests read back), admission open, queues empty, zero scans, marketing on build revision `9faf5a90…`                                                                                                                                                                                                                                             |
-| Recovery                                        | pending                            | Backup/restore was not re-drilled this cycle; the November 2 isolated-restore proof precedes the two migration cycles and the v26 cutover — schema/storage changed since; treat it as no longer fully applicable. Re-running an isolated restore drill is recommended with the owner before relying on the next rollback                                                                                                              |
+| Operations                                      | done                               | Readiness 200/200 at the post-deploy readback; provenance labels match release inputs (app/scanner/proxy/worker digests read back); admission open; queues `wait/active/failed` all 0; worker healthy with 0 restarts. The 2026-11-15 promotion interruption and its recovery are recorded below                                                                                                                                      |
+| Recovery                                        | done                               | Isolated restore drill [43730222781](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43730222781) (attempt 1, source `9fe6bce2`) passed every step: reviewed-source binding, exact-object restore into PostgreSQL 17, private row integrity, schema and audit chains, application startup against the restored database, digest-only proof artifact — backups are restorable again                                          |
 | Physical-device / screen-reader                 | deferred-by-scope                  | No physical devices available                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Billing                                         | deferred-by-scope                  | Excluded from this recovery; commercial configuration preserved; no checkout/refund/payout actions taken                                                                                                                                                                                                                                                                                                                              |
 
