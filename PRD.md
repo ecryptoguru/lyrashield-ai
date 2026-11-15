@@ -426,9 +426,9 @@ The protected runtime measurement and installation handshake remains unresolved.
 
 No paid acceptance, positive provider Fix PR/retest, physical-device or screen-reader qualification, or financial readiness follows from this merge.
 
-### Release path restored — 2026-11-15 (source candidate; not yet deployed)
+### Release path restored — 2026-11-15 (deployed 2026-11-15)
 
-`Status:` **source candidate in the recovery PR; deployed production remains the November 2 release until the candidate merges and the deploy is verified.** Flip this line only after merge and post-deploy verification (app/scanner/scan readiness 200; worker image digest and provenance match the release inputs).
+`Status:` **deployed and verified.** The recovery release succeeded on 2026-11-15. See “Current deployed production — 2026-11-15 (recovery release)” below for the exact identities and readback.
 
 - The recovery release restores the normal production path: main push → `release-production.yml` → `deploy-azure.yml` — source qualification against the merged PR's required checks ([`qualify-release-source.mjs`](../.github/scripts/qualify-release-source.mjs)), exact-image build, disposable rehearsal, guarded Azure rollout; `deploy-marketing` is independent. `LYRASHIELD_RUNTIME_FLEET_EVIDENCE` and the `qualify-runtime` gate are removed from `release-production.yml`; they had no issuer and blocked every deployment without adding an enforceable guarantee to this path.
 - Launch-time worker configuration (`ops/worker/run-worker.sh` / `ops/worker/worker-env.sh`) no longer requires the signed sandbox SBOM-coverage attestation or a publication record. Repository-scan isolation remains the pinned `ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:<digest>` image, the egress-restricted `lyrashield-sandbox` network and the deny-by-default firewall; provenance, budget and evidence checks are unchanged.
@@ -439,7 +439,15 @@ No paid acceptance, positive provider Fix PR/retest, physical-device or screen-r
 
 No paid acceptance, positive provider Fix PR/retest, physical-device/screen-reader qualification, or financial readiness follows from this change. Git history and the merged PRs retain the deleted lane's implementation.
 
-### Current deployed production — 2026-11-02 21:04 UTC
+### Current deployed production — 2026-11-15 (recovery release; deployed)
+
+[PR #1133](https://github.com/ecryptoguru/lyrashield-ai/pull/1133) merged as `fa1679b374700ae6b6b866bca29d44aac92d3eb6`; compatibility migration PRs #1134 (`c89e1d370ad0875d98372f137163a6eb9b1212dd`) and #1135 (`9faf5a903090525cfcbc43dde3abd1bc7cedb2db`) followed; [release 43700283334](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43700283334) succeeded at 2026-11-15 including source qualification, exact-image build, disposable rehearsal, production migration application, web/worker deploy, worker promotion and production smoke.
+
+An independent Azure and VM readback at release completion confirmed: app `lyrashield-app--0000516`, scanner `lyrashield-scanner--0000490` and egress proxy `lyrashield-egress-proxy--0000356` healthy at 100% traffic on revision `9faf5a903090525cfcbc43dde3abd1bc7cedb2db` with web digest `sha256:afbcc41280aba7e64c475c0a151ad7cc977b3ed387a1562035ee9eac31175a94` and proxy digest `sha256:4def21ee2e548e01fb509e21eafda2d34051aaecca89a224819b227f81f6a05c`. The worker container `lyrashield-worker` runs image `sha256:c9ecd28042fd0e607b2f7ba7f08d9feb4d4daf1c1d964883291e48dae9e10c07` with product revision `9faf5a903090525cfcbc43dde3abd1bc7cedb2db` and engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`. `https://lyrashieldai.com/` returns 200 serving build revision `9faf5a903090525cfcbc43dde3abd1bc7cedb2db`; `https://app.lyrashieldai.com/api/ready` and `/api/ready/scans` each return 200; the scan admission stop key is unset and the BullMQ queues are empty. All pending migrations applied (the two `finished_at IS NULL` rows in `_prisma_migrations` are both marked `rolled_back`: the ancient 2026-08-14 baseline and the first attempt of `20261113140000_scan_dispatch_command_descriptor`, which the rerun applied successfully).
+
+This supersedes the November 2 record below as current production evidence. It is a deployment fact only. It does not establish authenticated customer journeys, bounded paid model-backed scan verification on OnboardingAI2, positive provider Fix PR/retest, or any financial readiness. Paid/model-backed Standard/Deep repository scans remain enabled by design; billing is out of scope.
+
+### Current deployed production — 2026-11-02 21:04 UTC (superseded 2026-11-15)
 
 A later November 2 release superseded the 11:41 IST nonbilling release above. [PR #1070](https://github.com/ecryptoguru/lyrashield-ai/pull/1070) merged as `b03f0bbe2b42f3a49e24e103655187372ba0a5f6`, and [release 41518076035](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41518076035) succeeded at `2026-11-02T21:04:43Z`, including source qualification, exact-worker disposable rehearsal, production smoke and worker promotion.
 
@@ -606,7 +614,7 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 
 ## 9. Release status
 
-Cloud launch is not yet qualified. The 2026-11-14 deployment hold is retired from the normal release path (see §8 “Release path restored — 2026-11-15”; Status: not yet merged/verified at time of writing). The earlier runtime readback and remaining launch work are in the November 12 checkpoint. Earlier controlled PHP scans and the unchanged-source negative retest remain historical evidence; the approval-bound PR and positive retest still require current acceptance. The Desktop app has no signed release in this record.
+Cloud launch is not yet qualified. The 2026-11-14 deployment hold is retired from the normal release path and the production recovery deployed and verified on 2026-11-15 (see §8 “Current deployed production — 2026-11-15”). The earlier runtime readback and remaining launch work are in the November 12 checkpoint. Earlier controlled PHP scans and the unchanged-source negative retest remain historical evidence; the approval-bound PR and positive retest still require current acceptance. The Desktop app has no signed release in this record.
 
 ### Local v26 implementation — 2026-10-30
 
