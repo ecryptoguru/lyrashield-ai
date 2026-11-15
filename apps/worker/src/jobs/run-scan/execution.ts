@@ -16,6 +16,7 @@ import {
 import {
   authorizeDeterministicRetest,
   checkoutDeterministicRetest,
+  RetestBaselineUnavailableError,
 } from "../../engine/deterministic-retest"
 import {
   mintScanRelayGrant,
@@ -29,6 +30,7 @@ import {
   type EngineRunResult,
 } from "../../engine/runner"
 import { effectiveEngineBudget, engineDispatchStatus } from "./execution-policy"
+import { inconclusiveRetestsForScan } from "../../engine/result-integrity"
 import type { TargetType } from "../../engine/command-builder"
 import {
   AUTHENTICATED_ASSESSMENT_BETA_LIMITS,
@@ -316,7 +318,15 @@ export async function executeScanTarget(params: {
   if (deterministicRetest) {
     if (target.repoProvider !== "github")
       throw new Error("Deterministic repository retests require a GitHub source target")
-    await authorizeDeterministicRetest(scanId, workspaceId, params.target.id)
+    await authorizeDeterministicRetest(scanId, workspaceId, params.target.id).catch(
+      async (error) => {
+        // A missing deterministic baseline is an expected refusal: record the
+        // inconclusive verification, then fail the scan so nothing is billed.
+        if (!(error instanceof RetestBaselineUnavailableError)) throw error
+        await inconclusiveRetestsForScan(scanId, error.reason)
+        throw error
+      }
+    )
     deterministicCheckout = await checkoutDeterministicRetest({
       scanId,
       workspaceId,

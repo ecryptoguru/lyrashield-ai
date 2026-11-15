@@ -115,8 +115,28 @@ describe("fix generation lifecycle", () => {
     expect(mocks.prepare).not.toHaveBeenCalled()
   })
 
-  it("skips a queued delegated fix when authority was revoked before consumption", async () => {
-    const delegatedScan = {
+  it("settles a finding without a structured fix instead of leaving an inert draft", async () => {
+    mocks.proposal.mockResolvedValue({
+      ...{ id: "proposal-1", status: "draft", summary: "Upgrade the dependency" },
+      finding,
+    })
+    mocks.evidence.mockResolvedValue([])
+    expect(await processFixGenerateJob(input)).toMatchObject({
+      status: "skipped",
+      reason: "no structured fix in the finding's evidence",
+    })
+    expect(mocks.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: "draft" }),
+        data: expect.objectContaining({
+          status: "failed",
+          summary: expect.stringContaining("reviewed change"),
+        }),
+      })
+    )
+  })
+
+  it("skips a queued delegated fix when authority was revoked before consumption", async () => {    const delegatedScan = {
       ...finding.scan,
       delegatedConnectionId: "conn-1",
       delegatedAuthorizationVersion: 2,

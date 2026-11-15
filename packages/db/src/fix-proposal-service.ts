@@ -19,7 +19,7 @@ export interface CreateFixProposalParams {
 }
 
 export interface FixProposalWithDetails extends FixProposal {
-  finding: Pick<Finding, "id" | "title" | "severity" | "status" | "cwe"> & {
+  finding: Pick<Finding, "id" | "title" | "severity" | "status" | "cwe" | "baseCommit"> & {
     target: Pick<Target, "id" | "name" | "repoFullName">
   }
   pullRequests: PullRequest[]
@@ -96,6 +96,9 @@ export async function getFixProposal(
             severity: true,
             status: true,
             cwe: true,
+            // Patch execution needs an immutable base; a list must be able to
+            // explain a proposal that cannot become a pull request yet.
+            baseCommit: true,
             target: { select: { id: true, name: true, repoFullName: true } },
           },
         },
@@ -142,6 +145,9 @@ export async function listFixProposals(
             severity: true,
             status: true,
             cwe: true,
+            // Patch execution needs an immutable base; a list must be able to
+            // explain a proposal that cannot become a pull request yet.
+            baseCommit: true,
             target: { select: { id: true, name: true, repoFullName: true } },
           },
         },
