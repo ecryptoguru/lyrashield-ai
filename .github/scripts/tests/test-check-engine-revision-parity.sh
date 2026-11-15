@@ -8,7 +8,6 @@ trap 'rm -rf "$tmp"' EXIT
 
 revision=1b98b8f7fb1e84913e34c23a898429481df01570
 other=2c8fccc9d1b0b1f0e3e0c9a0b1c2d3e4f5a6b7c8
-third=3d9add24e9a61fadd997de36f9a82806631e7b75
 
 write_workflow() {
   local path=$1 pinned=$2
