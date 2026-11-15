@@ -22,6 +22,7 @@ export default function FixProposalsHarness() {
               kind: "composer_update",
               status: "ready",
               hasStoredPatch: true,
+              hasPatchBase: true,
               safetyScore: 95,
               summary:
                 "Update the affected Composer package after reviewing its advisory and locked release.\n\n" +

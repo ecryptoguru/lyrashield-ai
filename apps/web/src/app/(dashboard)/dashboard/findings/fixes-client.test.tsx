@@ -64,11 +64,21 @@ describe("proposed fix review clarity", () => {
 
 describe("pull request approval from a proposal", () => {
   it("offers the existing approval action for an authorized member with a ready stored patch", () => {
-    expect(render({ hasStoredPatch: true }, true)).toContain("Create pull request")
+    expect(render({ hasStoredPatch: true, hasPatchBase: true }, true)).toContain(
+      "Create pull request"
+    )
+  })
+
+  it("explains a missing patch base instead of offering an action that would fail", () => {
+    const html = render({ hasStoredPatch: true, hasPatchBase: false }, true)
+    expect(html).not.toContain("Create pull request")
+    expect(html).toContain("did not record one")
   })
 
   it("hides the action without permission, a stored patch, or a ready proposal", () => {
-    expect(render({ hasStoredPatch: true }, false)).not.toContain("Create pull request")
+    expect(render({ hasStoredPatch: true, hasPatchBase: true }, false)).not.toContain(
+      "Create pull request"
+    )
     expect(render({ hasStoredPatch: false }, true)).not.toContain("Create pull request")
     expect(render({ hasStoredPatch: true, status: "failed" }, true)).not.toContain(
       "Create pull request"

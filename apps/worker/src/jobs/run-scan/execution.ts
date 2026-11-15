@@ -13,10 +13,8 @@ import {
   buildVibeSecurityInstruction,
   normalizeDomainForProof,
 } from "@lyrashield/security"
-import {
-  authorizeDeterministicRetest,
-  checkoutDeterministicRetest,
-} from "../../engine/deterministic-retest"
+import { checkoutDeterministicRetest } from "../../engine/deterministic-retest"
+import { authorizeDeterministicRetestOrInconclusive } from "../../engine/retest-authorization"
 import {
   mintScanRelayGrant,
   resolveRelayRuntimeConfig,
@@ -316,7 +314,7 @@ export async function executeScanTarget(params: {
   if (deterministicRetest) {
     if (target.repoProvider !== "github")
       throw new Error("Deterministic repository retests require a GitHub source target")
-    await authorizeDeterministicRetest(scanId, workspaceId, params.target.id)
+    await authorizeDeterministicRetestOrInconclusive(scanId, workspaceId, params.target.id)
     deterministicCheckout = await checkoutDeterministicRetest({
       scanId,
       workspaceId,
