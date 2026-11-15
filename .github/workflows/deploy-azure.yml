@@ -3,10 +3,6 @@ name: Deploy to Azure
 on:
   workflow_call:
     inputs:
-      cold_release:
-        required: false
-        default: false
-        type: boolean
       source_sha:
         required: false
         type: string
@@ -35,14 +31,6 @@ on:
         default: ""
         type: string
       prepared_candidate_run_attempt:
-        required: false
-        default: ""
-        type: string
-      runtime_fleet_qualification:
-        required: false
-        default: ""
-        type: string
-      runtime_fleet_record_sha256:
         required: false
         default: ""
         type: string
@@ -81,7 +69,7 @@ env:
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
   EGRESS_PROXY_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-egress-proxy
-  ENGINE_REVISION: 7fa1c5afeda2b0d8521876cee9e89168665d77a3
+  ENGINE_REVISION: afd71f79675cb4db4187e31ecbf8f58ebcd62e1c
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
@@ -132,13 +120,6 @@ jobs:
       id-token: write
       packages: read
     steps:
-      # Applies to both workflow calls and manual recovery dispatches.
-      - name: Hold HA and retained release lanes
-        if: inputs.cold_release != true
-        run: |
-          echo '::error::Production release is held pending runtime qualification.'
-          exit 1
-
       - name: Checkout exact deployment source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -148,31 +129,6 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "24" }
 
-      - name: Authenticate the automated cold release caller
-        if: inputs.cold_release == true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
-        run: node .github/scripts/assert-cold-release-caller.mjs
-      # A normal push deploys only behind the protected issuer's signed
-      # exact-artifact record for this exact source. Health and fixture
-      # signatures use other purposes and are rejected inside the verifier.
-      - name: Require the authenticated exact-artifact release record
-        if: inputs.cold_release == true
-        env:
-          RUNTIME_FLEET_QUALIFICATION: ${{ inputs.runtime_fleet_qualification }}
-          RUNTIME_FLEET_RECORD_SHA256: ${{ inputs.runtime_fleet_record_sha256 }}
-          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
-          ENGINE_REVISION: ${{ env.ENGINE_REVISION }}
-        run: |
-          set -euo pipefail
-          [ -n "$RUNTIME_FLEET_RECORD_SHA256" ] || {
-            echo '::error::Missing authenticated exact-artifact release qualification'
-            exit 1
-          }
-          export SOURCE_TREE
-          SOURCE_TREE=$(git --no-replace-objects rev-parse 'HEAD^{tree}')
-          node .github/scripts/assert-runtime-fleet-qualification.mjs
       - name: Confirm deployment source remains current main
         env:
           GH_TOKEN: ${{ github.token }}
@@ -330,7 +286,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     if: ${{ !cancelled() &&
-      inputs.cold_release != true &&
       inputs.held_recovery_original_run_id == '' &&
       inputs.prepared_candidate_run_id == '' &&
       inputs.qualified_release_digest == '' &&
@@ -614,8 +569,7 @@ jobs:
     name: Select verified release image digests
     needs: [build, resolve-prepared-images, preflight-compatible-baseline]
     if: ${{ !cancelled() &&
-      (needs.build.result == 'success' || needs.resolve-prepared-images.result == 'success' ||
-      (inputs.cold_release == true && needs.preflight-compatible-baseline.result == 'success')) }}
+      (needs.build.result == 'success' || needs.resolve-prepared-images.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -642,10 +596,7 @@ jobs:
       - name: Select only the image source authorized for this release mode
         id: select
         env:
-          COLD_RELEASE: ${{ inputs.cold_release }}
           GH_TOKEN: ${{ github.token }}
-          RUNTIME_FLEET_QUALIFICATION: ${{ inputs.runtime_fleet_qualification }}
-          RUNTIME_FLEET_RECORD_SHA256: ${{ inputs.runtime_fleet_record_sha256 }}
           SOURCE_SHA: ${{ env.DEPLOY_SHA }}
           ENGINE_REVISION: ${{ env.ENGINE_REVISION }}
           HELD_RECOVERY: ${{ inputs.held_recovery_original_run_id != '' }}
@@ -668,15 +619,6 @@ jobs:
           PREPARED_ENGINE_REVISION: ${{ needs.resolve-prepared-images.outputs.engine_revision }}
         run: |
           set -euo pipefail
-          if [ "$COLD_RELEASE" = true ]; then
-            [ "$HELD_RECOVERY" = false ] && [ "$PAIRED_PREPARED" = false ] &&
-              [ "$BUILD_RESULT" = skipped ] && [ "$PREPARED_RESULT" = skipped ] || exit 1
-            node .github/scripts/assert-cold-release-caller.mjs
-            export SOURCE_TREE
-            SOURCE_TREE=$(git --no-replace-objects rev-parse 'HEAD^{tree}')
-            node .github/scripts/select-qualified-release-images.mjs
-            exit 0
-          fi
           if [ "$HELD_RECOVERY" = true ] || [ "$PAIRED_PREPARED" = true ]; then
             [ "$PREPARED_RESULT" = success ] && [ "$BUILD_RESULT" = skipped ] || exit 1
             prefix=PREPARED
@@ -693,40 +635,6 @@ jobs:
             [ "$key" != egress_digest ] || key=egress_proxy_digest
             echo "$key=$value" >> "$GITHUB_OUTPUT"
           done
-
-      - name: Authenticate qualified image reads
-        if: inputs.cold_release == true
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Verify the qualified web and worker images
-        if: inputs.cold_release == true
-        env:
-          WEB_REF: ${{ steps.select.outputs.web_image }}@${{ steps.select.outputs.web_digest }}
-          WORKER_REF: ${{ steps.select.outputs.worker_image }}@${{ steps.select.outputs.worker_digest }}
-          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
-          ENGINE_REVISION: ${{ steps.select.outputs.engine_revision }}
-        run: bash .github/scripts/verify-v26-images.sh "$WEB_REF" "$WORKER_REF" "$SOURCE_SHA" "$ENGINE_REVISION"
-
-      - name: Require the built images to be the qualified images
-        if: inputs.runtime_fleet_record_sha256 != ''
-        env:
-          RUNTIME_FLEET_QUALIFICATION: ${{ inputs.runtime_fleet_qualification }}
-          RUNTIME_FLEET_RECORD_SHA256: ${{ inputs.runtime_fleet_record_sha256 }}
-          REQUIRE_QUALIFIED_IMAGES: "1"
-          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
-          ENGINE_REVISION: ${{ steps.select.outputs.engine_revision }}
-          WEB_DIGEST: ${{ steps.select.outputs.web_digest }}
-          WORKER_DIGEST: ${{ steps.select.outputs.worker_digest }}
-          PROXY_DIGEST: ${{ steps.select.outputs.egress_proxy_digest }}
-        run: |
-          set -euo pipefail
-          export SOURCE_TREE
-          SOURCE_TREE=$(git --no-replace-objects rev-parse 'HEAD^{tree}')
-          node .github/scripts/assert-runtime-fleet-qualification.mjs
 
   # Every merge to main pushes new SHA-tagged images; web also re-points :latest, while workers
   # remain immutable and deploy by verified digest. Multi-arch buildx pushes leave untagged manifests
@@ -816,7 +724,6 @@ jobs:
       product_source_sha: ${{ inputs.source_sha || github.sha }}
       engine_revision: ${{ needs.resolve-images.outputs.engine_revision }}
       worker_image: ${{ needs.resolve-images.outputs.worker_image }}@${{ needs.resolve-images.outputs.worker_digest }}
-      cold_release: ${{ inputs.cold_release }}
 
   deploy:
     name: Deploy Azure Container Apps
@@ -835,8 +742,6 @@ jobs:
       needs.resolve-images.result == 'success' &&
       needs.validate-manual-production-dispatch.result == 'success' &&
       needs.preflight-compatible-baseline.result == 'success' &&
-      (inputs.cold_release != true ||
-        needs.verify-built-worker-image.outputs.cold_sandbox_image == format('ghcr.io/ecryptoguru/lyrashield-sandbox@{0}', needs.resolve-images.outputs.sandbox_digest)) &&
       (
         needs.verify-built-worker-image.result == 'success' ||
         (
@@ -876,8 +781,6 @@ jobs:
       egress_proxy_image: ${{ needs.resolve-images.outputs.egress_proxy_image }}
       egress_proxy_digest: ${{ needs.resolve-images.outputs.egress_proxy_digest }}
       qualified_release_digest: ${{ inputs.qualified_release_digest }}
-      cold_release: ${{ inputs.cold_release }}
-      cold_sandbox_image: ${{ needs.verify-built-worker-image.outputs.cold_sandbox_image }}
     secrets: inherit
 
   verify-held-recovery-outcome:

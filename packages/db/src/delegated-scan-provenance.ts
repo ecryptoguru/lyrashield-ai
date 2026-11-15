@@ -76,36 +76,3 @@ export async function bindDelegatedScanProvenance(
     },
   })
 }
-
-/**
- * Resolve a delegated operation after validating its server-issued proof. This
- * is a preflight only; the scan transaction repeats and atomically reserves it.
- */
-export async function resolveDelegatedScanOperation(
-  tx: ScanTransaction,
-  params: {
-    workspaceId: string
-    admission: DelegatedScanAdmission
-  }
-) {
-  const operation = await tx.agentOperation.findFirst({
-    where: {
-      id: params.admission.operationId,
-      workspaceId: params.workspaceId,
-      connectionId: params.admission.connectionId,
-      principalType: "OAUTH_CONNECTION",
-      principalId: params.admission.connectionId,
-      operationName: "scan.create",
-      authorizationVersion: params.admission.authorizationVersion,
-      status: "EXECUTING",
-      resultReference: null,
-    },
-  })
-  if (
-    !operation ||
-    !verifyDelegatedAdmissionProof(params.admission.admissionProof, operation.admissionProofHash)
-  ) {
-    throw new DelegatedScanAdmissionError()
-  }
-  return operation
-}

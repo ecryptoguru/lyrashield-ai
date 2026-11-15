@@ -248,8 +248,11 @@ jobs:
           node .github/scripts/verify-pnpm-pin.mjs
           pnpm lint:ratchet-baselines
 
+      # The ops suite discovers these four tests too (run-all-tests.mjs), so
+      # they run here only when the ops suite is not selected; shared changes
+      # with runtime coverage select the app-checks ops suite instead.
       - name: Test protected release controller and distribution matrix
-        if: needs.changes.outputs.tooling-only == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.tooling-only == 'true'
         run: >-
           node --test
           .github/scripts/tests/paired-runtime-workflow.test.mjs
@@ -535,8 +538,11 @@ jobs:
         timeout-minutes: 8
         run: node .github/scripts/run-user-scan-slot-runtime.mjs "$RUNNER_TEMP/user-scan-slot.json"
 
+      # The core suite already runs this contract when it is selected (app
+      # runtime changes select database-tests). Run it standalone only when
+      # core is not selected; presentation-only web changes still need it.
       - name: Web presentation contracts
-        if: needs.changes.outputs.app == 'true'
+        if: needs.changes.outputs.app == 'true' && needs.changes.outputs.database-tests != 'true'
         run: pnpm exec vitest run --maxWorkers=2 apps/web/src/app/mobile-shell.contract.test.ts
 
       - name: Target admission concurrency with disposable PostgreSQL

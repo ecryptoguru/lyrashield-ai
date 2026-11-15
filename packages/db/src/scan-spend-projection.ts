@@ -1,6 +1,4 @@
-import type { Scan } from "./generated/prisma"
-import { readScanCapacity, type ScanCapacityProjection } from "./scan-capacity"
-import { withWorkspaceRLS } from "./rls"
+import type { ScanCapacityProjection } from "./scan-capacity"
 import { decimalString, planFacts } from "./scan-spend-facts"
 
 export type SpendValue =
@@ -147,25 +145,4 @@ export function buildScanSpendProjection(input: {
         }
       : null,
   }
-}
-
-export async function getScanSpendProjection(params: {
-  workspaceId: string
-  scanId: string
-  actorUserId: string
-  canManageBilling: boolean
-}): Promise<ScanSpendProjection | null> {
-  return withWorkspaceRLS(params.workspaceId, async (tx) => {
-    const scan = await tx.scan.findFirst({
-      where: { id: params.scanId, workspaceId: params.workspaceId, deletedAt: null },
-    })
-    if (!scan) return null
-    const capacity = await readScanCapacity(tx, scan as Scan)
-    return buildScanSpendProjection({
-      actorUserId: params.actorUserId,
-      canManageBilling: params.canManageBilling,
-      scan,
-      capacity,
-    })
-  })
 }

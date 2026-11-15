@@ -153,7 +153,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON "Workspace", users, "Target", "Scan", "S
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated fixture path
   await writeFile(
     config,
-    `export default ${JSON.stringify({ root, test: { include: ["apps/worker/src/user-scan-slot.runtime.test.ts", "apps/worker/src/user-scan-slot.fixture.test.ts"], maxWorkers: 1 } })}\n`
+    `export default ${JSON.stringify({ root, test: { include: ["apps/worker/src/user-scan-slot.runtime.test.ts", "apps/worker/src/user-scan-slot.fixture.test.ts", "apps/worker/src/scan-journey.runtime.test.ts"], maxWorkers: 1 } })}\n`
   )
   await command(
     "pnpm",
@@ -173,6 +173,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON "Workspace", users, "Target", "Scan", "S
   assertFileCounts(JSON.parse(await readFile(report, "utf8")), [
     ["apps/worker/src/user-scan-slot.runtime.test.ts", 12],
     ["apps/worker/src/user-scan-slot.fixture.test.ts", 2],
+    ["apps/worker/src/scan-journey.runtime.test.ts", 2],
   ])
   const remaining = await command("docker", [
     "exec",
@@ -273,6 +274,9 @@ export async function runUserScanSlotRuntime({
       LYRASHIELD_TEST_DB_DISPOSABLE: "1",
       USER_SCAN_SLOT_RUNTIME_TEST: "1",
       USER_SCAN_SLOT_REDIS_FIXTURE_ID: identity,
+      SCAN_JOURNEY_RUNTIME_TEST: "1",
+      LYRASHIELD_LOCAL_EVIDENCE_DIR: resolve(directory, "evidence"),
+      LYRASHIELD_LOCAL_EVIDENCE_STORAGE: "1",
       DATABASE_URL: ownerUrl,
       DATABASE_DIRECT_URL: ownerUrl,
       DATABASE_SYSTEM_URL: ownerUrl,

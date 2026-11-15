@@ -22,24 +22,10 @@ if [ ! -r "$environment_file" ]; then
   exit 1
 fi
 
-unset LYRASHIELD_COLD_SINGLE_WORKER LYRASHIELD_COLD_DATABASE_EPOCH_SHA256 LYRASHIELD_COLD_RELEASE_OWNER
-unset LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH
 set -a
 # shellcheck disable=SC1090
 . "$runtime_config"
 set +a
-
-publication_record_mount=
-if [ -n "${LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH:-}" ]; then
-  publication_record=/etc/lyrashield/sandbox-publication-record.json
-  [ "$LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH" = "$publication_record" ] &&
-    [ -f "$publication_record" ] && [ ! -L "$publication_record" ] &&
-    [ "$(stat -c '%u:%a' "$publication_record")" = 0:444 ] || {
-      echo "Signed publication record must be a root-owned read-only regular file" >&2
-      exit 1
-    }
-  publication_record_mount="--mount type=bind,src=$publication_record,dst=$publication_record,readonly"
-fi
 
 : "${LYRASHIELD_WORKER_IMAGE:?Set an immutable worker image in the runtime configuration}"
 : "${LYRASHIELD_SANDBOX_IMAGE:?Set an immutable sandbox image in the runtime configuration}"
@@ -347,7 +333,7 @@ docker create \
   "$@" \
   --env-file "$environment_file" \
   $env_args \
-  $publication_record_mount $cold_evidence_mount \
+  $cold_evidence_mount \
   --group-add "$socket_group" \
   --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
   --mount type=bind,src="$worker_shared_root",dst="$worker_shared_root" \
