@@ -37,6 +37,7 @@ interface FixProposalItem {
   summary: string
   status: string
   hasStoredPatch?: boolean
+  hasPatchBase?: boolean
   safetyScore?: number | null
   generatedByModel?: string | null
   createdAt: string
@@ -67,6 +68,7 @@ const fixProposalItemSchema = z
     summary: z.string(),
     status: z.string(),
     hasStoredPatch: z.boolean().optional(),
+    hasPatchBase: z.boolean().optional(),
     safetyScore: z.number().nullable().optional(),
     generatedByModel: z.string().nullable().optional(),
     createdAt: z.string().datetime().or(z.string()),
@@ -329,7 +331,15 @@ function ProposalAction({
   workspaceId: string
   canCreatePr: boolean
 }) {
-  if (!canCreatePr || proposal.status !== "ready" || !proposal.hasStoredPatch) return null
+  if (proposal.status !== "ready" || !proposal.hasStoredPatch) return null
+  if (!proposal.hasPatchBase)
+    return (
+      <p className="text-muted-foreground mt-3 text-sm">
+        A pull request needs the immutable base commit that produced this finding, and its scan did
+        not record one. Run a new scan of this target and propose the fix from that result.
+      </p>
+    )
+  if (!canCreatePr) return null
   return (
     <div className="mt-3">
       <CreateFixPrAction

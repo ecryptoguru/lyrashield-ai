@@ -264,6 +264,7 @@ vi.mock("../engine/result-integrity", () => ({
   persistResultManifest: vi.fn().mockResolvedValue(undefined),
   markRetestsRunning: vi.fn().mockResolvedValue(undefined),
   completeRetestsForScan: vi.fn().mockResolvedValue(undefined),
+  inconclusiveRetestsForScan: vi.fn().mockResolvedValue(undefined),
   failTerminalRetestsForScan: vi.fn().mockResolvedValue(undefined),
 }))
 

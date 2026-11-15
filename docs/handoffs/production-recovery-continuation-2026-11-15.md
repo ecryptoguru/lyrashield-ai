@@ -7,7 +7,7 @@ Prepared by the production-recovery execution on 2026-11-15 (Asia/Kolkata). This
 
 ## Release identities (verified post-deploy)
 
-- Product main at this record: `9fe6bce22408ca85bccd0103207e7ec2891a4364` (scan-outage fix #1138 `848ab90624b84d945cf9b18e9c1a3d0d017c89ea`, dependabot pnpm/setup #1116 `9fe6bce22`)
+- Product main at this record: `ab7d3d85ef852e5fbf4c6c9933f50e72c79840d4` (retest/proposal outcome fixes #1141) (scan-outage fix #1138 `848ab90624b84d945cf9b18e9c1a3d0d017c89ea`, dependabot pnpm/setup #1116 `9fe6bce22`)
 - Deployed release for the outage fix: [43724862673](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43724862673) — success, product `848ab90624b84d945cf9b18e9c1a3d0d017c89ea`
 - App/scanner: `lyrashield-app--0000518` / `lyrashield-scanner--0000492` at 100% traffic, web digest `sha256:ea9b97b600b82f99a7758c1fec1ee004d4d438959718883c90e4a3980bcf922b`
 - Egress proxy: `lyrashield-egress-proxy--0000358` at 100% traffic, digest `sha256:5e805fe0973e7236d7a2a00b48841b4620a68390bc60518d2fccd4017e57fb87`
@@ -94,6 +94,21 @@ The Deep pass matters on its own: this fixture had repeatedly failed Deep with "
 A fresh retest was then queued on that finding to exercise the receipt path. The retest scan failed after one second with `INTERNAL_ERROR` and no charge; the worker journal shows the real reason, `Deterministic retest baseline provenance is incomplete`, because the originating scan had Partial coverage. The finding stayed `OPEN` and was not marked fixed, which is the correct outcome. The defect is presentation: an expected, well-defined refusal is reported as an internal service failure instead of a bounded `INCONCLUSIVE` carrying its reason.
 
 No positive `VALIDATED` retest was produced, and none is claimed.
+
+### Deterministic URL review and browser quality (same session)
+
+- Safe/Quick URL review on `LyraShield release canary` (`https://lyrashieldai.com/`), scan `cmwi54aay000g01e2cc4xuml0`: COMPLETED and sealed in 3s; 0 findings; coverage Partial with one recorded limitation; **no agent-minutes charged**, which is correct for a deterministic URL review.
+- 390x844: no horizontal overflow on dashboard, scans, findings or billing (measured `scrollWidth - clientWidth` = 0). The scans list exposes 20px-tall inline text links, which fall under the WCAG inline-text exception rather than being undersized controls.
+- Keyboard: `New Scan` reachable by Tab, opens with Enter and closes with Escape; all 30 sampled focus stops show a visible focus ring.
+- Screen reader: not performed; no assistive technology was available.
+
+### The three fix/retest defects are fixed and verified live
+
+| Defect                                               | Fix                                                                                              | Production evidence                                                                                                                                                                       |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Expected retest refusal reported as `INTERNAL_ERROR` | Typed `RetestBaselineUnavailableError`; an inconclusive receipt is written before the scan fails | A fresh retest now records `status: inconclusive` with "…cannot confirm or deny the fix", the finding stays `OPEN`/`DETECTED`; a `FindingVerification` row `INCONCLUSIVE`/`RETEST` exists |
+| Current-scan proposal stuck as an inert `draft`      | Terminal generation skips settle the proposal as `failed` with the reason                        | Covered by unit tests; applies to new generations                                                                                                                                         |
+| Dead "Create pull request" without a patch base      | List exposes `hasPatchBase` and explains the missing base                                        | The fail-open proposal now renders "its scan did not record one" and no button                                                                                                            |
 
 ## Acceptance matrix
 
