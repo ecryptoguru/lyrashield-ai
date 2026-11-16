@@ -249,7 +249,9 @@ export function makeRemoteApprovalGate(
 
   return async (toolName, args) => {
     if (!scopes.includes("write") && !scopes.includes("lyrashield.write")) {
-      return denied("This connection does not have write scope; mutating tools are refused.")
+      return options.connection
+        ? denied("This connection does not have write scope; mutating tools are refused.")
+        : connectRequired()
     }
 
     // Replay bypasses REST handlers, so recheck live membership and role before

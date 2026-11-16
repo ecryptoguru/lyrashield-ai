@@ -165,17 +165,30 @@ describe("remote approval gate — connect-over-OAuth only", () => {
     expect(getApprovalMock).not.toHaveBeenCalled()
   })
 
-  it("denies read-only credentials on scope before any connect hint", async () => {
+  it("requires a connected grant for read-only API-key mutations", async () => {
     const decision = await makeGate(["read"])("lyrashield_scan_target", {
       targetId: "t-1",
       workspaceId: "ws-1",
     })
 
+    expect(decision).toMatchObject({
+      approved: false,
+      structuredContent: { code: "connect_required" },
+    })
+    expect(createApprovalMock).not.toHaveBeenCalled()
+    expect(mcpCallTool).not.toHaveBeenCalled()
+  })
+
+  it("refuses a connected read-only grant without executing a mutation", async () => {
+    const decision = await makeGate(["lyrashield.read"], targetAConnection)(
+      "lyrashield_scan_target",
+      { targetId: "t-1", workspaceId: "ws-1" }
+    )
+
     expect(decision).toEqual({
       approved: false,
       reason: "This connection does not have write scope; mutating tools are refused.",
     })
-    expect(createApprovalMock).not.toHaveBeenCalled()
     expect(mcpCallTool).not.toHaveBeenCalled()
   })
 
