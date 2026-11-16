@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current production evidence: 2026-11-16 03:55 UTC — product `679021c069789ad2060f60d38b1d8261fd56b9d6`, release `43796371038`, worker `sha256:2bbe9ace4dead4f92f07198c039a6adc40a70baacd53aeff36dd65196b49432b`, engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`. See §8 for prior paid scan identities and fresh hosted acceptance. This file owns product strategy, accepted scope, release gates, and ordered backlog; running code, schema, CI, and live evidence override prose.
+> Current production evidence: 2026-11-16 14:29 UTC — product `493d6eae5947605bcf932fb395ef2bf8ffe3caaa`, release `43878552122`, worker `sha256:5f7b469015f9813da1c50c5d1a70d7370164df7a54cf0c1d38683f5ac5cba0e3`, engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`. See §8 for published clients and earlier immutable paid/hosted acceptance identities. This file owns product strategy, accepted scope, release gates, and ordered backlog; running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
@@ -404,6 +404,41 @@ Detailed file and package mapping: [codebase.md](./codebase.md).
 
 ## 8. Current production evidence
 
+### Final runtime and client distribution — 2026-11-16
+
+[PR #1149](https://github.com/ecryptoguru/lyrashield-ai/pull/1149) merged as `493d6eae5947605bcf932fb395ef2bf8ffe3caaa` after all three required checks passed on exact head `04810e19835c3b1c0494763511b94373f66a515e` ([CI 43875159269](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43875159269)). [Release 43878552122](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43878552122) completed source qualification, exact-image rehearsal, Azure rollout, worker promotion and marketing deployment. Independent readback at `2026-11-16T14:29Z` confirmed:
+
+| Component    | Revision / state                                                           | Image digest                                                              |
+| ------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| App          | `lyrashield-app--0000525`, healthy, 100%                                   | `sha256:25b59b8e026233fe09030e441cb56b74e73cfe4f17105685f3916fa55bcb0179` |
+| Scanner      | `lyrashield-scanner--0000499`, healthy, 100%                               | same web digest                                                           |
+| Egress proxy | `lyrashield-egress-proxy--0000365`, healthy, 100%                          | `sha256:e6c4a6b1de64e8f613bc31dfea4d3012bc035f71f0b0eb8a0ca473636fab2b04` |
+| Worker       | product `493d6eae`, healthy, zero restarts, started `2026-11-16T14:27:13Z` | `sha256:5f7b469015f9813da1c50c5d1a70d7370164df7a54cf0c1d38683f5ac5cba0e3` |
+| Engine       | unchanged `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`                       | bound in worker provenance                                                |
+
+All three public health/readiness probes returned 200; marketing serves build `493d6eae5947605bcf932fb395ef2bf8ffe3caaa`. Standard/Deep manifests remain `MATCH` with their original `637a178ae` worker provenance and one unchanged 16/39-minute usage receipt each. No paid scans were rerun for these client updates.
+
+Public MCP `0.2.13`, Agent Plugin `0.1.32` and CLI `0.2.15` archive/integrity and fresh consumer checks pass. [PR #1150](https://github.com/ecryptoguru/lyrashield-ai/pull/1150), merged as `9983264b062763dd0995b5161d1e598b0755e3d7`, aligns Zed's Cargo.lock root version with Cargo.toml `0.1.32` without changing dependencies; local and marketplace CI locked WASM builds pass. [Its release routing](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43886509763) correctly skipped Azure/marketing. Current guide labels match the published CLI; dated historical receipts retain their original versions. Immutable marketplace publication and individual native client activation need separate receipts. Broker authority (#7), physical-device/screen-reader and financial qualification remain outside this acceptance.
+
+### Coordinated client release — 2026-11-16 13:12 UTC
+
+[PR #1148](https://github.com/ecryptoguru/lyrashield-ai/pull/1148) merged as `c651cc80c6eb5eb801a10df8661b210cbdd0ce48` after all three required checks passed on exact head `36f6c7c0d9f6ada1dcc4d27495005c7d8352b06d` ([CI 43860099222](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43860099222)). [Release 43862618892](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43862618892) passed source qualification, exact-image rehearsal, Azure rollout, worker promotion and marketing deployment. Independent readback confirmed:
+
+| Component    | Revision / source                                         | Image digest                                                              |
+| ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------- |
+| App          | `lyrashield-app--0000524`, healthy, 100%                  | `sha256:8efef1faafca8ab6dda634cd60e670e855eb20076e7627084850ec1ed34a1aff` |
+| Scanner      | `lyrashield-scanner--0000498`, healthy, 100%              | same web digest                                                           |
+| Egress proxy | `lyrashield-egress-proxy--0000364`, healthy, 100%         | `sha256:0e397fae3295c650cfcee004fd9b0f303d0ef80859c20912d12127dd80d2f44b` |
+| Worker       | product `c651cc80c6eb5eb801a10df8661b210cbdd0ce48`        | `sha256:cc26096d7e9283850b821f66808392734cf44385df0f9908c4258f42f8775bcd` |
+| Engine       | unchanged `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`      | bound in worker provenance                                                |
+| Marketing    | homepage build `c651cc80c6eb5eb801a10df8661b210cbdd0ce48` | Cloudflare deployment                                                     |
+
+App health, scanner readiness and scan readiness returned 200. The preceding app/scanner/proxy revisions remain at 0% traffic. Standard/Deep receipts below still verify `MATCH`, each with exactly one unchanged account-owned usage receipt; their original product revision remains `637a178ae`, not this client release.
+
+Public npm latest is MCP `0.2.13`, Agent Plugin `0.1.32` and CLI `0.2.15`. Downloaded SHA-256 and npm integrity match the reviewed archives from source `a64713f93af3ccf77771e6ea4ced6e0cc671f4a3`; subsequent source changes were documentation only. A fresh public consumer passed MCP discovery of 22 tools, setup-health, sealed quality reads and CLI resume of existing deterministic URL scan `cmwiqcx4x000901k576f3xqfx`, without new execution or usage. Local verification passed 767 focused tests across 69 files, package typechecks, ESLint, packed runtime checks and size gates. MCP adds the missing setup-health tool; the CLI supplies Node's standard ESM `createRequire` to repair its scan-loader failure. Exact pins reach the SDK/MCP/plugin/CLI, WebMCP adapters, client guides and generated marketplace templates without changing support tiers or transports.
+
+Immutable marketplace publication, individual native client activation, physical-device/screen-reader, financial and broker-authority qualification require separate receipts. No additional paid scans were run for this client release; prior hosted acceptance is bounded to the source identities below.
+
 ### Hosted acceptance and client provenance — 2026-11-16 03:55 UTC
 
 [PR #1147](https://github.com/ecryptoguru/lyrashield-ai/pull/1147) merged as `679021c069789ad2060f60d38b1d8261fd56b9d6` after all three required checks passed on exact head `767563520fa13cf54404a0962e5f733168d16f79` ([CI 43794901096](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43794901096): 10,220 core tests passed, 387 skipped; 49 browser and 289 portable-browser checks passed). [Release 43796371038](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43796371038) succeeded. Independent readback confirmed app `0000523`, scanner `0000497` and proxy `0000363` healthy at 100%; web digest `sha256:7ce12256fbfaa1bf930f9cc82fa31dd2940679bd033fb95bff34a5366ab34694`, proxy digest `sha256:a7954502dadfc589965d437f300d85b511ca344c01b59090a1c7d36733c17221`, worker digest `sha256:2bbe9ace4dead4f92f07198c039a6adc40a70baacd53aeff36dd65196b49432b`, product `679021c069789ad2060f60d38b1d8261fd56b9d6` and unchanged engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`. App health, scanner readiness and scan readiness returned 200.
@@ -540,7 +575,7 @@ PR #386 keeps the earlier bounded scan unchanged and corrects future coverage: p
 
 ## 9. Release status
 
-Cloud launch is not yet qualified. Production runs `679021c0` (§8); the Desktop app has no signed release. The controller/broker admission path stays closed until installed production authority and protected journal evidence exist. Controlled Standard/Deep, deterministic Composer fix/retest, hosted tenant/credential/MCP and temporary report-sharing receipts now pass within their recorded scope. Coordinated MCP/plugin/CLI publication, individual native client/marketplace activation, physical-device/screen-reader and financial qualification remain open.
+Cloud launch is not yet qualified. Production runs `493d6eae` (§8); the Desktop app has no signed release. The controller/broker admission path stays closed until installed production authority and protected journal evidence exist. Controlled Standard/Deep, deterministic Composer fix/retest, hosted tenant/credential/MCP and temporary report-sharing receipts pass within their recorded scope. Coordinated MCP/plugin/CLI publication and public consumer checks pass; immutable marketplace publication, individual native client activation, physical-device/screen-reader and financial qualification require separate receipts.
 
 ### Delivered features and bounded proofs
 

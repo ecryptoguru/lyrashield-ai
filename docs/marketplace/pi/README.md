@@ -65,7 +65,7 @@ as workspace discovery. Setup and discovery alone are not an authenticated runti
 start a paid scan unless the user explicitly requests it and the workspace, target and profile are
 authorized.
 
-Local stdio uses the published CLI `0.2.14` and MCP `0.2.13`, which include the explicit idempotency
+Local stdio uses the published CLI `0.2.15` and MCP `0.2.13`, which include the explicit idempotency
 fields required by the focused workflows. The matching immutable marketplace skill release remains
 pending. Do not pair the new workflow skills with the older published MCP `0.2.11`:
 
