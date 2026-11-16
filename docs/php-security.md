@@ -298,9 +298,17 @@ permissions were explicitly approved and accepted for its existing installation.
 The controlled PR attempt then failed safely because the existing-file update
 omitted GitHub's blob SHA. The correction binds the update to the scanned blob and uses a distinct
 branch for each new approval. This recorded acceptance does not yet include
-a successful corrected release or the Composer draft PR → compatibility review
-→ merge → trusted positive retest. Preserve the failed receipt and unchanged orphan branch.
+the model-backed Composer draft PR → compatibility review → merge → trusted
+positive retest on the Standard/Deep chain. Preserve the failed receipt and unchanged orphan branch.
 No finding was marked fixed by these attempts.
+
+Update 2026-11-16: the deterministic Composer chain completed end to end on
+deployed production `637a178ae` — stored `composer_update` patch → fixture
+PR #1 squash-merged `30b4d018` → retest scan `cmwiksnuo000501fu43qj89bx` →
+`FIXED`/`VALIDATED` with no model usage. See
+[PRD §8](../PRD.md#fix-pr-and-deterministic-retest-acceptance--2026-11-16).
+`sast` and `iac` coverage stays `BLOCKED` on that fixture, so this does not
+complete the model-backed acceptance above.
 
 See [PRD §8](../PRD.md#8-current-production-evidence) for exact image/scan/run
 identities and [operations](./operations.md#historical-production-readback--2026-10-27)

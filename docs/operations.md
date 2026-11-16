@@ -2,7 +2,11 @@
 
 Founder- and operator-run procedures consolidated from standalone runbooks. Each section is founder-controlled; nothing here runs unattended.
 
-## Current production readback — 2026-11-02
+## Current production readback — 2026-11-16
+
+Production runs product `637a178ae589a4545224afb1e13c4b694fefd679` ([PR #1143](https://github.com/ecryptoguru/lyrashield-ai/pull/1143)) deployed by [release 43764099383](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43764099383). The independent readback at `2026-11-15T22:16:36Z` found app `lyrashield-app--0000521`, scanner `lyrashield-scanner--0000495` and egress proxy `lyrashield-egress-proxy--0000361` healthy at 100% traffic, a healthy worker on engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c` with zero restarts, scan readiness 200 with the admission stop unset and empty BullMQ queues plus marketing serving build revision `637a178ae`. Superseded revisions (`0000520`, `0000494`, `0000360`) are retained at 0% traffic for rollback; exact digests and limits are in [PRD §8](../PRD.md#current-deployed-production--2026-11-16-record-released-2026-11-15-2216-utc). The first positive deterministic fix receipt is in [PRD §8](../PRD.md#fix-pr-and-deterministic-retest-acceptance--2026-11-16). Wait for release completion before VM RunCommand reads; never overlap worker promotion.
+
+## Historical production readback — 2026-11-02
 
 [Production release 41438792830](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41438792830) succeeded for `d488862bd269c07194afe87a918ca413e4a62217`. Independent post-release Azure and VM observations found healthy app, scanner, egress proxy and worker with matching product/image identity; public app/scanner and scan readiness returned 200. Exact revisions and digests are recorded in [PRD §8](../PRD.md#nonbilling-production-release--2026-11-02-ist). Wait for release completion before VM RunCommand reads; never overlap worker promotion.
 
@@ -12,7 +16,7 @@ The November 1 scheduled restore failed its private row-integrity step, and the 
 
 Product `2d4e168da544306bf6cc9958a55f14bbfcb717e3` passed [production release 40538483543](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40538483543). Provider readback showed app `0000507`, scanner `0000481` and proxy `0000347` at 100% traffic; scan readiness returned HTTP 200. Independent VM readback confirmed healthy worker `sha256:690bac6ed42d1c450af94055e270d5f21baa937771ba828e7e4871e501067fbe`, matching product and engine `3001517530300ca5f602536bfadcbd3c95ad3039` provenance and 23 PHP/Composer and coverage source hashes. Wait for release completion before VM RunCommand reads; never overlap worker promotion.
 
-Controlled PHP Standard and Deep baseline acceptance passed on an earlier image. A later cold-cache Composer proposal succeeded and its sealed artifact was checked; the unchanged-source negative retest failed as expected and left the finding OPEN/DETECTED. The approval-bound PR and positive retest remain pending. PR #1043 is deployed by [release 40538483543](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40538483543). On October 28, the approved GitHub App write permissions were accepted. The controlled PR attempt failed on a missing blob SHA during an existing-file update; The recorded attempt predates the blob-bound update correction. Preserve its failed receipt and unchanged orphan branch; verify the corrected release and complete the positive workflow before claiming acceptance. Inspect only server-produced sealed artifacts and preserve compatibility notices and immutable evidence. Never update finding or ledger state directly or remove queue keys.
+Controlled PHP Standard and Deep baseline acceptance passed on an earlier image. A later cold-cache Composer proposal succeeded and its sealed artifact was checked; the unchanged-source negative retest failed as expected and left the finding OPEN/DETECTED. PR #1043 is deployed by [release 40538483543](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40538483543). On October 28, the approved GitHub App write permissions were accepted. The controlled PR attempt failed on a missing blob SHA during an existing-file update; The recorded attempt predates the blob-bound update correction. Preserve its failed receipt and unchanged orphan branch. Since then, the deterministic Composer chain completed end to end on 2026-11-16 ([PRD §8](../PRD.md#fix-pr-and-deterministic-retest-acceptance--2026-11-16)); the model-backed Standard/Deep acceptance of this controlled record remains open. Inspect only server-produced sealed artifacts and preserve compatibility notices and immutable evidence. Never update finding or ledger state directly or remove queue keys.
 
 The October 25 [backup / isolated restore 40172080687](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40172080687) passed verified TLS, schema/audit/readiness, cleanup and public-safe proof publication. App and worker log ingestion were observed. The three reconciliation/catalog rules exist and remain intentionally disabled under the October 12 noise policy. The operator receiver is verified, and one Azure test notification reached the operator inbox on October 27; this does not prove individual alert-rule behavior. Preserve receiver and alert settings.
 
@@ -252,8 +256,8 @@ allowlisted legacy writers and database schema. A manual `Deploy to Azure`
 dispatch requires exact current `main` and uses the same classifier. No cutover
 flag or typed confirmation is needed. The maintenance workflow drains existing
 queues, pauses app/scanner writers, stops the worker and checks the database
-before migration. Unknown or mixed baselines fail closed; see the
-[cutover contract](reviews/2026-09-30/webhook-production-cutover.md).
+before migration. Unknown or mixed baselines fail closed. The removed
+2026-09-30 cutover contract remains recoverable from Git history.
 
 Legacy `nextAttemptAt` and `leaseExpiresAt` values must both be empty after
 writers stop. The UTC migration then preserves NULLs and needs no historical
@@ -291,7 +295,7 @@ Launch-time worker configuration no longer requires signed sandbox SBOM-coverage
 
 ### v26 admission/capacity cutover and compatible rollback
 
-This is an operator procedure for a separately authorized release. Local v26 tests and a merged source commit do not authorize production migration, cancellation, financial reconciliation or paid acceptance. Record the exact candidate/rollback product revisions, worker digests, engine revision, runtime roles and a bounded maintenance window before starting. The [v26 source/disposition record](./handoffs/v26-implementation-2026-10-30.md) states local qualification limits.
+This is an operator procedure for a separately authorized release. Local v26 tests and a merged source commit do not authorize production migration, cancellation, financial reconciliation or paid acceptance. Record the exact candidate/rollback product revisions, worker digests, engine revision, runtime roles and a bounded maintenance window before starting. The removed v26 source/disposition record (`docs/handoffs/v26-implementation-2026-10-30.md`; recover from Git history) states local qualification limits.
 
 **October 31, 2026 IST evidence:** the first-v26 transition is complete. Do not repeat the first migration, replay the failed release, or use these steps to bootstrap maintenance again. They document the transition contract and the checks that later compatible releases must preserve. [Release 41117355986](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41117355986) deployed product `6739563df7dad585cef1be14cedcb978bc0a5219`; the retained independent VM/Azure/database readback records `COMPLETE`, absent admission stop, healthy exact-digest app/scanner/worker, four migration checksums and forced RLS. Exact deployed digests and observation limits are in [PRD §8](../PRD.md#v26-production-addendum--2026-10-31-ist).
 
@@ -354,7 +358,7 @@ ROLLBACK;
 
 Run only through the approved scoped/system read boundary; null legacy settlement timestamps are investigation candidates, not proof that every historical scan has a debt. Keep IDs, accounting data and evidence private. This query is an inventory, not an automatic repair or complete reconciliation algorithm.
 
-Revision deactivation and scanner-secret removal have separate cleanup policies: a revision-cleanup warning must not hide a failed secret-removal policy, and neither cleanup-only outcome sends healthy traffic back to an older image. Retain sanitized bounded reason codes and the fixed remediation guidance; never print raw Azure inventory or private web logs. The [low-rate error alert document](./low-rate-error-alert-draft.md) remains an unactivated proposal; preserve the approved receiver, telemetry-only app-any-5xx and intentionally disabled rules.
+Revision deactivation and scanner-secret removal have separate cleanup policies: a revision-cleanup warning must not hide a failed secret-removal policy, and neither cleanup-only outcome sends healthy traffic back to an older image. Retain sanitized bounded reason codes and the fixed remediation guidance; never print raw Azure inventory or private web logs. The low-rate error alert proposal was never activated; preserve the approved receiver, telemetry-only `app-any-5xx` and intentionally disabled reconciliation/catalog rules.
 
 ### Checkout rollback
 
