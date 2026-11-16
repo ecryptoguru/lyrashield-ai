@@ -324,6 +324,17 @@ describe("schedule-service", () => {
             OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }],
           },
           take: 50,
+          include: {
+            target: {
+              select: expect.objectContaining({
+                installationId: true,
+                repoOwner: true,
+                repoName: true,
+                repoFullName: true,
+                branch: true,
+              }),
+            },
+          },
         })
       )
     })

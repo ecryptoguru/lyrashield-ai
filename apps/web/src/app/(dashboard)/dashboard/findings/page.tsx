@@ -388,6 +388,7 @@ function serializeFixProposals(
     summary: p.summary,
     status: p.status,
     hasStoredPatch: Boolean(p.diffRef),
+    hasPatchBase: Boolean(p.finding.baseCommit),
     safetyScore: p.safetyScore,
     generatedByModel: p.generatedByModel,
     createdAt: p.createdAt.toISOString(),

@@ -66,7 +66,10 @@ class Fixture:
         if program == 'docker' and args[:2] == ['container', 'rm']:
             self.resources = [record for record in self.resources if record['Id'] != args[-1]]
         if program == 'systemctl' and args[0] == 'show':
-            return '0' if '--property=MainPID' in args else 'inactive'
+            if '--property=MainPID' in args:
+                # systemd reports no MainPID for an inactive socket unit.
+                return '' if args[1].endswith('.socket') else '0'
+            return 'inactive'
         if call == 'systemctl stop lyrashield-worker.service':
             self.resources = [record for record in self.resources if record['Name'] != '/lyrashield-worker']
         if call == 'systemctl start docker.service' and self.delayed:

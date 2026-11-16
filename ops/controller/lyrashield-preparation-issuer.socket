@@ -1,0 +1,13 @@
+[Unit]
+Description=LyraShield broker preparation issuer socket
+
+[Socket]
+ListenStream=/run/lyrashield/control/preparation.sock
+SocketUser=root
+SocketGroup=lyrashield-broker
+SocketMode=0660
+DirectoryMode=0755
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

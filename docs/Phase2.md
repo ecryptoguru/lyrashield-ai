@@ -27,7 +27,9 @@ This overlay records the deferrals and removals that bound the current Cloud lau
 ### Enterprise, infrastructure-expansion and speculative integration roadmap
 
 - **Status.** Already deferred further down this document, in `Current Phase 2 direction` and `Explicitly deferred`: enterprise SSO/OIDC and SCIM, advanced policy, private worker, VPC/self-hosting, data residency, IaC/container/cloud-account and reachability scanning, SIEM/Jira/CI integration adapters, plus a large speculative integration catalog.
-- **Reason, impact and re-entry condition.** Unchanged and recorded there. They are cross-referenced here rather than restated, so the launch does not carry a second backlog and nothing is pulled forward by this overlay.
+- **Reason.** Each item depends on a governance, procurement or deployment model that the single-tenant Cloud launch does not have. The launch path is one hosted product with one control plane; enterprise identity, customer-managed keys, data residency and customer-VPC deployment all require contractual and operational machinery that does not exist yet. The speculative adapters are deferred because there is no validated named-customer demand, and a generic signed outbound webhook is preferred over many narrow adapters.
+- **Impact.** No enterprise SSO, SCIM, private worker, VPC/self-hosted or residency option is offered; no compliance mapping beyond mapped scanner evidence is claimed; and no SIEM/Jira/CI adapter is shipped. This is a scope boundary, not a defect, and it does not affect the retained Cloud launch.
+- **Re-entry condition.** Not yet defined for these items. The dated direction above states that Phase 2 proceeds only after the launch gates close and 2–3 design partners validate demand, and that the expansion branch is chosen on validated demand. Until that happens these items stay deferred; a specific item re-enters only when a design partner requires it and the corresponding governance or contractual work is scoped and authorized.
 
 ### LyraShield Local/Desktop launch and its deferred roadmap
 
@@ -56,7 +58,7 @@ This overlay records the Phase 2 direction and open-gate snapshot as of 2026-09-
 
 ### Launch gates still open before Phase 2 (per `PRD.md` §9)
 
-1. On deployed product `4822306e24f375800981bf282fd992a9c15dcde8` (which includes merged PR #454), obtain a successful canonical/OG URL and PNG readback from an owner-authorized active scorecard. The historical fixture is revoked and returns 404; do not enumerate or create a production scorecard without authorization.
+1. On the current deployed production revision (see `PRD.md` §8), obtain a successful canonical/OG URL and PNG readback from an owner-authorized active scorecard. The historical fixture is revoked and returns 404; do not enumerate or create a production scorecard without authorization.
 2. Retain longer-window Redis command/capacity evidence; provision RazorpayX and Payoneer payout API access plus the tax-form workflow.
 3. Triage the 25 findings from the accepted Standard scan and obtain independent verification where warranted.
 4. Select and authorize a controlled Deep/Sol target, then retain separate routing, cost, receipt, image, and terminal-state evidence.

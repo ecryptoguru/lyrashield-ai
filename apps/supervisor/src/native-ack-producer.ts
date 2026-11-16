@@ -25,6 +25,12 @@ export function nativeInvocationAcknowledgement(options: {
 }): NonNullable<ExecutorContext["nativeInvocation"]> {
   return {
     requestId: options.guardId,
+    ...(options.binding.phase === "EXECUTOR_CREATE"
+      ? {
+          planCreate: (ownership: ResourceOwnership) =>
+            recordNativeCreatePlan({ ...options, ownership }),
+        }
+      : {}),
     acknowledge: async (fact) => {
       options.assertActive()
       const ownership = fact.inspection.ownership
@@ -115,6 +121,51 @@ export async function recordNativeStartPlan(options: {
   options.assertActive()
   const record = await options.journal.append({
     type: "native_invocation_planned",
+    supervisorInstanceId: options.supervisorInstanceId,
+    observedAt: options.nowIso(),
+    commandId: options.command.commandId,
+    attemptId: options.attempt.binding.attemptId,
+    operationId: options.attempt.binding.operationId,
+    authorityEpochId: options.attempt.binding.authorityEpochId,
+    executorKey: options.command.executorKey,
+    guardId: options.guardId,
+    nativeRequestId: options.guardId,
+    bindingInputChecksum: sha256Hex(canonicalJson(binding)),
+    actionChecksum: binding.actionChecksum,
+    commandInputChecksum: commandRequestHash(options.command),
+    ownership: options.ownership,
+  })
+  options.apply(record)
+  options.assertActive()
+}
+
+export async function recordNativeCreatePlan(options: {
+  journal: JournalPort<SupervisorJournalEvent>
+  supervisorInstanceId: string
+  nowIso: () => string
+  apply: (record: JournalRecord<SupervisorJournalEvent>) => void
+  attempt: AttemptState
+  command: StartCommand
+  ownership: ResourceOwnership
+  guardId: string
+  assertActive: () => void
+}): Promise<void> {
+  const planned = options.attempt.planned.get(options.command.executorKey)
+  if (
+    !planned ||
+    canonicalJson(planned) !== canonicalJson(options.ownership) ||
+    options.ownership.containerId !== undefined ||
+    options.ownership.kind !== "container" ||
+    options.attempt.resources.has(options.command.executorKey) ||
+    options.attempt.nativeStartIntents?.has(options.command.executorKey) ||
+    options.attempt.nativeAckGuards?.has(options.guardId)
+  )
+    throw new Error("original native create plan is unavailable")
+  const binding = executorActionBinding(options.attempt, options.command, "EXECUTOR_CREATE")
+  options.assertActive()
+  const record = await options.journal.append({
+    type: "native_invocation_planned",
+    phase: "EXECUTOR_CREATE",
     supervisorInstanceId: options.supervisorInstanceId,
     observedAt: options.nowIso(),
     commandId: options.command.commandId,

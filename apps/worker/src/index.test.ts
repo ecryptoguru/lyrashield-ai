@@ -20,6 +20,13 @@ import {
 import { trackActiveEngineProcess } from "./engine/runner"
 import { RECONCILIATION_IDLE_BACKSTOP_MS } from "./queue-reconciliation"
 
+const installedAuthority = vi.hoisted(() => ({ current: vi.fn().mockResolvedValue(true) }))
+vi.mock("./worker-authority-startup", () => ({
+  workerAuthorityStartup: { kind: "broker", adapter: { isCurrent: installedAuthority.current } },
+  legacyWorkerLifecycleEnabled: () => false,
+  initializeWorkerAuthorityStartup: vi.fn(),
+}))
+
 vi.mock("@lyrashield/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/config")>()
   return {
@@ -57,6 +64,7 @@ describe("worker readiness lifecycle", () => {
   afterEach(async () => {
     await removeWorkerReadiness()
     await clearWorkerActive()
+    installedAuthority.current.mockResolvedValue(true)
   })
 
   it("writes an ISO timestamp to the readiness marker with 0o600 permissions", async () => {
@@ -72,6 +80,13 @@ describe("worker readiness lifecycle", () => {
   it("removes the readiness marker without throwing when it is missing", async () => {
     await removeWorkerReadiness()
     await expect(removeWorkerReadiness()).resolves.toBeUndefined()
+  })
+
+  it("withdraws readiness when the protected authority is revoked or unavailable", async () => {
+    await refreshWorkerReadiness()
+    installedAuthority.current.mockResolvedValueOnce(false)
+    await expect(refreshWorkerReadiness()).rejects.toThrow("Worker authority is unavailable")
+    await expect(stat("/tmp/lyrashield-worker-ready")).rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it("paces deterministic idle worker polling and queue reconciliation", () => {

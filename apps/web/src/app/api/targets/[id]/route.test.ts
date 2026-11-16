@@ -37,15 +37,19 @@ const {
   }
 })
 const purgeAiResultCacheWorkspaceEntriesMock = vi.hoisted(() => vi.fn())
+const getDefaultBranchMock = vi.hoisted(() => vi.fn())
+const integrationFindFirstMock = vi.hoisted(() => vi.fn())
 vi.mock("@lyrashield/integrations", () => ({
   purgeAiResultCacheWorkspaceEntries: (...args: unknown[]) =>
     purgeAiResultCacheWorkspaceEntriesMock(...args),
+  getDefaultBranch: (...args: unknown[]) => getDefaultBranchMock(...args),
 }))
 
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     auditLog: { create: auditLogCreateMock },
     target: { findFirst: targetFindFirstMock, update: targetUpdateMock },
+    integration: { findFirst: integrationFindFirstMock },
   },
   withWorkspaceRLS: withWorkspaceRLSMock,
   softDeleteTarget: (...args: unknown[]) => softDeleteTargetMock(...args),
@@ -287,5 +291,113 @@ describe("PATCH /api/targets/[id]", () => {
     expect(checkScanUrlSafeMock).toHaveBeenCalledWith("https://metadata.example/openapi.json")
     expect(targetUpdateMock).not.toHaveBeenCalled()
     expect(auditLogCreateMock).not.toHaveBeenCalled()
+  })
+
+  it("rebinds a repository target only to an owned, reachable GitHub installation", async () => {
+    targetFindFirstMock
+      .mockResolvedValueOnce({ id: "t-1", type: "REPO", apiSpecUrl: null, branch: null })
+      .mockResolvedValueOnce({
+        id: "t-1",
+        type: "REPO",
+        repoFullName: "acme/api",
+        installationId: null,
+      })
+    integrationFindFirstMock.mockResolvedValueOnce({ externalId: "404" })
+    getDefaultBranchMock.mockResolvedValueOnce("main")
+
+    const response = await PATCH(
+      patchReq({ workspaceId: "ws-1", installationId: "404" }),
+      ctx("t-1")
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: { id: "t-1", type: "REPO", installationId: "404" },
+    })
+    expect(integrationFindFirstMock).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "ws-1",
+        type: "GITHUB",
+        externalId: "404",
+        status: "active",
+        deletedAt: null,
+      },
+      select: { externalId: true },
+    })
+    expect(getDefaultBranchMock).toHaveBeenCalledWith(404, "acme", "api")
+    expect(targetUpdateMock).toHaveBeenCalledWith({
+      where: { id: "t-1" },
+      data: { installationId: "404" },
+    })
+    expect(auditLogCreateMock).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        workspaceId: "ws-1",
+        action: "target.github_installation_rebound",
+        resourceId: "t-1",
+        metadata: { previousInstallationId: null, installationId: "404" },
+      }),
+    })
+  })
+
+  it("refuses an installation that is not an active integration of this workspace", async () => {
+    targetFindFirstMock
+      .mockResolvedValueOnce({ id: "t-1", type: "REPO", apiSpecUrl: null, branch: null })
+      .mockResolvedValueOnce({
+        id: "t-1",
+        type: "REPO",
+        repoFullName: "acme/api",
+        installationId: "101",
+      })
+    integrationFindFirstMock.mockResolvedValueOnce(null)
+
+    const response = await PATCH(
+      patchReq({ workspaceId: "ws-1", installationId: "999" }),
+      ctx("t-1")
+    )
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe("INSTALLATION_NOT_FOUND")
+    expect(getDefaultBranchMock).not.toHaveBeenCalled()
+    expect(targetUpdateMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses an installation that cannot reach the exact repository", async () => {
+    targetFindFirstMock
+      .mockResolvedValueOnce({ id: "t-1", type: "REPO", apiSpecUrl: null, branch: null })
+      .mockResolvedValueOnce({
+        id: "t-1",
+        type: "REPO",
+        repoFullName: "acme/api",
+        installationId: null,
+      })
+    integrationFindFirstMock.mockResolvedValueOnce({ externalId: "404" })
+    getDefaultBranchMock.mockRejectedValueOnce(new Error("Failed to get repo info: 404"))
+
+    const response = await PATCH(
+      patchReq({ workspaceId: "ws-1", installationId: "404" }),
+      ctx("t-1")
+    )
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe("INSTALLATION_REPOSITORY_ACCESS_DENIED")
+    expect(targetUpdateMock).not.toHaveBeenCalled()
+    expect(auditLogCreateMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses to bind a GitHub connection to a non-repository target", async () => {
+    targetFindFirstMock
+      .mockResolvedValueOnce({ id: "t-1", type: "API", apiSpecUrl: null, branch: null })
+      .mockResolvedValueOnce({ id: "t-1", type: "API", repoFullName: null, installationId: null })
+
+    const response = await PATCH(
+      patchReq({ workspaceId: "ws-1", installationId: "404" }),
+      ctx("t-1")
+    )
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe("INVALID_TARGET_TYPE")
+    expect(integrationFindFirstMock).not.toHaveBeenCalled()
+    expect(targetUpdateMock).not.toHaveBeenCalled()
   })
 })

@@ -10,18 +10,100 @@ import { ScanDispatchAuthorityError } from "./scan-dispatch-authority-error"
 import { projectSupervisorSnapshot } from "./scan-supervisor-receipt-ingestion-projection"
 import type { DispatchBrokerContext } from "./scan-dispatch-authority-broker-methods"
 import {
+  requireScanDispatchWorkerAssignment,
+  requireScanDispatchWorkerCleanup,
+  scanDispatchWorkerRequestOperation,
+} from "./scan-dispatch-worker-assignment"
+import {
   checkReceiptKeys,
   receiptFailure,
   verifyReceiptPage,
   type IngestedSupervisorRecord,
   type SupervisorReceiptAuthority,
 } from "./scan-supervisor-receipt-ingestion-verifier"
+import { readStoredDispatchCommand } from "./scan-dispatch-command-descriptor"
+import type { SupervisorReceiptCleanupScope } from "./scan-supervisor-receipt-ingestion-projection"
 
 type InstalledStream = {
   confirmedSequence: string
   originalHash: string
   wrapperHash: string
   headInputJson: string | null
+}
+
+async function bindWorkerOperationContext(client: pg.PoolClient, operationId: string) {
+  const result = await client.query<{ workspaceId: string }>(
+    'SELECT "workspaceId" FROM app.scan_preparation_context($1)',
+    [operationId]
+  )
+  const workspaceId = result.rows[0]?.workspaceId
+  if (!workspaceId)
+    throw new ScanDispatchAuthorityError("WORKER_GRANT_INVALID", "Worker authority is unavailable")
+  await client.query("SELECT set_config('app.current_workspace_id',$1,true)", [workspaceId])
+}
+
+async function workerReceiptAuthority(
+  client: pg.PoolClient,
+  authority: SupervisorReceiptAuthority,
+  operationId: string
+): Promise<SupervisorReceiptCleanupScope | undefined> {
+  await bindWorkerOperationContext(client, operationId)
+  try {
+    await requireScanDispatchWorkerAssignment(client, operationId)
+    return undefined
+  } catch (error) {
+    if (!(error instanceof ScanDispatchAuthorityError) || error.code !== "WORKER_GRANT_INVALID")
+      throw error
+  }
+  await requireScanDispatchWorkerCleanup(client, operationId)
+  const result = await client.query<{
+    attemptId: string
+    prepareJson: string
+    prepareChecksum: string
+    commandId: string
+    commandInputJson: string
+    commandInputChecksum: string
+  }>(
+    `SELECT a."attemptId",p."commandInputJson" AS "prepareJson",p."commandInputChecksum" AS "prepareChecksum",
+      c.id AS "commandId",c."commandInputJson",c."commandInputChecksum"
+     FROM "ScanDispatchAttempt" a JOIN "ScanDispatchOutbox" p ON p."operationId"=a."operationId"
+       AND p."attemptId"=a."attemptId" AND p."commandType"='PREPARE'
+     JOIN "ScanDispatchOutbox" c ON c."operationId"=a."operationId" AND c."attemptId"=a."attemptId"
+       AND c."commandType" IN ('STOP','RECONCILE')
+     WHERE a."operationId"=$1 AND a."workspaceId"=app.current_workspace_id()
+       AND a."authorityEpochId"=$2 AND a."authorityAcceptedAt" IS NOT NULL`,
+    [operationId, authority.authorityEpochId]
+  )
+  const attempts = new Set<string>(),
+    commands: string[] = []
+  for (const row of result.rows) {
+    const prepare = readStoredDispatchCommand(row.prepareJson, row.prepareChecksum)
+    const command = readStoredDispatchCommand(row.commandInputJson, row.commandInputChecksum)
+    if (
+      !prepare ||
+      prepare.type !== "PREPARE" ||
+      !command ||
+      !["STOP", "RECONCILE"].includes(command.type) ||
+      command.commandId !== row.commandId ||
+      !("attemptId" in command) ||
+      command.attemptId !== row.attemptId ||
+      prepare.attempt.attemptId !== row.attemptId ||
+      prepare.attempt.operationId !== operationId ||
+      prepare.attempt.authorityEpochId !== authority.authorityEpochId
+    )
+      throw new ScanDispatchAuthorityError(
+        "WORKER_GRANT_INVALID",
+        "Worker cleanup authority is unavailable"
+      )
+    attempts.add(row.attemptId)
+    commands.push(command.commandId)
+  }
+  if (attempts.size !== 1 || !commands.length)
+    throw new ScanDispatchAuthorityError(
+      "WORKER_GRANT_INVALID",
+      "Worker cleanup authority is unavailable"
+    )
+  return { attemptId: [...attempts][0]!, commandIds: commands }
 }
 
 async function installedStream(client: pg.PoolClient, authority: SupervisorReceiptAuthority) {
@@ -154,6 +236,11 @@ async function readPage(authority: SupervisorReceiptAuthority, cursor: Superviso
 
 async function ingestSnapshot(client: pg.PoolClient, authority: SupervisorReceiptAuthority) {
   checkReceiptKeys(authority)
+  const workerOperationId = scanDispatchWorkerRequestOperation()
+  if (workerOperationId !== undefined)
+    await receiptTransaction(client, async () => {
+      await workerReceiptAuthority(client, authority, workerOperationId)
+    })
   const lock = await client.query<{ held: boolean }>(
     "SELECT pg_try_advisory_lock(hashtextextended($1,0)) AS held",
     [`supervisor-receipts:${authority.streamId}`]
@@ -197,6 +284,9 @@ async function ingestSnapshot(client: pg.PoolClient, authority: SupervisorReceip
     if (final.records.length || final.hasMore) receiptFailure("SUPERVISOR_SNAPSHOT_CHANGED")
     await receiptTransaction(client, async () => {
       await acquireReceiptAuthorityGate(client)
+      if (workerOperationId !== undefined) {
+        await workerReceiptAuthority(client, authority, workerOperationId)
+      }
       const result = await client.query(
         `UPDATE "ScanSupervisorJournalStream" SET
         "confirmedSequence"=$2,"originalHash"=$3,"wrapperHash"=$4,"headInputJson"=$5,"updatedAt"=CURRENT_TIMESTAMP
@@ -236,13 +326,15 @@ async function ingestSnapshot(client: pg.PoolClient, authority: SupervisorReceip
 /** Optional protected installation; the public broker supplies no caller key or reader. */
 export function createSupervisorReceiptConsumer(
   installation: SupervisorReceiptAuthority,
-  lockOperation: DispatchBrokerContext["lockOperation"]
+  lockOperation: DispatchBrokerContext["lockOperation"],
+  cleanupLockOperation: DispatchBrokerContext["lockOperation"]
 ) {
   const authority = Object.freeze({ ...installation })
   const pool = new pg.Pool({
     ...createPgConnectionConfig(authority.connectionString),
     max: 1,
     connectionTimeoutMillis: 5000,
+    query_timeout: 15000,
     idleTimeoutMillis: 10000,
   })
   pool.on("error", () => undefined)
@@ -265,18 +357,30 @@ export function createSupervisorReceiptConsumer(
       }
     },
     async consume(operationId: unknown) {
+      const requestedOperation = scanDispatchWorkerRequestOperation()
+      if (requestedOperation !== undefined && requestedOperation !== operationId)
+        throw new ScanDispatchAuthorityError(
+          "WORKER_GRANT_INVALID",
+          "Worker authority is unavailable"
+        )
       const client = await pool.connect()
       let failed = true
       try {
         const snapshot = await ingestSnapshot(client, authority)
         const result = await receiptTransaction(client, async () => {
           await acquireReceiptAuthorityGate(client)
+          const workerOperationId = scanDispatchWorkerRequestOperation()
+          let cleanup: SupervisorReceiptCleanupScope | undefined
+          if (workerOperationId !== undefined) {
+            cleanup = await workerReceiptAuthority(client, authority, workerOperationId)
+          }
           return projectSupervisorSnapshot(
             client,
             authority,
             operationId,
             snapshot.sequence,
-            lockOperation
+            cleanup ? cleanupLockOperation : lockOperation,
+            cleanup
           )
         })
         failed = false

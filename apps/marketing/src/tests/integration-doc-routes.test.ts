@@ -117,7 +117,7 @@ describe("integration guide routes", () => {
 
     expect(kiroPage).toContain("Kiro's native Power path is the intended LyraShield integration")
     expect(kiroPage).toMatch(/Power distribution is still in\s+preparation/)
-    expect(kiroPage).toContain("@lyrashield/mcp@0.2.12")
+    expect(kiroPage).toContain("@lyrashield/mcp@0.2.13")
     expect(kiroPage).toContain("no public Power package to install yet")
     expect(pluginsPage).toMatch(/Kiro's\s+native Power distribution is in preparation/)
     expect(pluginsPage).toMatch(/guide\s+documents the MCP settings fallback/)
@@ -149,10 +149,10 @@ describe("integration guide routes", () => {
 
     expect(pluginsPage).toContain("https://www.npmjs.com/package/lyrashield/v/0.2.14")
     for (const client of ["claude-code", "cursor", "openai-codex", "github-copilot"]) {
-      expect(pluginsPage).not.toContain(`npx --yes lyrashield@0.2.14 install ${client} --dry-run`)
+      expect(pluginsPage).not.toContain(`npx --yes lyrashield@0.2.15 install ${client} --dry-run`)
     }
-    expect(pluginsPage).toContain("npx --yes lyrashield@0.2.14 install vscode --dry-run")
-    expect(pluginsPage).toContain("npx --yes lyrashield@0.2.14 install vscode</code>")
+    expect(pluginsPage).toContain("npx --yes lyrashield@0.2.15 install vscode --dry-run")
+    expect(pluginsPage).toContain("npx --yes lyrashield@0.2.15 install vscode</code>")
     expect(pluginsPage).toContain("marketplace listings remain pending review and public readback")
     expect(pluginsPage).not.toMatch(/npx\s+lyrashield\s+(?:install|init|uninstall|login)/)
     expect(pluginsPage).not.toMatch(/npx\s+lyrashield@latest/)
@@ -164,7 +164,7 @@ describe("integration guide routes", () => {
       "utf8"
     )
     expect(guide).toContain(".agents/mcp.json")
-    expect(guide).toContain("@lyrashield/mcp@0.2.12")
+    expect(guide).toContain("@lyrashield/mcp@0.2.13")
     expect(guide).toContain("static HTTP headers")
     expect(guide).not.toContain("Remote OAuth needs no local key")
     const manual = readFileSync(new URL("../../../../docs/user-guide.md", import.meta.url), "utf8")
@@ -179,13 +179,13 @@ describe("integration guide routes", () => {
       "utf8"
     )
     expect(preview).toContain("getPublishedCliInstallCommand")
-    expect(preview).toContain("lyrashield@0.2.14 login --oauth")
+    expect(preview).toContain("lyrashield@0.2.15 login --oauth")
     expect(preview).toContain("--dry-run")
     expect(preview).toContain("No matching CLI installer is recorded")
     expect(preview).toContain("preserving existing servers, comments")
     for (const id of ["vscode", "opencode", "gemini-cli", "copilot-cli"]) {
       expect(getPublishedCliInstallCommand(getAgent(id)!)).toBe(
-        `npx -y lyrashield@0.2.14 install ${id}`
+        `npx -y lyrashield@0.2.15 install ${id}`
       )
     }
     for (const id of ["cursor", "openai-codex", "picode"]) {
@@ -223,7 +223,7 @@ describe("integration guide routes", () => {
       "utf8"
     )
     expect(page).toContain("pi mcp login lyrashield")
-    expect(page).toContain("lyrashield@0.2.14 skills install pi --dry-run")
+    expect(page).toContain("lyrashield@0.2.15 skills install pi --dry-run")
     expect(page).toContain("does not imply a public Pi listing")
     expect(page).not.toContain("skills installer remain pending release")
   })

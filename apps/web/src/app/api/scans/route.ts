@@ -1,3 +1,4 @@
+import { resolveReviewChangesSource } from "./scan-repository-source"
 import { scanCreationConflict } from "../../../lib/scan-admission-conflicts"
 import { releaseUnstartedScanSlot } from "@lyrashield/db"
 import { withCookieMutation, authErrorResponse } from "../../../lib/api-auth"
@@ -37,7 +38,7 @@ import {
   enqueueScanJob,
   ScanWorkerUnavailableError,
 } from "../../../lib/queue"
-import { getBranchRefSha, getDefaultBranch, getMergeBaseSha } from "@lyrashield/integrations"
+import { resolveRepositoryScanSource } from "@lyrashield/integrations"
 import {
   checkFreeUrlScanRateLimit,
   checkScanCreateRateLimit,
@@ -50,20 +51,6 @@ import {
   resolveDelegatedScanAdmission,
   type DelegatedScanAdmission,
 } from "./scan-operation-admission"
-
-/** Full lowercase git object IDs (SHA-1 = 40, SHA-256 = 64) pass through as
- * immutable revisions; anything else resolves through the installation. */
-const FULL_GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
-
-async function resolveRepoRevision(
-  installationId: number,
-  owner: string,
-  repo: string,
-  ref: string
-): Promise<string> {
-  if (FULL_GIT_OBJECT_ID.test(ref)) return ref.toLowerCase()
-  return getBranchRefSha(installationId, owner, repo, ref)
-}
 
 /**
  * Concurrent in-flight reviews per workspace (shared with the scheduled-scan
@@ -118,7 +105,6 @@ async function post(request: Request) {
       operationClaim = {
         status: "NEW",
         operation: delegatedAdmission.operation,
-        admissionProof: delegatedAdmission.admission.admissionProof,
       }
     }
 
@@ -312,6 +298,7 @@ async function post(request: Request) {
     })
     if (ordinaryClaim.response) return ordinaryClaim.response
     if (ordinaryClaim.claim) operationClaim = ordinaryClaim.claim
+    delegatedScanAdmission ??= ordinaryClaim.admission
 
     // Spend controls, cheapest check first. The existing per-target guard below stops the
     // same target running twice; neither of these bounded a workspace fanning out across
@@ -474,28 +461,15 @@ async function post(request: Request) {
         })
       }
       try {
-        const headSha = await resolveRepoRevision(
+        const source = await resolveReviewChangesSource({
           installationId,
           repoOwner,
           repoName,
-          data.headRef ??
-            target.branch ??
-            (await getDefaultBranch(installationId, repoOwner, repoName))
-        )
-        const baseSha = await resolveRepoRevision(
-          installationId,
-          repoOwner,
-          repoName,
-          data.baseRef!
-        )
-        const mergeBaseSha = await getMergeBaseSha(
-          installationId,
-          repoOwner,
-          repoName,
-          baseSha,
-          headSha
-        )
-        if (!mergeBaseSha) {
+          headRef: data.headRef,
+          branch: target.branch,
+          baseRef: data.baseRef!,
+        })
+        if (!source) {
           return refuseScan({
             workspaceId,
             actorUserId,
@@ -508,11 +482,7 @@ async function post(request: Request) {
             workflow: data.workflow,
           })
         }
-        planSource = {
-          revision: headSha,
-          baseRevision: baseSha,
-          mergeBaseRevision: mergeBaseSha,
-        }
+        planSource = source
       } catch (resolveErr) {
         logger.warn("Failed to resolve Review Changes refs", {
           workspaceId,
@@ -531,27 +501,33 @@ async function post(request: Request) {
           workflow: data.workflow,
         })
       }
-    } else if (target.type === "REPO" && target.installationId) {
-      // Pin the head revision when the authorized integration can resolve it.
-      // REVIEW_TARGET keeps provenance honestly absent when the repository is
-      // unreachable rather than failing scan admission on a resolver outage.
-      const installationId = Number(target.installationId)
-      const repoOwner = target.repoOwner ?? target.repoFullName?.split("/")[0]
-      const repoName = target.repoName ?? target.repoFullName?.split("/")[1]
-      if (repoOwner && repoName) {
-        try {
-          const branch =
-            target.branch ?? (await getDefaultBranch(installationId, repoOwner, repoName))
-          planSource = {
-            revision: await resolveRepoRevision(installationId, repoOwner, repoName, branch),
-          }
-        } catch (resolveErr) {
-          logger.warn("Head revision resolution failed; plan records no source pin", {
-            workspaceId,
-            targetId: data.targetId,
-            error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr),
-          })
-        }
+    } else if (target.type === "REPO") {
+      try {
+        planSource = await resolveRepositoryScanSource(target, {
+          signal: request.signal,
+          readActiveConnection: () =>
+            prisma.integration.findFirst({
+              where: {
+                workspaceId,
+                type: "GITHUB",
+                externalId: String(target.installationId),
+                status: "active",
+                deletedAt: null,
+              },
+            }),
+        })
+      } catch {
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "ref_unresolved",
+          code: "SCAN_REF_UNRESOLVED",
+          message: "Could not resolve the repository to an immutable revision.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
     }
 

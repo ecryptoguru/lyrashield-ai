@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { randomUUID } from "node:crypto"
 import { prisma } from "./client"
 import { getSystemPrisma } from "./system-client"
@@ -13,6 +13,22 @@ import {
   getDelegatedScanAccess,
   withDelegatedReadAuthority,
 } from "./delegated-read-access"
+
+// Hoisting runs this guard before imports can construct a client from ambient
+// env. The fixture pairs the privileged DATABASE_SYSTEM_URL role with the
+// restricted DATABASE_URL role, so bind those two through the shared guard.
+await vi.hoisted(async () => {
+  const owner = process.env.DATABASE_SYSTEM_URL
+  const runtime = process.env.DATABASE_URL
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1" || !owner || !runtime) return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({
+    ...process.env,
+    DATABASE_URL: owner,
+    RLS_RUNTIME_DATABASE_URL: runtime,
+  })
+})
 
 const enabled =
   process.env.DELEGATED_PROVENANCE_POSTGRES_TEST === "1" &&

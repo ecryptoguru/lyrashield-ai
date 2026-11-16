@@ -55,6 +55,7 @@ function fixture({ failMigration = false, skipped = false, remote = false } = {}
       const testResults = [
         ["apps/worker/src/user-scan-slot.runtime.test.ts", 12],
         ["apps/worker/src/user-scan-slot.fixture.test.ts", 2],
+        ["apps/worker/src/scan-journey.runtime.test.ts", 2],
       ].map(([name, count]) => ({
         name,
         assertionResults: Array.from({ length: count }, () => ({

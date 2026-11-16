@@ -110,7 +110,7 @@ class FakeProviderGateway implements SupervisorPort {
     return this.grant
   }
 
-  async findGrantByRequest(): Promise<ProviderGrant | null> {
+  async findGrantByRequest(_requestId: string): Promise<ProviderGrant | null> {
     return this.lookupUnavailable ? null : this.grant
   }
 
@@ -639,6 +639,77 @@ describe("SupervisorService", () => {
       expect(inspectExecutor).not.toHaveBeenCalled()
       expect(lookupGrant).not.toHaveBeenCalled()
       expect(inspectGrant).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(["available", "missing", "foreign"] as const)(
+    "starts distinct paid executors only with the retained provider grant (%s)",
+    async (recovery) => {
+      class RequestBoundGateway extends FakeProviderGateway {
+        requestId: string | undefined
+        override async issueGrant(request: ProviderGrantRequest): Promise<ProviderGrant> {
+          this.requestId = request.grantRequestId
+          return super.issueGrant(request)
+        }
+        override async findGrantByRequest(requestId: string): Promise<ProviderGrant | null> {
+          return requestId === this.requestId ? super.findGrantByRequest(requestId) : null
+        }
+      }
+      const stored = await journal()
+      const gateway = new RequestBoundGateway()
+      const executor = new FakeExecutor()
+      const { service } = await serviceWith(stored, executor, gateway)
+      const base = prepareCommand()
+      const prepared = await service.execute({
+        ...base,
+        executors: [{ ...base.executors[0], key: "sandbox" }, base.executors[0]],
+      })
+      const sandbox = await service.execute({
+        type: "START_PAID",
+        commandId: "cmd-paid-sandbox",
+        attemptId: "attempt-1",
+        executorKey: "sandbox",
+        expectedReceiptHash: prepared.receipt.hash,
+      })
+      expect(sandbox.status).toBe("STARTED")
+      const { service: restarted } = await serviceWith(stored, executor, gateway)
+      if (recovery === "missing") gateway.lookupUnavailable = true
+      if (recovery === "foreign") gateway.grant = { ...gateway.grant!, grantId: "foreign-grant" }
+      const engine = await restarted.execute({
+        type: "START_PAID",
+        commandId: "cmd-paid-engine",
+        attemptId: "attempt-1",
+        executorKey: "engine",
+        expectedReceiptHash: sandbox.receipt.hash,
+      })
+      if (recovery !== "available") {
+        expect(engine.status).toBe("UNKNOWN")
+        expect(gateway.issueCalls).toBe(1)
+        expect(executor.startCalls).toBe(1)
+        return
+      }
+      expect(engine.status).toBe("STARTED")
+      expect(gateway.issueCalls).toBe(1)
+      expect(executor.startCalls).toBe(2)
+      const duplicate = await restarted.execute({
+        type: "START_PAID",
+        commandId: "cmd-paid-engine-again",
+        attemptId: "attempt-1",
+        executorKey: "engine",
+        expectedReceiptHash: engine.receipt.hash,
+      })
+      expect(duplicate.status).toBe("REJECTED")
+      expect(gateway.issueCalls).toBe(1)
+      expect(executor.startCalls).toBe(2)
+      const stopped = await restarted.execute({
+        type: "STOP",
+        commandId: "cmd-paid-stop",
+        attemptId: "attempt-1",
+        expectedReceiptHash: duplicate.receipt.hash,
+      })
+      expect(stopped.status).toBe("STOPPED")
+      expect(gateway.revokeCalls).toBe(1)
+      expect(executor.stopCalls).toBe(2)
     }
   )
 

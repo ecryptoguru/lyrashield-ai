@@ -1,3 +1,4 @@
+import { z } from "zod"
 /**
  * Closed durable dispatch-authority broker. Unconsumed foundation: no production
  * caller is wired to this module; see
@@ -50,6 +51,7 @@
 
 import { createId } from "@paralleldrive/cuid2"
 import pg from "pg"
+import type { ExecutorKey } from "@lyrashield/runtime-control"
 import { createPgConnectionConfig } from "./connection-config"
 import { createSupervisorReceiptConsumer } from "./scan-supervisor-receipt-ingestion"
 import type { SupervisorReceiptAuthority } from "./scan-supervisor-receipt-ingestion-verifier"
@@ -65,7 +67,15 @@ import {
   valueDigest,
 } from "./scan-dispatch-authority-broker-methods"
 import { startPaidDispatch } from "./scan-dispatch-authority-broker-start"
+import { createScanDispatchLifecycle } from "./scan-dispatch-lifecycle"
+import { selectPreparedWorkerStart, type WorkerDispatchInput } from "./scan-dispatch-worker-start"
 import type { ScanPreparationCompiler } from "./scan-dispatch-command-descriptor"
+import {
+  requireScanDispatchWorkerAssignment,
+  requireScanDispatchWorkerCleanup,
+  requireScanDispatchWorkerStage,
+  scanDispatchWorkerRequestOperation,
+} from "./scan-dispatch-worker-assignment"
 
 export type DispatchOperationState =
   | "QUEUED"
@@ -119,6 +129,7 @@ export type StartPaidDispatchInput = {
   workerInstanceId: string
   workerGrantId: string
   authorityEpochId: string
+  executorKey?: ExecutorKey
 }
 
 export type StartUnmeteredDispatchInput = StartPaidDispatchInput
@@ -150,7 +161,7 @@ export type StopDispatchResult = DispatchBrokerResult<{
 export type ReconcileDispatchInput = Omit<StopDispatchInput, "reasonCode">
 
 export type ReconcileDispatchResult = DispatchBrokerResult<{
-  state: "UNKNOWN"
+  state: "UNKNOWN" | "STOPPING"
   attemptId: string
   commandId: string
 }>
@@ -170,7 +181,10 @@ export { ScanDispatchAuthorityError }
 type BrokerOptions = {
   /** Protected installation only; separate restricted consumer credentials. */
   receiptAuthority?: SupervisorReceiptAuthority
+  attemptProofAuthority?: import("./scan-supervisor-receipt-ingestion-verifier").SupervisorAttemptProofAuthority
+  consumeReceipts?: (operationId: string) => Promise<unknown>
   connectionString: string
+  lifecycleConnectionString?: string
   maximumPoolSize?: number
   /** Internal installation only. This intent contract cannot execute work. */
   preparationAuthority?: "checked-intent-v1"
@@ -191,22 +205,42 @@ type LockedOperation = {
 async function runDispatchTransaction<T>(
   pool: pg.Pool,
   operationId: string,
-  work: (client: pg.PoolClient) => Promise<T>
+  work: (client: pg.PoolClient) => Promise<T>,
+  mode: "normal" | "stage" | "native" = "normal",
+  retainedCleanup = false
 ): Promise<TransactionOutcome<T & object>> {
   const client = await pool.connect()
   let commitAttempted = false
   let discardClient = false
   try {
+    if (retainedCleanup && mode !== "native") throw new Error("cleanup requires the native gate")
     await client.query("BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE")
     await client.query("SET LOCAL statement_timeout = '15s'")
     await client.query("SET LOCAL lock_timeout = '3s'")
     await client.query("SET LOCAL idle_in_transaction_session_timeout = '20s'")
     await client.query("SET LOCAL synchronous_commit = 'remote_apply'")
     await client.query("SET LOCAL timezone = 'UTC'")
+    if (mode === "stage") {
+      await client.query("SELECT app.require_scan_dispatch_stage_role()")
+      await client.query("SELECT pg_advisory_xact_lock_shared(1819234670,1)")
+    } else if (mode === "native") {
+      await client.query("SELECT app.require_scan_preparation_role()")
+      const held = await client.query("SELECT app.acquire_scan_preparation_gate() AS held")
+      if (held.rows[0]?.held !== true)
+        throw new ScanDispatchAuthorityError(
+          "PREPARATION_AUTHORITY_BUSY",
+          "Native lifecycle authority is busy"
+        )
+    }
     await bindScanPreparationContext(client, operationId)
+    if (mode === "stage") await requireScanDispatchWorkerStage(client, operationId)
+    if (retainedCleanup) await requireScanDispatchWorkerCleanup(client, operationId)
     const value = await work(client)
     if (typeof value !== "object" || value === null)
       throw new Error("dispatch broker transaction returned an invalid value")
+    if (mode === "stage") await requireScanDispatchWorkerStage(client, operationId)
+    else if (retainedCleanup) await requireScanDispatchWorkerCleanup(client, operationId)
+    else await requireScanDispatchWorkerAssignment(client, operationId)
     commitAttempted = true
     if ("authorityDeadlineAt" in value && value.authorityDeadlineAt instanceof Date) {
       const deadline =
@@ -251,7 +285,8 @@ async function runDispatchTransaction<T>(
 
 async function lockOperation(
   client: pg.PoolClient,
-  input: Pick<PrepareDispatchInput, "operationId" | "authorityEpochId">
+  input: Pick<PrepareDispatchInput, "operationId" | "authorityEpochId">,
+  retainedCleanup = false
 ): Promise<LockedOperation> {
   const preliminary = await client.query<LockedOperation>(
     `SELECT o."operationId", o."scanId", o."workspaceId", o."state"::text AS state,
@@ -267,7 +302,9 @@ async function lockOperation(
     throw new ScanDispatchAuthorityError("OPERATION_NOT_FOUND", "Dispatch operation not found")
 
   const epoch = await client.query(
-    'SELECT 1 FROM "ScanAuthorityEpoch" WHERE "id"=$1 AND "isOpen" FOR SHARE',
+    retainedCleanup
+      ? 'SELECT 1 FROM "ScanAuthorityEpoch" WHERE "id"=$1 FOR SHARE'
+      : 'SELECT 1 FROM "ScanAuthorityEpoch" WHERE "id"=$1 AND "isOpen" FOR SHARE',
     [input.authorityEpochId]
   )
   if (epoch.rowCount !== 1)
@@ -354,7 +391,13 @@ async function getDispatchStatus(pool: pg.Pool, operationId: string): Promise<Di
     if ("missing" in row) return { kind: "unknown", operationId, reasonCode: "STATUS_UNAVAILABLE" }
     if (!row) return { kind: "unknown", operationId, reasonCode: "STATUS_UNAVAILABLE" }
     return { kind: "available", ...row }
-  } catch {
+  } catch (error) {
+    if (
+      scanDispatchWorkerRequestOperation() !== undefined &&
+      error instanceof ScanDispatchAuthorityError &&
+      error.code === "WORKER_GRANT_INVALID"
+    )
+      throw error
     return { kind: "unknown", operationId, reasonCode: "STATUS_UNAVAILABLE" }
   }
 }
@@ -512,6 +555,13 @@ async function reconcileDispatch(
   }
 }
 
+/** Installed native authority only: authenticate global receipts privately. */
+export function createNativeSupervisorReceiptConsumer(authority: SupervisorReceiptAuthority) {
+  return createSupervisorReceiptConsumer(authority, lockOperation, (client, input) =>
+    lockOperation(client, input, true)
+  )
+}
+
 export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
   const pool = new pg.Pool({
     ...createPgConnectionConfig(options.connectionString),
@@ -540,45 +590,100 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
     ): Promise<TransactionOutcome<T & object>> => runDispatchTransaction(pool, operationId, work),
     lockOperation,
   }
+  const stagePool = options.lifecycleConnectionString
+    ? new pg.Pool({
+        ...createPgConnectionConfig(options.lifecycleConnectionString),
+        max: 2,
+        idleTimeoutMillis: 10_000,
+        connectionTimeoutMillis: 5_000,
+      })
+    : undefined
+  stagePool?.on("error", () => undefined)
+  stagePool?.on("connect", (client) => client.on("error", () => undefined))
+  const proofAuthority = options.attemptProofAuthority ?? options.receiptAuthority
+  const lifecycle = proofAuthority?.readAttemptProof
+    ? createScanDispatchLifecycle({
+        context: ctx,
+        authority: proofAuthority,
+        nativeTransaction: <T>(operationId: string, work: (client: pg.PoolClient) => Promise<T>) =>
+          runDispatchTransaction(pool, operationId, work, "native"),
+        cleanupTransaction: <T>(operationId: string, work: (client: pg.PoolClient) => Promise<T>) =>
+          runDispatchTransaction(pool, operationId, work, "native", true),
+        cleanupLockOperation: (client, input) => lockOperation(client, input, true),
+        stageTransaction: stagePool
+          ? <T>(operationId: string, work: (client: pg.PoolClient) => Promise<T>) =>
+              runDispatchTransaction(stagePool, operationId, work, "stage")
+          : undefined,
+      })
+    : undefined
 
   const receiptConsumer = options.receiptAuthority
-    ? createSupervisorReceiptConsumer(options.receiptAuthority, lockOperation)
+    ? createSupervisorReceiptConsumer(options.receiptAuthority, lockOperation, (client, input) =>
+        lockOperation(client, input, true)
+      )
     : undefined
 
   return {
+    async dispatchPrepared(input: WorkerDispatchInput) {
+      if (!ctx.preparationAuthority || !lifecycle)
+        throw new ScanDispatchAuthorityError(
+          "PREPARATION_AUTHORITY_CLOSED",
+          "Checked intent execution is closed"
+        )
+      const selected = await selectPreparedWorkerStart(ctx, input)
+      if (selected.kind !== "committed") return selected
+      if (!selected.value.input)
+        return { kind: "idle" as const, operationId: input.operationId, attemptId: input.attemptId }
+      return lifecycle.start(selected.value.input, selected.value.kind)
+    },
     consumeSupervisorReceipts: (operationId: unknown) =>
-      receiptConsumer
-        ? receiptConsumer.consume(operationId)
-        : Promise.reject(
-            new ScanDispatchAuthorityError(
-              "SUPERVISOR_CONSUMER_NOT_INSTALLED",
-              "Protected supervisor receipt consumer is not installed"
-            )
-          ),
+      options.consumeReceipts
+        ? options.consumeReceipts(
+            z
+              .string()
+              .min(3)
+              .max(192)
+              .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+              .parse(operationId)
+          )
+        : receiptConsumer
+          ? receiptConsumer.consume(operationId)
+          : Promise.reject(
+              new ScanDispatchAuthorityError(
+                "SUPERVISOR_CONSUMER_NOT_INSTALLED",
+                "Protected supervisor receipt consumer is not installed"
+              )
+            ),
     prepare: (input: PrepareDispatchInput) => prepareDispatch(ctx, input),
     startPaid: (input: StartPaidDispatchInput) =>
       ctx.preparationAuthority
-        ? Promise.reject(
-            new ScanDispatchAuthorityError(
-              "PREPARATION_AUTHORITY_CLOSED",
-              "Checked intent execution is closed"
+        ? lifecycle
+          ? lifecycle.start(input, "PAID")
+          : Promise.reject(
+              new ScanDispatchAuthorityError(
+                "PREPARATION_AUTHORITY_CLOSED",
+                "Checked intent execution is closed"
+              )
             )
-          )
         : startPaidDispatch(ctx, input),
     startUnmetered: (input: StartUnmeteredDispatchInput) =>
       ctx.preparationAuthority
-        ? Promise.reject(
-            new ScanDispatchAuthorityError(
-              "PREPARATION_AUTHORITY_CLOSED",
-              "Checked intent execution is closed"
+        ? lifecycle
+          ? lifecycle.start(input, "UNMETERED")
+          : Promise.reject(
+              new ScanDispatchAuthorityError(
+                "PREPARATION_AUTHORITY_CLOSED",
+                "Checked intent execution is closed"
+              )
             )
-          )
         : startUnmeteredDispatch(ctx, input),
-    stop: (input: StopDispatchInput) => stopDispatch(pool, input),
-    reconcile: (input: ReconcileDispatchInput) => reconcileDispatch(pool, input),
+    stop: (input: StopDispatchInput) =>
+      lifecycle ? lifecycle.cleanup(input, "STOP") : stopDispatch(pool, input),
+    reconcile: (input: ReconcileDispatchInput) =>
+      lifecycle ? lifecycle.cleanup(input, "RECONCILE") : reconcileDispatch(pool, input),
     status: (operationId: string) => getDispatchStatus(pool, operationId),
     async close(): Promise<void> {
-      await Promise.all([pool.end(), receiptConsumer?.close()])
+      await Promise.all([pool.end(), stagePool?.end(), receiptConsumer?.close()])
     },
   }
 }

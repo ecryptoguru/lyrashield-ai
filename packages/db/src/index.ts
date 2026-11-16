@@ -535,9 +535,11 @@ export {
   type ProtectedSupervisorReceiptSource,
 } from "./scan-supervisor-receipt-source"
 export { readRetainedSupervisorCommand } from "./scan-supervisor-command-history"
+export { createScanSupervisorJournalAuthority } from "./scan-supervisor-journal-authority"
 export {
   SupervisorCommandHistoryReader,
   createDisposableSupervisorCommandHistoryReader,
   createSupervisorCommandHistoryReader,
 } from "./scan-supervisor-command-history-reader"
 export type { SupervisorCommandHistoryInput } from "./scan-supervisor-command-history"
+export { createScanNativeOriginAuthorityVerifier } from "./scan-native-origin-authority-reader"

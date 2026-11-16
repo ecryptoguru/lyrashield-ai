@@ -17,6 +17,7 @@ import { revalidateDashboardAggregates } from "../../../../lib/cache"
 import { checkScanUrlSafe } from "../../../../lib/ssrf"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError } from "../../../../lib/api-response"
+import { rebindTargetInstallation } from "../../../../lib/target-installation-rebind"
 
 async function patch(request: Request, { params }: { params: Promise<{ id: string }> }) {
   let body: unknown
@@ -108,6 +109,15 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
     )
     if (!target) {
       return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+    }
+
+    if ("installationId" in parsed.data) {
+      return rebindTargetInstallation({
+        workspaceId,
+        actorUserId: session.userId,
+        targetId: id,
+        installationId: parsed.data.installationId,
+      })
     }
 
     const { apiSpecUrl } = parsed.data
