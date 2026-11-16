@@ -1,6 +1,20 @@
 import { withWorkspaceRLS } from "./rls"
-import type { SpendScanInput } from "./scan-spend-projection"
 import { decimalString, planFacts } from "./scan-spend-facts"
+
+interface SpendScanInput {
+  id: string
+  workspaceId: string
+  createdById: string
+  sponsorAccountId: string | null
+  status: string
+  accountingVersion: number | null
+  accountingSettledAt: Date | null
+  billedCostUsd: unknown
+  actualCostCents: number | null
+  createdAt: Date
+  updatedAt: Date
+  executionPlan: unknown
+}
 
 export interface CustomerScanUsageProjection {
   state: "reconciled" | "pending" | "not_applicable" | "unavailable"
