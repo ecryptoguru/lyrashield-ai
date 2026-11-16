@@ -432,7 +432,7 @@ Fourteen controls review browser-registered agent tools: annotation/behavior mis
 
 The shared static analyzer supports the browser-local Security Lab, bounded repository analysis, CLI diff workflows and a guarded Action subset. The subset is not the entire catalog executed against the whole repository.
 
-The opt-in [runtime checker](./webmcp-runtime.md) observes authorized fixture behavior separately. One browser observation never silently upgrades a static finding into independent verification or establishes behavior across every client.
+The opt-in runtime checker (`scripts/webmcp-runtime-check.mjs`; its earlier guide `docs/webmcp-runtime.md` was removed 2026-11-16 and is recoverable from Git history) observes authorized fixture behavior separately. One browser observation never silently upgrades a static finding into independent verification or establishes behavior across every client.
 
 Dashboard WebMCP preparation tools can fill a form without starting a scan. This is separate from delegated hosted MCP workflows that can authorize paid operations.
 

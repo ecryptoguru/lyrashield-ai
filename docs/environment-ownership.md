@@ -19,6 +19,8 @@ When adding a literal runtime read, declare an application schema field or revie
 
 ## Engine evidence rollout controls
 
+Revisions in the rollout order below were recorded 2026-11-02; refresh them against [PRD §8](../PRD.md#8-current-production-evidence) before any activation.
+
 The worker forwards these controls from the central schema's validated startup configuration. Changes require a worker restart; scan requests, profiles, chat and relay context cannot select them. Values other than the exact strings below fail configuration loading before engine/model work. These settings belong to the trusted worker deployment environment, never tenant settings or public/browser variables.
 
 | `LYRASHIELD_RUN_RECORD_V1_1` | `LYRASHIELD_PENDING_HTTP_EVIDENCE` | Engine writer behavior                            |

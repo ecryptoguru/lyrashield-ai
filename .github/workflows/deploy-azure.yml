@@ -275,7 +275,7 @@ jobs:
             else
               echo "The read-only verifier selects the ordinary rollout only for a complete durable-claims/2 baseline, or the first maintenance rollout only for the recognized durable-claims/1 source and exact pre-cutover schema. Mixed, partial, unknown, or unreadable states stop before image build."
             fi
-            echo "See [the automated cutover runbook](https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/reviews/2026-09-30/webhook-production-cutover.md)."
+            echo "See [the durable webhook-track UTC schema cutover runbook](https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/operations.md#durable-webhook-track-utc-schema-cutover)."
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
