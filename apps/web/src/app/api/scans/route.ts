@@ -105,7 +105,6 @@ async function post(request: Request) {
       operationClaim = {
         status: "NEW",
         operation: delegatedAdmission.operation,
-        admissionProof: delegatedAdmission.admission.admissionProof,
       }
     }
 
@@ -298,22 +297,8 @@ async function post(request: Request) {
       delegated: Boolean(delegatedScanAdmission),
     })
     if (ordinaryClaim.response) return ordinaryClaim.response
-    if (ordinaryClaim.claim) {
-      operationClaim = ordinaryClaim.claim
-      if (
-        ordinaryClaim.claim.status === "NEW" &&
-        ordinaryClaim.claim.admissionProof &&
-        session.oauth?.connectionId &&
-        session.oauth.authorizationVersion
-      ) {
-        delegatedScanAdmission = {
-          operationId: ordinaryClaim.claim.operation.id,
-          admissionProof: ordinaryClaim.claim.admissionProof,
-          connectionId: session.oauth.connectionId,
-          authorizationVersion: session.oauth.authorizationVersion,
-        }
-      }
-    }
+    if (ordinaryClaim.claim) operationClaim = ordinaryClaim.claim
+    delegatedScanAdmission ??= ordinaryClaim.admission
 
     // Spend controls, cheapest check first. The existing per-target guard below stops the
     // same target running twice; neither of these bounded a workspace fanning out across
