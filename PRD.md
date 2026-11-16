@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current production evidence: 2026-11-16 record (released `2026-11-15T22:16Z`) — product revision `637a178ae589a4545224afb1e13c4b694fefd679`, released by run `43764099383`; worker image `sha256:138d435fd5b17d819bd8136ec43d8d0856434f0d93067bd9275c15749d44ea70` on engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`; marketing serves the same build revision. This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
+> Current production evidence: 2026-11-16 03:55 UTC — product `679021c069789ad2060f60d38b1d8261fd56b9d6`, release `43796371038`, worker `sha256:2bbe9ace4dead4f92f07198c039a6adc40a70baacd53aeff36dd65196b49432b`, engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`. See §8 for prior paid scan identities and fresh hosted acceptance. This file owns product strategy, accepted scope, release gates, and ordered backlog; running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
@@ -404,7 +404,32 @@ Detailed file and package mapping: [codebase.md](./codebase.md).
 
 ## 8. Current production evidence
 
+### Hosted acceptance and client provenance — 2026-11-16 03:55 UTC
+
+[PR #1147](https://github.com/ecryptoguru/lyrashield-ai/pull/1147) merged as `679021c069789ad2060f60d38b1d8261fd56b9d6` after all three required checks passed on exact head `767563520fa13cf54404a0962e5f733168d16f79` ([CI 43794901096](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43794901096): 10,220 core tests passed, 387 skipped; 49 browser and 289 portable-browser checks passed). [Release 43796371038](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43796371038) succeeded. Independent readback confirmed app `0000523`, scanner `0000497` and proxy `0000363` healthy at 100%; web digest `sha256:7ce12256fbfaa1bf930f9cc82fa31dd2940679bd033fb95bff34a5366ab34694`, proxy digest `sha256:a7954502dadfc589965d437f300d85b511ca344c01b59090a1c7d36733c17221`, worker digest `sha256:2bbe9ace4dead4f92f07198c039a6adc40a70baacd53aeff36dd65196b49432b`, product `679021c069789ad2060f60d38b1d8261fd56b9d6` and unchanged engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`. App health, scanner readiness and scan readiness returned 200.
+
+The founder-authorized fresh Standard and Deep scans ran before this client repair, on the then-current deployed product `637a178ae589a4545224afb1e13c4b694fefd679` and worker `sha256:138d435fd5b17d819bd8136ec43d8d0856434f0d93067bd9275c15749d44ea70`, against OnboardingAI2 revision `8e854ab9eba4526f2cfeb9d6bdfe7884ba5af4fe`:
+
+| Profile  | Scan                        | Elapsed    | Model requests | Agent-minutes | Manifest SHA-256                                                   |
+| -------- | --------------------------- | ---------- | -------------- | ------------- | ------------------------------------------------------------------ |
+| Standard | `cmwimj28q000b01fulxtbij96` | 15m21.656s | 295            | 16            | `6b5c1bb56ed83436b1fad8d34295792b72e0de8ce6e03e7f4b7cc4193df3fe66` |
+| Deep     | `cmwin4r8f000i01fu4y3p7kaf` | 12m17.052s | 340            | 39            | `5fb938730101232f06ba13b5596b39d5069a3621f2ff577c618803ff4b6f80b0` |
+
+Both completed with checksum `MATCH` and exactly one account-owned usage receipt each. The Standard idempotency replay returned the same scan and operation. The dependency inventory remains incomplete at the unchanged limit of 500; completion does not establish full coverage. An operator mistakenly selected repository SAFE for a later proof scan; it aliases model-backed QUICK. Scan `cmwiq9ncc000201k52u8rnmjd` was cancelled after about a minute, retaining 17 model requests and one 2-minute usage receipt. Added consumption is 16 + 39 + 2 = 57; total use is 123 of 4,500, leaving 4,377. No live checkout/refund or billing-system acceptance was performed.
+
+The shared repair binds ordinary OAuth admission's existing authenticated operation proof into the immutable scan provenance and returns `connect_required` for hosted API-key mutations. New deterministic URL SAFE scan `cmwiqcx4x000901k576f3xqfx` completed in 2.295s on product `679021c069789ad2060f60d38b1d8261fd56b9d6`, with native operation `cmwiqcwyq000801k59ha3b8an`, matching stored authorization-plan hash and manifest `01c0d96a6f9d9398d662ac496a46565f5f5ee7e8cfbb87da3fae70571486561a` (`MATCH`). Hosted MCP full quality read succeeded. No model execution or usage receipt exists for this URL scan. Historical scans missing original provenance remain restricted; no backfill weakens the boundary. SDK, CLI, MCP, WebMCP and plugin source compatibility checks passed (190 tests).
+
+Hosted tenant/credential qualification passed 20 assertions: a temporary read-only key could read only its workspace, including when its real owner belonged to both workspaces; foreign scan reads and scoped database reads disclosed nothing; REST writes/key management were denied; MCP reads worked and mutations returned `connect_required`; deactivated creator membership and revoked keys were rejected by REST and MCP. No denied mutation created a scan or usage. The individual target GET endpoint is unsupported (405), and is not counted as a tenancy proof. The temporary key was revoked and workspace archived, with lifecycle audit events.
+
+Public report sharing passed 11 assertions on report `cmwimm3vu000f01fuj7yjhby7`: valid anonymous minimal projection, absent private execution/storage/credential fields, refusal of missing/wrong/cross-report tokens, immediate revocation including conditional requests, and retained owner access. The token existed only in process memory and was revoked. No production scorecard was created.
+
+A packed CLI scan-resume check found `Dynamic require of "assert" is not supported`; the CLI ESM banner now supplies Node's standard `createRequire`. The repaired bundle successfully resumed the same URL scan without creating another scan. CLI `0.2.15` is a verified release candidate; npm still publishes `0.2.14` until authenticated publication and readback. MCP `0.2.12`, Agent Plugin `0.1.31` and current public CLI pins are retained until publication; no new tool/schema/package change was needed for the shared server repair.
+
+Broker authority (#7) remains deferred and unqualified. Physical-device/screen-reader, individual IDE/native marketplace activation and financial qualification are outside this bounded acceptance. These receipts supersede earlier pending paid, tenant/credential and report-sharing statements; they are not universal launch qualification.
+
 ### Current deployed production — 2026-11-16 record (released 2026-11-15 22:16 UTC)
+
+> Earlier release tuple; the later deployed tuple and acceptance receipts above supersede its pending qualification statements.
 
 [PR #1143](https://github.com/ecryptoguru/lyrashield-ai/pull/1143) merged as `637a178ae589a4545224afb1e13c4b694fefd679` after `SCA & Secret Scan`, `Lint, Typecheck, Test & Build` and `Pinned Engine / Worker Contract` passed on its exact head `acf00c1e4875666ff5b22c6bc031210a034b2ba4`. [Release 43764099383](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43764099383) succeeded end to end: source qualification, exact-image build, disposable worker rehearsal, production migration preparation, Container Apps rollout, marketing deploy, worker promotion and smoke. The optional `queue` check failed on that head; it is a known optional failure and is not relabeled successful.
 
@@ -515,7 +540,7 @@ PR #386 keeps the earlier bounded scan unchanged and corrects future coverage: p
 
 ## 9. Release status
 
-Cloud launch is not yet qualified. Production runs `637a178ae` and was verified on 2026-11-16 (§8); the Desktop app has no signed release. The controller/broker admission path stays closed until installed production authority and protected fleet/journal evidence exist. Earlier controlled PHP scans remain historical; the deterministic Composer fix-and-retest chain is now proven end to end, while paid model-backed acceptance, hosted tenant/credential acceptance, physical-device/screen-reader qualification and financial readiness remain open.
+Cloud launch is not yet qualified. Production runs `679021c0` (§8); the Desktop app has no signed release. The controller/broker admission path stays closed until installed production authority and protected journal evidence exist. Controlled Standard/Deep, deterministic Composer fix/retest, hosted tenant/credential/MCP and temporary report-sharing receipts now pass within their recorded scope. CLI 0.2.15 publication, individual native client/marketplace activation, physical-device/screen-reader and financial qualification remain open.
 
 ### Delivered features and bounded proofs
 

@@ -11,10 +11,33 @@ import {
   EXPECTED_MCP_TOOLS,
   inspectTarball,
   parseArgs,
+  smokePackage,
   validatePublishedManifest,
 } from "./verify-agent-distribution.mjs"
 
 const runFile = promisify(execFile)
+
+describe("packed CLI scan loader", () => {
+  it.each([
+    ["fetch failed", true],
+    ['Dynamic require of "assert" is not supported', false],
+  ])("checks the scan command beyond help/version: %s", async (error, expected) => {
+    await mkdir(path.join(workDir, "bin"))
+    await writeFile(
+      path.join(workDir, "bin/cli.mjs"),
+      `if (process.argv.includes("scan")) {
+        console.log(JSON.stringify({ ok: false, error: ${JSON.stringify(error)} }));
+        process.exitCode = 4;
+      } else { console.log("0.2.15"); }`
+    )
+    const checks = await smokePackage(
+      workDir,
+      { name: "lyrashield", version: "0.2.15", bin: { lyrashield: "bin/cli.mjs" } },
+      { repoDir: workDir, workspaceDirs: new Map(), install: false }
+    )
+    expect(checks.find(({ id }) => id === "smoke:cli-scan-loader")?.ok).toBe(expected)
+  })
+})
 
 let workDir
 
