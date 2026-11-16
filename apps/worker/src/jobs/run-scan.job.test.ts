@@ -1,5 +1,14 @@
 import { resolve } from "node:path"
-import { randomUUID } from "node:crypto"
+import { randomUUID, createHash } from "node:crypto"
+import {
+  verifyNativeEngineResult,
+  type NativeEngineOutput,
+  type NativeEngineResultProof,
+} from "./run-scan/native-engine-result"
+const nativeCleanupProof = vi.hoisted(() => vi.fn())
+vi.mock("@lyrashield/db/src/scan-dispatch-cleanup-proof", () => ({
+  readScanDispatchCleanupProof: nativeCleanupProof,
+}))
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { logger } from "@lyrashield/logger"
 import * as coldDatabaseEpoch from "../cold-database-epoch"
@@ -21,14 +30,23 @@ const completeUsage = vi.hoisted(() => ({
   long_cache_write_input_tokens: 0,
   long_output_tokens: 0,
 }))
-const systemScanFindUnique = vi.hoisted(() => vi.fn())
+const scopedScanFindFirst = vi.hoisted(() => vi.fn())
 vi.mock("../engine/deterministic-retest", () => ({
   authorizeDeterministicRetest: vi.fn(),
   checkoutDeterministicRetest: vi.fn(),
+  RetestBaselineUnavailableError: class RetestBaselineUnavailableError extends Error {
+    readonly reason =
+      "The original scan does not provide a complete deterministic baseline, so this retest cannot confirm or deny the fix."
+    constructor() {
+      super("Deterministic retest baseline provenance is incomplete")
+      this.name = "RetestBaselineUnavailableError"
+    }
+  },
 }))
 import {
   authorizeDeterministicRetest,
   checkoutDeterministicRetest,
+  RetestBaselineUnavailableError,
 } from "../engine/deterministic-retest"
 
 const configMocks = vi.hoisted(() => ({
@@ -90,6 +108,7 @@ vi.mock("@lyrashield/db", async () => {
         findFirst: vi.fn(),
       },
       scan: {
+        findFirst: scopedScanFindFirst,
         findUnique: vi.fn(),
         update: vi.fn(),
         updateMany: vi.fn(),
@@ -102,11 +121,6 @@ vi.mock("@lyrashield/db", async () => {
         }),
       },
     },
-    getSystemPrisma: vi.fn(() => ({
-      scan: {
-        findUnique: systemScanFindUnique,
-      },
-    })),
     get updateUnclaimedScanStatus() {
       return this.updateScanStatus
     },
@@ -259,6 +273,7 @@ vi.mock("../engine/result-integrity", () => ({
   persistResultManifest: vi.fn().mockResolvedValue(undefined),
   markRetestsRunning: vi.fn().mockResolvedValue(undefined),
   completeRetestsForScan: vi.fn().mockResolvedValue(undefined),
+  inconclusiveRetestsForScan: vi.fn().mockResolvedValue(undefined),
   failTerminalRetestsForScan: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -302,6 +317,7 @@ import {
   engineRoutingCoverageIssue,
   persistEngineUsageCheckpoint,
   processScanJob,
+  processNativeScanResult,
   resolveScanRuntimeBudgetMs,
   resolveScannerPhaseTimeoutMs,
   shouldRecordAgentMinutes,
@@ -321,6 +337,7 @@ import {
   failTerminalRetestsForScan,
   completeRetestsForScan,
   persistResultManifest,
+  inconclusiveRetestsForScan,
 } from "../engine/result-integrity"
 import { resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import { verifyRelayGrant } from "@lyrashield/security"
@@ -389,7 +406,7 @@ function mockStoredScanAuthority(
     executionPlanHash: string | null
   }> = {}
 ) {
-  systemScanFindUnique.mockResolvedValue({
+  scopedScanFindFirst.mockResolvedValue({
     id: "scan-1",
     workspaceId: "ws-1",
     targetId: "target-1",
@@ -1321,6 +1338,131 @@ describe("processScanJob", () => {
     } as never)
   })
 
+  it("finalizes authenticated stopped native output through the shared manifest without another engine or capacity claim", async () => {
+    const sourceRevision = "c".repeat(40)
+    const plan = buildScanExecutionPlan({
+      targetType: "REPO",
+      mode: "SAFE",
+      source: { revision: sourceRevision },
+    })
+    mockStoredScanAuthority({
+      accountingVersion: 2,
+      startedAt: new Date(Date.now() - 60000),
+      executionPlan: plan,
+      executionPlanHash: computeScanExecutionPlanHash(plan),
+    })
+    vi.mocked(prisma.scan.findUnique).mockResolvedValue({
+      status: "RUNNING",
+      createdById: "user-1",
+      events: [{ id: "actual-existing-billable-marker" }],
+    } as never)
+    const bytesFor = (text: string) => {
+      const value = Buffer.from(text)
+      return {
+        bytes: value.length,
+        checksum: createHash("sha256").update(value).digest("hex"),
+        base64: value.toString("base64"),
+      }
+    }
+    const output: NativeEngineOutput = {
+      schema: "lyrashield-native-engine-output/1",
+      action: {
+        phase: "EXECUTOR_CREATE",
+        operationId: "operation-one",
+        attemptId: "attempt-one",
+        workspaceId: "ws-1",
+        scanId: "scan-1",
+        authorityEpochId: "epoch-one",
+        authorityRevision: 1,
+        authorityChecksum: "d".repeat(64),
+        actionChecksum: "e".repeat(64),
+        commandId: "command-one",
+        executorKey: "engine",
+      },
+      guardId: "guard-one",
+      ownership: {
+        kind: "container",
+        executorKey: "engine",
+        ownershipId: "ownership-one",
+        containerId: "f".repeat(64),
+      },
+      productRevision: "a".repeat(40),
+      engineRevision: "b".repeat(40),
+      engineImageDigest: `sha256:${"1".repeat(64)}`,
+      startedAt: new Date(Date.now() - 60000).toISOString(),
+      finishedAt: new Date().toISOString(),
+      exitCode: 0,
+      source: {
+        revision: sourceRevision,
+        stagedTreeDigest: createHash("sha256").digest("hex"),
+        directories: [],
+        files: [],
+      },
+      artifacts: {
+        "run.json": bytesFor(
+          JSON.stringify({
+            run_id: "scan-1",
+            run_name: "scan-1",
+            status: "completed",
+            llm_usage: completeUsage,
+          })
+        ),
+        "vulnerabilities.json": bytesFor("[]"),
+        "coverage.json": "ABSENT",
+        "threat_model.json": "ABSENT",
+        "http_exchanges.json": "ABSENT",
+      },
+    }
+    const bytes = Buffer.from(JSON.stringify(output))
+    const proof: NativeEngineResultProof = {
+      schema: "lyrashield-root-worker-result-proof/1",
+      authority: {},
+      action: output.action,
+      guardId: output.guardId,
+      ownership: output.ownership,
+      sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+      totalBytes: bytes.length,
+    }
+    const native = verifyNativeEngineResult(bytes, proof, {
+      operationId: output.action.operationId,
+      attemptId: output.action.attemptId,
+      workspaceId: "ws-1",
+      scanId: "scan-1",
+      authorityEpochId: output.action.authorityEpochId,
+      productRevision: output.productRevision,
+      engineRevision: output.engineRevision,
+      sourceRevision,
+    })
+    nativeCleanupProof.mockResolvedValue({
+      operationId: output.action.operationId,
+      attemptId: output.action.attemptId,
+      authorityEpochId: output.action.authorityEpochId,
+      noBillableWork: false,
+      billingDisposition: "settlement_required",
+    })
+    await expect(processNativeScanResult(mockJob, native)).resolves.toMatchObject({
+      status: "completed",
+    })
+    expect(runEngine).not.toHaveBeenCalled()
+    expect(cleanupEngineWorkspace).not.toHaveBeenCalled()
+    expect(reserveScanCapacity).not.toHaveBeenCalled()
+    expect(runScannerOrchestrator).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceDir: native.engineResult.sourceCheckoutPath })
+    )
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        engineExecution: expect.objectContaining({
+          sourceRevision,
+          imageDigest: output.engineImageDigest,
+        }),
+      })
+    )
+    expect(vi.mocked(persistResultManifest).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(completeRetestsForScan).mock.invocationCallOrder[0]!
+    )
+    expect(recordAgentMinutes).toHaveBeenCalledWith("ws-1", "scan-1", 60000, expect.anything())
+  })
+
   it.each(["budget_exceeded", "unknown_failure"])(
     "never bills terminal %s even with affirmative provider usage",
     async (reason) => {
@@ -1701,7 +1843,7 @@ describe("processScanJob", () => {
 
   it("releases a successful second attempt with a retained pre-provider timestamp", async () => {
     mockStoredScanAuthority({ accountingVersion: 2 })
-    const authority = await systemScanFindUnique()
+    const authority = await scopedScanFindFirst()
     const persisted: {
       status: string
       startedAt: Date | null
@@ -1715,7 +1857,7 @@ describe("processScanJob", () => {
       stopped: false,
       slotHeld: true,
     }
-    systemScanFindUnique.mockImplementation(async () => ({
+    scopedScanFindFirst.mockImplementation(async () => ({
       ...authority,
       startedAt: persisted.startedAt,
     }))
@@ -1846,6 +1988,47 @@ describe("processScanJob", () => {
     vi.mocked(authorizeDeterministicRetest).mockRejectedValueOnce(new Error("Invalid lineage"))
     await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "failed" })
     expect(runEngine).not.toHaveBeenCalled()
+  })
+
+  it("treats a recorded retest baseline refusal as terminal, uncharged and unretried", async () => {
+    mockStoredScanAuthority({ determinismMode: "targeted_scanner" })
+    vi.mocked(authorizeDeterministicRetest).mockRejectedValueOnce(
+      new RetestBaselineUnavailableError()
+    )
+    const retryingJobFixture = {
+      id: "scan-1",
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      },
+    }
+    const retryingJob = retryingJobFixture as never
+
+    await expect(processScanJob(retryingJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: "RETEST_BASELINE_UNAVAILABLE",
+      errorMessage: expect.stringContaining("does not provide a complete deterministic baseline"),
+    })
+    // The inconclusive receipt is retained and charged work never starts.
+    expect(inconclusiveRetestsForScan).toHaveBeenCalledWith(
+      "scan-1",
+      expect.stringContaining("complete deterministic baseline")
+    )
+    expect(runEngine).not.toHaveBeenCalled()
+    expect(checkoutDeterministicRetest).not.toHaveBeenCalled()
+    expect(recordAgentMinutes).not.toHaveBeenCalled()
+    // A terminal refusal must not be requeued into another attempt.
+    expect(requeueScanForRetry).not.toHaveBeenCalled()
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({ errorCategory: "RETEST_BASELINE_UNAVAILABLE" })
+    )
   })
   it("completes successfully when engine returns exit code 0", async () => {
     const result = await processScanJob(mockJob)
@@ -3986,11 +4169,9 @@ describe("processScanJob", () => {
 
     expect(result.status).toBe("failed")
     expect(result.errorCategory).toBe("INVALID_JOB")
-    expect(updateScanStatus).toHaveBeenCalledWith(
-      "scan-1",
-      "FAILED",
-      expect.objectContaining({ errorCategory: "INVALID_JOB" }),
-      "ws-1"
+    expect(updateScanStatus).not.toHaveBeenCalled()
+    expect(scopedScanFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "scan-1", workspaceId: "ws-evil" } })
     )
     expect(runEngine).not.toHaveBeenCalled()
   })
@@ -4051,7 +4232,7 @@ describe("processScanJob", () => {
       errorCategory: "INVALID_JOB",
     })
 
-    expect(systemScanFindUnique).not.toHaveBeenCalled()
+    expect(scopedScanFindFirst).not.toHaveBeenCalled()
     expect(updateScanStatus).not.toHaveBeenCalled()
     expect(runEngine).not.toHaveBeenCalled()
   })

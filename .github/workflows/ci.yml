@@ -34,7 +34,7 @@ jobs:
 
       - name: Setup pnpm
         if: needs.changes.outputs.docs-only != 'true'
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -92,6 +92,7 @@ jobs:
       database-services: ${{ steps.classify.outputs.database-services }}
       desktop-frontend-tests: ${{ steps.classify.outputs.desktop-frontend-tests }}
       egress-image: ${{ steps.classify.outputs.egress-image }}
+      controller-image: ${{ steps.classify.outputs.controller-image }}
       worker-image: ${{ steps.classify.outputs.worker-image }}
       web-image: ${{ steps.classify.outputs.web-image }}
       web-component: ${{ steps.classify.outputs.web-component }}
@@ -191,7 +192,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -247,8 +248,11 @@ jobs:
           node .github/scripts/verify-pnpm-pin.mjs
           pnpm lint:ratchet-baselines
 
+      # The ops suite discovers these four tests too (run-all-tests.mjs), so
+      # they run here only when the ops suite is not selected; shared changes
+      # with runtime coverage select the app-checks ops suite instead.
       - name: Test protected release controller and distribution matrix
-        if: needs.changes.outputs.tooling-only == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.tooling-only == 'true'
         run: >-
           node --test
           .github/scripts/tests/paired-runtime-workflow.test.mjs
@@ -362,7 +366,7 @@ jobs:
           done
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -416,6 +420,26 @@ jobs:
         if: needs.changes.outputs.database-tests == 'true'
         run: pnpm --filter @lyrashield/db migrate:deploy
 
+      # Production (Supabase) keeps pgcrypto in the `extensions` schema while the
+      # disposable database above keeps it in `public`. Replay the whole chain
+      # into a production-shaped database so an ordering assumption that only
+      # holds for `public` cannot reach a fresh Supabase environment again.
+      # Deliberately no `?schema=public`: that would pin search_path to `public`
+      # and hide the extension schema production actually resolves against.
+      - name: Replay migrations into a production-shaped database
+        if: needs.changes.outputs.database-tests == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec "ci-postgres" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE lyrashield_supabase_shape'
+          docker exec "ci-postgres" psql -U lyrashield -d lyrashield_supabase_shape -v ON_ERROR_STOP=1 \
+            -c 'CREATE SCHEMA extensions' \
+            -c 'CREATE EXTENSION pgcrypto SCHEMA extensions' \
+            -c 'ALTER DATABASE lyrashield_supabase_shape SET search_path = "$user", public, extensions'
+          DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_supabase_shape" \
+            pnpm --filter @lyrashield/db migrate:deploy
+
       # These tests intentionally reject arbitrary DBs and use fixed local
       # database names as a destructive-action guard. Keep each fixture DB
       # disposable and migrate it from the checked-out schema.
@@ -460,7 +484,7 @@ jobs:
             -c "CREATE ROLE app_runtime_ci LOGIN PASSWORD 'runtime-ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS" \
             -c "GRANT CONNECT ON DATABASE lyrashield TO app_runtime_ci" \
             -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
-            -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('PlatformAdminElevation', 'PlatformAdminChallengeLimit', 'PlatformAdminAudit', 'billing_reconciliation_state', 'ScanAuthorityEpoch', 'ScanWorkerInstanceGrant', 'ScanDispatchOperation', 'ScanQueueOutbox', 'ScanDispatchAttempt', 'ScanDispatchOutbox', 'ScanDispatchStart', 'ScanSupervisorReceipt', 'ScanSupervisorJournalStream', 'ScanSupervisorJournalRecord','ScanExecutionActionIntent','ScanExecutionInvocationGuard','ScanExecutionInvocationResolution', 'ScanPhysicalExecution', 'ScanPhysicalExecutionTransition', 'ScanDispatchReleaseReceipt') LOOP EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO app_runtime_ci', item.tablename); END LOOP; FOR item IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO app_runtime_ci', item.sequencename); END LOOP; END \$\$;" \
+            -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('PlatformAdminElevation', 'PlatformAdminChallengeLimit', 'PlatformAdminAudit', 'billing_reconciliation_state', 'ScanAuthorityEpoch', 'ScanWorkerInstanceGrant', 'ScanDispatchOperation', 'ScanQueueOutbox', 'ScanDispatchAttempt', 'ScanDispatchWorkerAssignment', 'ScanDispatchLifecycleProof', 'ScanDispatchOutbox', 'ScanDispatchStart', 'ScanSupervisorReceipt', 'ScanSupervisorJournalStream', 'ScanSupervisorJournalRecord','ScanExecutionActionIntent','ScanExecutionInvocationGuard','ScanExecutionInvocationResolution', 'ScanPhysicalExecution', 'ScanPhysicalExecutionTransition', 'ScanDispatchReleaseReceipt') LOOP EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO app_runtime_ci', item.tablename); END LOOP; FOR item IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO app_runtime_ci', item.sequencename); END LOOP; END \$\$;" \
             -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci" \
             -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci" \
             -c "GRANT EXECUTE ON FUNCTION app.enqueue_integration_config_deletion_task(text, text, text) TO app_runtime_ci"
@@ -476,7 +500,7 @@ jobs:
               -c "GRANT CONNECT ON DATABASE ${database} TO app_runtime_ci"
             docker exec "ci-postgres" psql -U lyrashield -d "$database" -v ON_ERROR_STOP=1 \
               -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
-              -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('PlatformAdminElevation', 'PlatformAdminChallengeLimit', 'PlatformAdminAudit', 'billing_reconciliation_state', 'ScanAuthorityEpoch', 'ScanWorkerInstanceGrant', 'ScanDispatchOperation', 'ScanQueueOutbox', 'ScanDispatchAttempt', 'ScanDispatchOutbox', 'ScanDispatchStart', 'ScanSupervisorReceipt', 'ScanSupervisorJournalStream', 'ScanSupervisorJournalRecord','ScanExecutionActionIntent','ScanExecutionInvocationGuard','ScanExecutionInvocationResolution', 'ScanPhysicalExecution', 'ScanPhysicalExecutionTransition', 'ScanDispatchReleaseReceipt') LOOP EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO app_runtime_ci', item.tablename); END LOOP; FOR item IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO app_runtime_ci', item.sequencename); END LOOP; END \$\$;" \
+              -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('PlatformAdminElevation', 'PlatformAdminChallengeLimit', 'PlatformAdminAudit', 'billing_reconciliation_state', 'ScanAuthorityEpoch', 'ScanWorkerInstanceGrant', 'ScanDispatchOperation', 'ScanQueueOutbox', 'ScanDispatchAttempt', 'ScanDispatchWorkerAssignment', 'ScanDispatchLifecycleProof', 'ScanDispatchOutbox', 'ScanDispatchStart', 'ScanSupervisorReceipt', 'ScanSupervisorJournalStream', 'ScanSupervisorJournalRecord','ScanExecutionActionIntent','ScanExecutionInvocationGuard','ScanExecutionInvocationResolution', 'ScanPhysicalExecution', 'ScanPhysicalExecutionTransition', 'ScanDispatchReleaseReceipt') LOOP EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO app_runtime_ci', item.tablename); END LOOP; FOR item IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO app_runtime_ci', item.sequencename); END LOOP; END \$\$;" \
               -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci" \
               -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci" \
               -c "GRANT EXECUTE ON FUNCTION app.enqueue_integration_config_deletion_task(text, text, text) TO app_runtime_ci"
@@ -489,7 +513,7 @@ jobs:
           set -euo pipefail
           docker exec -e PGPASSWORD=runtime-ci-only "ci-postgres" \
             psql -h 127.0.0.1 -U app_runtime_ci -d lyrashield -v ON_ERROR_STOP=1 \
-            -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT DISTINCT c.table_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE' AND c.column_name IN ('workspaceId', 'accountId') AND c.table_name NOT IN ('ScanAuthorityEpoch', 'ScanWorkerInstanceGrant', 'ScanDispatchOperation', 'ScanQueueOutbox', 'ScanDispatchAttempt', 'ScanDispatchOutbox', 'ScanDispatchStart', 'ScanSupervisorReceipt', 'ScanSupervisorJournalStream', 'ScanSupervisorJournalRecord','ScanExecutionActionIntent','ScanExecutionInvocationGuard','ScanExecutionInvocationResolution', 'ScanPhysicalExecution', 'ScanPhysicalExecutionTransition', 'ScanDispatchReleaseReceipt') LOOP EXECUTE format('SELECT 1 FROM public.%I LIMIT 0', item.table_name); RAISE NOTICE 'runtime SELECT smoke passed for %', item.table_name; END LOOP; END \$\$;"
+            -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT DISTINCT c.table_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE' AND c.column_name IN ('workspaceId', 'accountId') AND c.table_name NOT IN ('ScanAuthorityEpoch', 'ScanWorkerInstanceGrant', 'ScanDispatchOperation', 'ScanQueueOutbox', 'ScanDispatchAttempt', 'ScanDispatchWorkerAssignment', 'ScanDispatchLifecycleProof', 'ScanDispatchOutbox', 'ScanDispatchStart', 'ScanSupervisorReceipt', 'ScanSupervisorJournalStream', 'ScanSupervisorJournalRecord','ScanExecutionActionIntent','ScanExecutionInvocationGuard','ScanExecutionInvocationResolution', 'ScanPhysicalExecution', 'ScanPhysicalExecutionTransition', 'ScanDispatchReleaseReceipt') LOOP EXECUTE format('SELECT 1 FROM public.%I LIMIT 0', item.table_name); RAISE NOTICE 'runtime SELECT smoke passed for %', item.table_name; END LOOP; END \$\$;"
           docker exec -e PGPASSWORD=runtime-ci-only "ci-postgres" \
             psql -h 127.0.0.1 -U app_runtime_ci -d lyrashield -v ON_ERROR_STOP=1 \
             -c "DO \$\$ BEGIN IF has_table_privilege(current_user, 'public.billing_reconciliation_state', 'SELECT') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'INSERT') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'UPDATE') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'DELETE') THEN RAISE EXCEPTION 'app_runtime_ci must not access billing_reconciliation_state'; END IF; END \$\$;" \
@@ -534,8 +558,11 @@ jobs:
         timeout-minutes: 8
         run: node .github/scripts/run-user-scan-slot-runtime.mjs "$RUNNER_TEMP/user-scan-slot.json"
 
+      # The core suite already runs this contract when it is selected (app
+      # runtime changes select database-tests). Run it standalone only when
+      # core is not selected; presentation-only web changes still need it.
       - name: Web presentation contracts
-        if: needs.changes.outputs.app == 'true'
+        if: needs.changes.outputs.app == 'true' && needs.changes.outputs.database-tests != 'true'
         run: pnpm exec vitest run --maxWorkers=2 apps/web/src/app/mobile-shell.contract.test.ts
 
       - name: Target admission concurrency with disposable PostgreSQL
@@ -798,7 +825,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -1035,7 +1062,7 @@ jobs:
   container-build:
     name: Container image build (no push)
     needs: changes
-    if: needs.changes.outputs.web-image == 'true' || needs.changes.outputs.worker-image == 'true' || needs.changes.outputs.egress-image == 'true'
+    if: needs.changes.outputs.web-image == 'true' || needs.changes.outputs.worker-image == 'true' || needs.changes.outputs.egress-image == 'true' || needs.changes.outputs.controller-image == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -1051,7 +1078,7 @@ jobs:
       # deploy-azure.yml so the PR gate cannot drift from production. Do not
       # bump the pin here.
       - name: Read pinned engine revision
-        if: needs.changes.outputs.worker-image == 'true'
+        if: needs.changes.outputs.worker-image == 'true' || needs.changes.outputs.controller-image == 'true'
         id: engine
         shell: bash
         run: |
@@ -1120,6 +1147,48 @@ jobs:
           push: false
           cache-from: type=gha,scope=container-build-egress-proxy
           cache-to: type=gha,mode=max,scope=container-build-egress-proxy
+
+      # The three control-plane roles share one Dockerfile base but are separate
+      # digest-pinned images. Building them here keeps the release package path
+      # exercised on every change to their sources.
+      - name: Build broker image (no push)
+        if: needs.changes.outputs.controller-image == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: controller
+          push: false
+          build-args: |
+            PRODUCT_REVISION=${{ github.sha }}
+            ENGINE_REVISION=${{ steps.engine.outputs.revision }}
+          cache-from: type=gha,scope=container-build-controller
+          cache-to: type=gha,mode=max,scope=container-build-controller
+
+      - name: Build supervisor image (no push)
+        if: needs.changes.outputs.controller-image == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: supervisor
+          push: false
+          build-args: |
+            PRODUCT_REVISION=${{ github.sha }}
+            ENGINE_REVISION=${{ steps.engine.outputs.revision }}
+          cache-from: type=gha,scope=container-build-controller
+          cache-to: type=gha,mode=max,scope=container-build-controller
+
+      - name: Build provider-gateway image (no push)
+        if: needs.changes.outputs.controller-image == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: provider-gateway
+          push: false
+          build-args: |
+            PRODUCT_REVISION=${{ github.sha }}
+            ENGINE_REVISION=${{ steps.engine.outputs.revision }}
+          cache-from: type=gha,scope=container-build-controller
+          cache-to: type=gha,mode=max,scope=container-build-controller
 
   desktop-rust:
     name: Desktop Rust (cargo)
@@ -1192,7 +1261,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.

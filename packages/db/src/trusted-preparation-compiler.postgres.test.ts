@@ -1,7 +1,7 @@
 import pg from "pg"
 import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { z } from "zod"
 import { createScanDispatchAuthorityBroker } from "./scan-dispatch-authority-broker"
 import { createTrustedPreparationCompiler } from "./trusted-preparation-compiler"
@@ -15,6 +15,18 @@ import {
   preparationInput,
 } from "../scripts/tests/scan-preparation-fixture"
 import { queueFixtureWorker } from "../scripts/tests/queue-outbox-fixture"
+
+// Hoisting runs this guard before imports can construct a client from ambient
+// env. Bind the fixture's privileged DATABASE_URL role to its restricted
+// preparation broker role through the shared disposable-pair guard.
+await vi.hoisted(async () => {
+  const runtime = process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1" || !runtime) return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({ ...process.env, RLS_RUNTIME_DATABASE_URL: runtime })
+})
+
 const enabled = process.env.LYRA_PREPARATION_MANAGED_DISPOSABLE_PROOF === "1"
 const configSchema = z
   .object({

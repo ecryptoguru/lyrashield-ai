@@ -1,4 +1,9 @@
-import { notifyScanFailed } from "../notifications"
+import {
+  recordScannerCompletion,
+  notifyTerminalScanFailure,
+} from "./run-scan/scan-completion-events"
+import { readNativeCleanupProof, assertVerifiedNativeResult } from "./run-scan/native-cleanup-proof"
+import { type VerifiedNativeEngineResult } from "./run-scan/native-engine-result"
 import { readExecutionPolicy, failScanWithTimeout } from "./run-scan/execution-policy"
 import {
   prepareScanCapacity,
@@ -21,7 +26,6 @@ import {
 } from "@lyrashield/config"
 import type { checkoutDeterministicRetest } from "../engine/deterministic-retest"
 
-import { summarizeVibeSecurityCoverage } from "@lyrashield/security"
 import { executeScanTarget, resolveEngineTerminalError } from "./run-scan/execution"
 import { createEngineMinuteMeter, type ScanTerminalError } from "./run-scan/settlement"
 import {
@@ -40,7 +44,6 @@ import { resolveScanProfile, type UrlScanProfile } from "@lyrashield/types"
 import { prepareScanExecution } from "./run-scan/preparation"
 import { interpretExitCode, resolveEngineProfile, type EngineRunResult } from "../engine/runner"
 import type { TargetType } from "../engine/command-builder"
-import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { markRetestsRunning } from "../engine/result-integrity"
 import { type ScanJobData, type ScanJobResult } from "../types"
@@ -52,8 +55,10 @@ import {
   finalizeExecutionDenial,
   executorProvenStopped,
   readScanTerminalState,
+  persistScanFailure,
 } from "./run-scan/lifecycle-guards"
 import { resumePendingScanFinalization } from "./run-scan/pending-finalization"
+import { classifyScanFailure } from "./run-scan/terminal-failure"
 import {
   imageDigest,
   isTimeoutError,
@@ -81,10 +86,33 @@ export {
 }
 
 export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Promise<ScanJobResult> {
+  return processStoredScanJob(job)
+}
+
+/** Only a root-bound native archive may resume already-dispatched work. */
+export async function processNativeScanResult(
+  job: Job<ScanJobData, ScanJobResult>,
+  native: VerifiedNativeEngineResult
+): Promise<ScanJobResult> {
+  assertVerifiedNativeResult(native)
+  try {
+    return await processStoredScanJob(job, native)
+  } finally {
+    native.cleanup()
+  }
+}
+
+async function processStoredScanJob(
+  job: Job<ScanJobData, ScanJobResult>,
+  native?: VerifiedNativeEngineResult
+): Promise<ScanJobResult> {
   const authority = await verifyScanJobAuthority(job)
   if (!authority.ok) return authority.result
   const { data, scanRecord, workspaceId, executionPlan } = authority
   const { scanId, targetId, goal, mode, policyId } = data
+  const nativeCleanup = native
+    ? await readNativeCleanupProof(native, workspaceId, scanId, executionPlan)
+    : null
   const elapsedScanMs = scanElapsedClock(scanRecord.startedAt)
 
   // Wrap the entire job in workspace context so the Prisma client extension's
@@ -103,7 +131,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     let execution: Awaited<ReturnType<typeof executeScanTarget>> | undefined
     let executorReturned = false
     let noBillableWork = true
-    let billingDisposition: ScanBillingDisposition | undefined
+    let billingDisposition: ScanBillingDisposition | undefined = nativeCleanup?.billingDisposition
     let recoveringPreviousExecution = Boolean(scanRecord.startedAt)
     let urlProfile: UrlScanProfile | undefined
     let engineProfile: ReturnType<typeof resolveEngineProfile> | undefined
@@ -117,13 +145,17 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         workspaceId,
         targetId,
       })
-      if (resumedFinalization) {
+      if (
+        resumedFinalization &&
+        !(native && resumedFinalization.errorCategory === "BILLABLE_PHASE_INTERRUPTED")
+      ) {
         recoveringPreviousExecution = true
         contended = resumedFinalization.errorCategory === "BILLABLE_PHASE_INTERRUPTED"
         return resumedFinalization
       }
 
       const preparation = await prepareScanExecution({
+        ...(native ? { executorAlreadyStopped: true as const } : {}),
         scanId,
         targetId,
         goal,
@@ -212,41 +244,56 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
       if (!admission.ok) return admission.result
 
-      await prepareScanCapacity({
-        accountingVersion: scanRecord.accountingVersion,
-        workspaceId,
-        scanId,
-        engineBacked,
-        deterministicRetest,
-        scanRuntimeBudgetMs,
-      })
+      if (!native)
+        await prepareScanCapacity({
+          accountingVersion: scanRecord.accountingVersion,
+          workspaceId,
+          scanId,
+          engineBacked,
+          deterministicRetest,
+          scanRuntimeBudgetMs,
+        })
       await updateUnclaimedScanStatus(scanId, "RUNNING" as ScanStatus)
       await markRetestsRunning(scanId)
-      execution = await executeScanTarget({
-        accountingVersion: scanRecord.accountingVersion,
-        scanId,
-        workspaceId,
-        goal,
-        mode,
-        focus: job.data.focus,
-        target,
-        policy,
-        policyMaxBudgetUsd,
-        scanRuntimeBudgetMs,
-        elapsedScanMs,
-        isScanCancelled,
-        markGlobalScanTimeout: () => {
-          globalScanTimeoutReached = true
-        },
-        markBillablePhaseStarted: () => {
-          billablePhaseStarted = true
-        },
-        deterministicRetest,
-        engineBacked,
-        urlEngineBacked,
-        scanProfile,
-        executionPlan,
-      })
+      if (native) {
+        native.verifySource()
+        billablePhaseStarted = true
+        const profile = resolveEngineProfile(mode)
+        execution = {
+          ok: true,
+          engineResult: native.engineResult,
+          engineProfile: profile,
+          engineModel: profile.model,
+          maxBudgetUsd: executionPlan!.limits.maxBudgetUsd,
+          engineStartedAtMs: native.startedAtMs,
+          capacityLimited: false,
+        }
+      } else
+        execution = await executeScanTarget({
+          accountingVersion: scanRecord.accountingVersion,
+          scanId,
+          workspaceId,
+          goal,
+          mode,
+          focus: job.data.focus,
+          target,
+          policy,
+          policyMaxBudgetUsd,
+          scanRuntimeBudgetMs,
+          elapsedScanMs,
+          isScanCancelled,
+          markGlobalScanTimeout: () => {
+            globalScanTimeoutReached = true
+          },
+          markBillablePhaseStarted: () => {
+            billablePhaseStarted = true
+          },
+          deterministicRetest,
+          engineBacked,
+          urlEngineBacked,
+          scanProfile,
+          executionPlan,
+        })
       executorReturned = executorProvenStopped(execution, engineBacked, deterministicRetest)
       if (!execution.ok) {
         // noBillableWork is still true. Only an acknowledged claim may finalize as its owner.
@@ -291,6 +338,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         !engineBacked ||
         deterministicRetest ||
         !hasObservedScanWork(scanId, exitInterpretation.status, runRecord)
+      if (nativeCleanup && !nativeCleanup.noBillableWork) noBillableWork = false
       const engineWorkObserved =
         engineBacked &&
         shouldRecordAgentMinutes(scanId, exitInterpretation.status, runRecord, { cancelled })
@@ -302,8 +350,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // Deep/Custom scans consume 3× minutes (applied inside recordAgentMinutes).
       // Billing outcome (founder-confirmed 2026-08-29): failed scans are never
       // billed; cancelled scans bill elapsed time only (no 1-minute floor).
-      const engineWallClockMs =
-        engineStartedAtMs === null ? 0 : Math.max(1, Date.now() - engineStartedAtMs)
+      const engineWallClockMs = native
+        ? native.finishedAtMs - native.startedAtMs
+        : engineStartedAtMs === null
+          ? 0
+          : Math.max(1, Date.now() - engineStartedAtMs)
       let agentMinuteTerminalError: ScanTerminalError | null = null
       const meterEngineRun = createEngineMinuteMeter({
         scanId,
@@ -344,9 +395,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               ...(runRecord?.reasoning_effort
                 ? { reasoningEffort: runRecord.reasoning_effort }
                 : {}),
-              image: env.LYRASHIELD_IMAGE || null,
-              ...(imageDigest(env.LYRASHIELD_IMAGE)
-                ? { imageDigest: imageDigest(env.LYRASHIELD_IMAGE) }
+              image: native
+                ? `ghcr.io/ecryptoguru/lyrashield-sandbox@${native.engineImageDigest}`
+                : env.LYRASHIELD_IMAGE || null,
+              ...(native || imageDigest(env.LYRASHIELD_IMAGE)
+                ? { imageDigest: native?.engineImageDigest ?? imageDigest(env.LYRASHIELD_IMAGE) }
                 : {}),
               ...(runRecord?.engine_version ? { engineVersion: runRecord.engine_version } : {}),
               ...(runRecord?.prompt_bundle_hash
@@ -486,12 +539,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         urlProfile,
       })
 
+      native?.verifySource()
       const triageOverlay = await runEngineTriageOverlay({
         scanId,
         scope: { workspaceId, targetId: target.id, targetType: target.type },
         sponsorAccountId: scanRecord.sponsorAccountId ?? scanRecord.createdById,
         mode,
         deterministicRetest,
+        allowEngineDispatch: !native,
         agentMinuteTerminalError,
         hasGlobalScanTimeout,
         isScanCancelled,
@@ -511,48 +566,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       costReconciled = triageOverlay.costReconciled
       reconciliationReason = triageOverlay.reconciliationReason
 
-      try {
-        await addScanEvent(
-          scanId,
-          "scanners_complete",
-          "info",
-          `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, url=${orchestratorResult.urlFindings.length}, agent_config=${orchestratorResult.agentConfigFindings.length}, sast=${orchestratorResult.sastFindings.length}, iac=${orchestratorResult.iacFindings.length}, ml_supply_chain=${orchestratorResult.mlSupplyChainFindings.length}, ai_app_security=${orchestratorResult.aiAppSecurityFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
-          {
-            engine: orchestratorResult.engineFindings.length,
-            sca: orchestratorResult.scaFindings.length,
-            secrets: orchestratorResult.secretsFindings.length,
-            url: orchestratorResult.urlFindings.length,
-            agentConfig: orchestratorResult.agentConfigFindings.length,
-            sast: orchestratorResult.sastFindings.length,
-            iac: orchestratorResult.iacFindings.length,
-            mlSupplyChain: orchestratorResult.mlSupplyChainFindings.length,
-            aiAppSecurity: orchestratorResult.aiAppSecurityFindings.length,
-            falsePositivesFiltered: orchestratorResult.filteredFalsePositives,
-            stats: orchestratorResult.stats,
-          }
-        )
-      } catch (eventErr) {
-        log.warn("Failed to persist scanners_complete event", {
-          scanId,
-          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-        })
-      }
-
-      const coverage = summarizeVibeSecurityCoverage(orchestratorResult.allFindings)
-      try {
-        await addScanEvent(
-          scanId,
-          "coverage_contract",
-          "info",
-          `Vibe Security 50: ${coverage.reviewControlsRequested} code/URL review controls requested where applicable; ${coverage.matchedControlRanks.length} produced findings; ${coverage.evidenceControlsRequired} require deployment or human evidence`,
-          coverage
-        )
-      } catch (eventErr) {
-        log.warn("Failed to persist coverage_contract event", {
-          scanId,
-          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-        })
-      }
+      const coverage = await recordScannerCompletion(scanId, orchestratorResult)
 
       const grace = finalizationGrace()
       const finalization = await finalizeScanLifecycle({
@@ -600,19 +614,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         return terminalResult ?? { status: "completed", summary: scanSummary }
       }
       if (terminalResult) {
-        if (terminalResult.errorCategory !== "BUDGET_EXCEEDED") {
-          try {
-            await notifyScanFailed(workspaceId, scanId, terminalResult.errorMessage)
-          } catch (notificationError) {
-            log.warn("Failed to send scan failure notification", {
-              scanId,
-              error:
-                notificationError instanceof Error
-                  ? notificationError.message
-                  : String(notificationError),
-            })
-          }
-        }
+        await notifyTerminalScanFailure(
+          workspaceId,
+          scanId,
+          terminalResult.errorCategory,
+          terminalResult.errorMessage
+        )
         return terminalResult
       }
 
@@ -642,18 +649,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
       if (error instanceof ScanCapacityWaitingError && !billablePhaseStarted)
         await deferScanCapacityWait(job, workspaceId, scanId)
-      const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
       const timedOut = globalScanTimeoutReached || isTimeoutError(error)
-      const finalErrorCategory = timedOut
-        ? "TIMEOUT"
-        : isTerminalPrerequisiteFailure
-          ? "EVIDENCE_STORAGE_CONFIGURATION"
-          : "INTERNAL_ERROR"
-      const finalErrorMessage = timedOut
-        ? timeoutErrorMessage(scanRuntimeBudgetMs)
-        : isTerminalPrerequisiteFailure
-          ? "Evidence storage is not configured"
-          : "The scan could not be completed because an internal service failed."
+      const { finalErrorCategory, finalErrorMessage, isTerminalPrerequisiteFailure } =
+        classifyScanFailure(error, { timedOut, scanRuntimeBudgetMs })
 
       log.error("Scan job failed", {
         scanId,
@@ -728,20 +726,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         throw error
       }
 
-      try {
-        const update = billablePhaseStarted ? updateScanStatus : updateUnclaimedScanStatus
-        await update(scanId, "FAILED" as ScanStatus, {
-          errorCategory: finalErrorCategory,
-          errorMessage: finalErrorMessage,
-        })
-      } catch (updateErr) {
-        log.error("Failed to update scan status on error", {
-          scanId,
-          errorType: updateErr instanceof Error ? updateErr.name : "UNKNOWN",
-        })
-        // ponytail: let BullMQ retain the terminal infrastructure failure when the DB cannot.
-        throw error
-      }
+      await persistScanFailure(
+        scanId,
+        billablePhaseStarted,
+        finalErrorCategory,
+        finalErrorMessage,
+        error
+      )
 
       return {
         status: "failed",
@@ -760,7 +751,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           noBillableWork,
           billingDisposition,
         })
-        await cleanupScanExecution(scanId, billablePhaseStarted, deterministicCheckout, execution)
+        if (!native)
+          await cleanupScanExecution(scanId, billablePhaseStarted, deterministicCheckout, execution)
       }
     }
   }) // end runWithWorkspaceContext

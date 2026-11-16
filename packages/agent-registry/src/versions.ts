@@ -1,11 +1,11 @@
 import type { AgentEntry } from "./types"
 
 /** Exact MCP runtime pin for the coordinated native-agent release. */
-export const MCP_PACKAGE_VERSION = "0.2.12"
+export const MCP_PACKAGE_VERSION = "0.2.13"
 export const MCP_PACKAGE_SPEC = `@lyrashield/mcp@${MCP_PACKAGE_VERSION}`
 
 /** Exact CLI pin for the coordinated native-agent release. */
-export const CLI_PACKAGE_VERSION = "0.2.14"
+export const CLI_PACKAGE_VERSION = "0.2.15"
 export const CLI_PACKAGE_SPEC = `lyrashield@${CLI_PACKAGE_VERSION}`
 
 /** The pinned release includes the native skills installer. */

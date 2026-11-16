@@ -18,6 +18,7 @@ vi.mock("@lyrashield/db", () => ({
   WorkspaceScanConcurrencyLimitError: class WorkspaceScanConcurrencyLimitError extends Error {},
   prisma: {
     target: { findFirst: vi.fn() },
+    integration: { findFirst: vi.fn() },
     workspace: { findUnique: vi.fn() },
     targetDomainVerification: { findFirst: vi.fn() },
     policy: { findFirst: vi.fn() },
@@ -73,6 +74,7 @@ vi.mock("@lyrashield/integrations", () => ({
   getBranchRefSha: vi.fn(),
   getDefaultBranch: vi.fn(),
   getMergeBaseSha: vi.fn(),
+  resolveRepositoryScanSource: vi.fn(),
 }))
 
 vi.mock("@lyrashield/billing", () => ({
@@ -99,6 +101,24 @@ import {
 } from "../../../lib/queue"
 import { checkScanCreateRateLimit } from "../../../lib/rate-limit"
 import { assertScanAllowed } from "@lyrashield/billing"
+import {
+  getBranchRefSha,
+  getDefaultBranch,
+  getMergeBaseSha,
+  resolveRepositoryScanSource,
+} from "@lyrashield/integrations"
+
+const repositoryTarget = {
+  id: "t1",
+  workspaceId: "ws-1",
+  type: "REPO",
+  installationId: "1234",
+  repoOwner: "fixture",
+  repoName: "app",
+  repoFullName: "fixture/app",
+  branch: "main",
+}
+const repositoryRevision = "a".repeat(40)
 
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost:3000/api/scans", {
@@ -125,7 +145,22 @@ describe("scan operation route regressions", () => {
       remaining: 5,
       retryAfter: 0,
     })
-    vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1", type: "REPO" } as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(repositoryTarget as never)
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({
+      id: "connection-1",
+      workspaceId: "ws-1",
+      type: "GITHUB",
+      externalId: "1234",
+      status: "active",
+      deletedAt: null,
+    } as never)
+    vi.mocked(resolveRepositoryScanSource).mockImplementation(async (_target, options) => {
+      await options.readActiveConnection()
+      return { revision: repositoryRevision }
+    })
+    vi.mocked(getBranchRefSha).mockResolvedValue(repositoryRevision)
+    vi.mocked(getDefaultBranch).mockResolvedValue("main")
+    vi.mocked(getMergeBaseSha).mockResolvedValue(repositoryRevision)
     vi.mocked(prisma.policy.findFirst).mockImplementation((async (args: {
       where?: { id?: string }
     }) => {
@@ -151,6 +186,50 @@ describe("scan operation route regressions", () => {
     req.headers.set("Idempotency-Key", "review-probe")
     return req
   }
+  it("binds a newly claimed OAuth scan to its authenticated admission proof", async () => {
+    vi.mocked(requirePermission).mockResolvedValue({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          authorizationVersion: 3,
+          workspaceId: "ws-1",
+          scopes: ["lyrashield.write"],
+          allowedOperations: ["scan.create"],
+          allowedTargetIds: ["t1"],
+          allTargets: false,
+          allowedProfiles: ["SAFE"],
+        },
+      },
+      workspace: { id: "ws-1" },
+    } as never)
+    vi.mocked(claimOrGetAgentOperation).mockResolvedValue({
+      status: "NEW",
+      operation: { id: "op-1" },
+      admissionProof: "p".repeat(64),
+    } as never)
+
+    const req = makeRequest({
+      workspaceId: "ws-1",
+      targetId: "t1",
+      goal: "TEST_APP",
+      mode: "SAFE",
+    })
+    req.headers.set("Idempotency-Key", "oauth-admission")
+    const res = await POST(req)
+
+    expect(res.status).toBe(201)
+    expect(createScan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        delegatedOperation: {
+          operationId: "op-1",
+          admissionProof: "p".repeat(64),
+          connectionId: "conn-1",
+          authorizationVersion: 3,
+        },
+      })
+    )
+  })
   it("never executes a failed claim again", async () => {
     vi.mocked(claimOrGetAgentOperation).mockResolvedValue({
       status: "FAILED",
@@ -323,7 +402,7 @@ describe("scan operation route regressions", () => {
       $executeRaw: vi.fn(),
       userScanSlot: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
       scanCapacityReservation: { create: vi.fn() },
-      target: { findFirst: vi.fn().mockResolvedValue({ id: "t1", type: "REPO" }) },
+      target: { findFirst: vi.fn().mockResolvedValue(repositoryTarget) },
       workspace: { findUnique: vi.fn().mockResolvedValue({ agencySponsorAccountId: null }) },
       policy: {
         findFirst: vi.fn().mockResolvedValue({ id, maxBudgetUsd: { toNumber: () => limit } }),
@@ -456,11 +535,9 @@ describe("scan operation route regressions", () => {
       baseRef: "main",
     })
     reviewChanges.headers.set("Idempotency-Key", "review-probe")
-    // REVIEW_CHANGES on this target short-circuits after the claim (no
-    // GitHub-connected repo) — the claim input binding is what we assert.
     vi.mocked(failAgentOperation).mockResolvedValue({} as never)
-    await POST(plain)
-    await POST(reviewChanges)
+    expect((await POST(plain)).status).toBe(201)
+    expect((await POST(reviewChanges)).status).toBe(201)
     const calls = vi.mocked(claimOrGetAgentOperation).mock.calls
     expect(calls[0]?.[0].input).not.toEqual(calls[1]?.[0].input)
     expect(calls[1]?.[0].input).toMatchObject({

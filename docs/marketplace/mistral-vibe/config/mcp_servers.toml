@@ -2,4 +2,4 @@
 name = "lyrashield"
 transport = "stdio"
 command = "npx"
-args = ["-y", "@lyrashield/mcp@0.2.12"]
+args = ["-y", "@lyrashield/mcp@0.2.13"]

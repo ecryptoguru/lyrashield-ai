@@ -1,8 +1,8 @@
 # Marketplace reviewer pack
 
 **State: PREPARATION.** The case set and package metadata are drafted for Agent Plugin
-`0.1.31`. They have not been uploaded, run in a publisher portal or accepted by a directory.
-The published `@lyrashield/agent-plugin` is `0.1.31`; this reviewer pack and matching immutable
+`0.1.32`. They have not been uploaded, run in a publisher portal or accepted by a directory.
+The published `@lyrashield/agent-plugin` is `0.1.32`; this reviewer pack and matching immutable
 marketplace release remain separate deliverables.
 
 ## OpenAI Codex and ChatGPT plugin directory

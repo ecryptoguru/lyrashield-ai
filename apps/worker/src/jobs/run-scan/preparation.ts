@@ -30,6 +30,8 @@ export type ScanPreparationResult =
 
 export async function prepareScanExecution(params: {
   scanId: string
+  /** Actual root result + physical release proof has already been authenticated by the caller. */
+  executorAlreadyStopped?: true
   targetId: string
   goal: string
   mode: ScanJobData["mode"]
@@ -47,7 +49,9 @@ export async function prepareScanExecution(params: {
 
   // 1. Preflight checks
   await updateUnclaimedScanStatus(scanId, "PREFLIGHT" as ScanStatus)
-  const preflight = await runPreflight(scanId, targetId)
+  const preflight = params.executorAlreadyStopped
+    ? await runPreflight(scanId, targetId, { executorAlreadyStopped: true })
+    : await runPreflight(scanId, targetId)
 
   if (!preflight.passed) {
     await updateUnclaimedScanStatus(scanId, "FAILED" as ScanStatus, {

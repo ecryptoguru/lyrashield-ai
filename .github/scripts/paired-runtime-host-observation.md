@@ -45,6 +45,8 @@ an internal Docker `network` and four `components`: `broker`, `supervisor`,
 `uid`, `gid`, exact PID-one `processCommand`, nonsecret `environment`, and
 `credentialFiles` mapping credential environment names to root-owned files under
 `/etc/lyrashield/control`. These are installation policy, never worker input.
+The supervisor GID must match the host's `lyrashield-supervisor` socket group;
+other roles cannot share it or acquire it through supplementary process groups.
 Credentials stay private and are not returned. The actual PID environment, mapped
 policy bytes, image configuration and protected credential files must agree.
 

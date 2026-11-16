@@ -5,6 +5,8 @@ const recordDeferredMock = vi.fn()
 const failTerminallyMock = vi.fn()
 const completeMock = vi.fn()
 const handleMergedMock = vi.fn()
+const activeIntegrationMock = vi.fn()
+const resolveSourceMock = vi.fn()
 vi.mock("@lyrashield/db", () => ({
   claimDueLoopClosures: (...args: unknown[]) => claimDueMock(...args),
   recordDeferredLoopClosure: (...args: unknown[]) => recordDeferredMock(...args),
@@ -19,12 +21,15 @@ vi.mock("@lyrashield/db", () => ({
     return "UNEXPECTED_ERROR"
   },
   LOOP_CLOSURE_MAX_ATTEMPTS: 5,
+  withWorkspaceRLS: async (_workspaceId: string, run: (tx: unknown) => unknown) =>
+    run({ integration: { findFirst: activeIntegrationMock } }),
 }))
 const enqueueScanMock = vi.fn().mockResolvedValue("job-1")
 const assertWorkerMock = vi.fn()
 vi.mock("@lyrashield/integrations", () => ({
   enqueueScan: (...args: unknown[]) => enqueueScanMock(...args),
   assertScanWorkerAvailable: (...args: unknown[]) => assertWorkerMock(...args),
+  resolveRepositoryScanSource: (...args: unknown[]) => resolveSourceMock(...args),
 }))
 const assertAllowedMock = vi.fn()
 vi.mock("@lyrashield/billing", () => ({
@@ -59,9 +64,48 @@ beforeEach(() => {
   assertAllowedMock.mockResolvedValue({ allowed: true })
   assertWorkerMock.mockResolvedValue(undefined)
   enqueueScanMock.mockResolvedValue("job-1")
+  resolveSourceMock.mockResolvedValue({ revision: "c".repeat(40) })
 })
 
 describe("processLoopClosureSweep — durable retry with terminal visibility", () => {
+  it("resolves each new retest from its current stored target and scoped active connection", async () => {
+    const target = {
+      id: "target-1",
+      workspaceId: "ws-1",
+      type: "REPO",
+      installationId: "42",
+      branch: "current-branch",
+    }
+    activeIntegrationMock.mockResolvedValue({
+      type: "GITHUB",
+      status: "active",
+      workspaceId: "ws-1",
+      externalId: "42",
+    })
+    resolveSourceMock.mockImplementationOnce(async (_target, options) => {
+      await options.readActiveConnection()
+      return { revision: "c".repeat(40) }
+    })
+    claimDueMock.mockResolvedValue([closure])
+    handleMergedMock.mockImplementationOnce(async (options) => {
+      expect(await options.resolveRetestSource(target)).toEqual({ revision: "c".repeat(40) })
+      return { ...outcome, retestId: "retest-1" }
+    })
+    await processLoopClosureSweep()
+    expect(resolveSourceMock).toHaveBeenCalledWith(
+      target,
+      expect.objectContaining({ readActiveConnection: expect.any(Function) })
+    )
+    expect(activeIntegrationMock).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "ws-1",
+        type: "GITHUB",
+        externalId: "42",
+        status: "active",
+        deletedAt: null,
+      },
+    })
+  })
   it("completes a deferred closure: retest created, enqueued, closure closed", async () => {
     claimDueMock.mockResolvedValue([closure])
     handleMergedMock.mockResolvedValue({ ...outcome, retestId: "retest-1" })

@@ -26,7 +26,7 @@ export const protectedSourceResourceSchema = z
     ...readonly,
   })
   .strict()
-export const protectedAttachmentResourceSchema = z
+const protectedAttachmentResourceSchema = z
   .object({
     id: id,
     checksum: hash,

@@ -16,7 +16,11 @@ import {
 import { logger } from "@lyrashield/logger"
 import { MAX_CONCURRENT_WORKSPACE_SCANS } from "@lyrashield/types"
 import { evaluateScanEntitlement } from "@lyrashield/billing"
-import { resolveAvailableUrlReview, ScanEnqueueNotSubmittedError } from "@lyrashield/integrations"
+import {
+  resolveAvailableUrlReview,
+  resolveRepositoryScanSource,
+  ScanEnqueueNotSubmittedError,
+} from "@lyrashield/integrations"
 import { assertScanWorkerAvailable, enqueueScan } from "./queue"
 import { notifyScheduleBlocked } from "./notifications"
 
@@ -141,7 +145,24 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
           return
         }
         // User-slot/workspace/target contention rolls back the occurrence too.
-        const scan = await createScheduledScan(schedule, now, nextRunAt)
+        const source = await resolveRepositoryScanSource(
+          { ...schedule.target, workspaceId: schedule.workspaceId },
+          {
+            readActiveConnection: () =>
+              prisma.integration.findFirst({
+                where: {
+                  workspaceId: schedule.workspaceId,
+                  type: "GITHUB",
+                  externalId: String(schedule.target.installationId),
+                  status: "active",
+                  deletedAt: null,
+                },
+              }),
+          }
+        )
+        const scan = source
+          ? await createScheduledScan(schedule, now, nextRunAt, source)
+          : await createScheduledScan(schedule, now, nextRunAt)
         if (!scan) return
         try {
           await enqueueScan({

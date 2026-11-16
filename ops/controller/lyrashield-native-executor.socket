@@ -1,0 +1,13 @@
+[Unit]
+Description=LyraShield supervisor native action socket
+
+[Socket]
+ListenStream=/run/lyrashield/control/native-executor.sock
+SocketUser=root
+SocketGroup=lyrashield-supervisor
+SocketMode=0660
+DirectoryMode=0755
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

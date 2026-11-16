@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ENGINE_REVISION: 0793bcb9644a1985165963375586124c993c020a
+  ENGINE_REVISION: afd71f79675cb4db4187e31ecbf8f58ebcd62e1c
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
@@ -139,7 +139,7 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
-      - uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+      - uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -352,7 +352,7 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
-      - uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+      - uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -473,7 +473,7 @@ jobs:
           node scripts/validate-updater-manifest.mjs latest.json --expected-version "${RELEASE_TAG#v}" --tauri-conf apps/desktop/src-tauri/tauri.conf.json
 
       - name: Create signed draft release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           draft: true

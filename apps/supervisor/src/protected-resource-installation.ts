@@ -7,6 +7,7 @@ import {
   canonicalJson,
   sha256Hex,
   executorResourceDescriptorSchema,
+  readSourceTree,
   type ExecutorResourceDescriptor,
 } from "@lyrashield/runtime-control"
 
@@ -180,6 +181,28 @@ async function installedMounts(
       const bytes = await protectedBytes(source, 65_536)
       if (bytesHash(bytes) !== resource.checksum)
         throw new Error("Protected egress policy checksum is invalid")
+    }
+    if (resource.kind === "source") {
+      const observed = readSourceTree(source, { ownerUid: 0, immutable: true })
+      if (observed.stagedTreeDigest !== resource.checksum)
+        throw new Error("Protected source tree checksum is invalid")
+    }
+    if (resource.kind === "attachments") {
+      const manifest = descriptor.attachments!
+      const observed = readSourceTree(source, { ownerUid: 0, immutable: true })
+      if (
+        sha256Hex(canonicalJson(manifest.entries)) !== manifest.manifestChecksum ||
+        observed.entries.length !== manifest.entries.length ||
+        !manifest.entries.every((entry) =>
+          observed.entries.some(
+            (file) =>
+              file.path === entry.containerPath.slice("/input/attachments/".length) &&
+              file.bytes === entry.byteLength &&
+              file.checksum === entry.checksum
+          )
+        )
+      )
+        throw new Error("Protected attachment bytes do not match the approved manifest")
     }
     mounts.push({ source, target: resource.target })
   }

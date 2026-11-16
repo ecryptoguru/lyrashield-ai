@@ -250,6 +250,8 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
       "LicenseActivation",
       "LicenseKey",
       "ArtifactDeletionTask",
+      "ScanDispatchWorkerAssignment",
+      "ScanDispatchLifecycleProof",
     ]) {
       expect(WORKSPACE_SCOPED_MODELS.has(m)).toBe(false)
     }

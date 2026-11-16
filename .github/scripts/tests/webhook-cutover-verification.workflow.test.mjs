@@ -75,7 +75,10 @@ assert.match(
 assert.match(build, /inputs\.held_recovery_original_run_id == ''/)
 assert.match(preparedImages, /inputs\.held_recovery_original_run_id != ''/)
 assert.match(preparedImages, /verify-webhook-recovery-candidate\.mjs/)
-assert.match(resolvedImages, /needs:\s*\[build, resolve-prepared-images\]/)
+assert.match(
+  resolvedImages,
+  /needs:\s*\[build, resolve-prepared-images, preflight-compatible-baseline\]/
+)
 assert.match(
   resolvedImages,
   /\[ "\$BUILD_RESULT" = success \] && \[ "\$PREPARED_RESULT" = skipped \]/
@@ -120,7 +123,7 @@ assert.match(
   /worker_digest: \$\{\{ needs\.resolve-images\.outputs\.worker_digest \}\}/
 )
 assert.match(runtime, /Verify compatible webhook cutover baseline[\s\S]*Run database migrations/)
-assert.match(cutover, /webhook-production-cutover\.md/)
+assert.match(cutover, /durable-webhook-track-utc-schema-cutover/)
 assert.match(cutover, /durable-claims\/1/)
 assert.match(
   deploy,

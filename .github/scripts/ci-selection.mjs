@@ -21,6 +21,7 @@ export const routingFlags = [
   "web-image",
   "worker-image",
   "egress-image",
+  "controller-image",
   "desktop-frontend-tests",
 ]
 
@@ -122,7 +123,8 @@ export function validateResults(needs, cancelled = false) {
       "container-build",
       outputs["web-image"] === "true" ||
         outputs["worker-image"] === "true" ||
-        outputs["egress-image"] === "true",
+        outputs["egress-image"] === "true" ||
+        outputs["controller-image"] === "true",
     ],
   ]) {
     const result = needs[job]?.result

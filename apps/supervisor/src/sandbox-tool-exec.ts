@@ -9,17 +9,20 @@ import {
   type ResourceOwnership,
   type ScanAuthorityFence,
   type SandboxToolRequest,
+  type SandboxToolExecDescriptor,
 } from "@lyrashield/runtime-control"
-import { DockerRuntimeExecutor } from "./executor"
-import { SandboxToolDocker } from "./sandbox-tool-docker"
+import type { RuntimeExecutor } from "./executor"
+import type { SandboxToolNative } from "./sandbox-tool-native"
 import { projectSandboxToolHistory } from "./sandbox-tool-history"
 import { SandboxToolJournal, type SandboxToolEvent } from "./sandbox-tool-journal"
 
 export interface SandboxToolExecScope {
+  pty?: SandboxToolExecDescriptor["pty"]
   action: AuthorityAction
   supervisorInstanceId: string
   workspaceRoot: string
   ownership: ResourceOwnership
+  resultKind?: SandboxToolExecDescriptor["resultKind"]
 }
 
 function digest(value: unknown): string {
@@ -38,6 +41,8 @@ export function sandboxToolExecChecksum(
       request,
       workspaceRoot: scope.workspaceRoot,
       ownership: scope.ownership,
+      ...(scope.resultKind ? { resultKind: scope.resultKind } : {}),
+      ...(scope.pty ? { pty: scope.pty } : {}),
     })
   )
 }
@@ -68,10 +73,8 @@ function ensureHistory(events: SandboxToolEvent[], request: SandboxToolRequest):
 }
 
 /**
- * Starts a detached Docker exec once, retaining its identity before start.
- * This is not the engine RPC: detached output, timeout enforcement, PTY I/O,
- * grant resolution, and safe recovery have not been installed. Never advertise
- * exec capability or return a completed engine response from this primitive.
+ * The root service durably retains exec identity before starting. A lost ACK
+ * remains unresolved; this layer never replays physical work.
  */
 export async function startSandboxToolExec(
   input: unknown,
@@ -79,8 +82,14 @@ export async function startSandboxToolExec(
   dependencies: {
     fence: ScanAuthorityFence
     journal: SandboxToolJournal
-    docker: SandboxToolDocker
-    executor: DockerRuntimeExecutor
+    native: SandboxToolNative
+    executor: Pick<RuntimeExecutor, "inspect">
+    acknowledgeStarted: (input: {
+      action: AuthorityAction
+      descriptor: SandboxToolExecDescriptor
+      guardId: string
+      execId: string
+    }) => Promise<void>
   }
 ): Promise<{ execId: string }> {
   const descriptor = sandboxToolExecDescriptorSchema.parse({
@@ -88,8 +97,10 @@ export async function startSandboxToolExec(
     request: sandboxToolRequestSchema.parse(input),
     workspaceRoot: scope.workspaceRoot,
     ownership: scope.ownership,
+    ...(scope.resultKind ? { resultKind: scope.resultKind } : {}),
+    ...(scope.pty ? { pty: scope.pty } : {}),
   })
-  const request = descriptor.request
+  const request = sandboxToolRequestSchema.parse(descriptor.request)
   const action = authorityActionSchema.parse(scope.action)
   const root = descriptor.workspaceRoot
   const ownership = descriptor.ownership
@@ -136,13 +147,16 @@ export async function startSandboxToolExec(
       },
       tool: {
         requestId: request.requestId,
-        kind: "exec" as const,
+        kind: scope.resultKind ?? ("exec" as const),
         commandId: request.commandId,
         prepareCommandId,
         invocationGuardId: invocation.guardId,
         actionChecksum: action.actionChecksum,
         handleChecksum: digest(request.binding.sandboxHandle),
         containerId,
+        maxOutputBytes: request.maxOutputBytes,
+        timeoutSeconds: request.timeoutSeconds,
+        bindingInputJson: canonicalJson(action),
       },
     }
     const history = await dependencies.journal.load()
@@ -158,8 +172,6 @@ export async function startSandboxToolExec(
     )
       throw new Error("retained sandbox is unavailable")
     assertActive()
-    await dependencies.docker.inspect(containerId, ownership.ownershipId)
-    assertActive()
     const append = async (type: SandboxToolEvent["type"], execId?: string) => {
       assertActive()
       await dependencies.journal.append({
@@ -172,16 +184,19 @@ export async function startSandboxToolExec(
     }
     await append("tool_intent")
     assertActive()
-    const execId = await dependencies.docker.create(containerId, request.argv, root)
+    const { execId } = await dependencies.native.start(action, descriptor)
     assertActive()
     if (usedExecIds.has(execId)) throw new Error("sandbox tool exec identity was reused")
     await append("tool_created", execId)
     await append("tool_starting", execId)
-    await dependencies.docker.inspect(containerId, ownership.ownershipId)
-    assertActive()
-    await dependencies.docker.start(execId)
-    assertActive()
     await append("tool_started", execId)
+    await dependencies.acknowledgeStarted({
+      action,
+      descriptor,
+      guardId: invocation.guardId,
+      execId,
+    })
+    assertActive()
     return { execId }
   })
 }
