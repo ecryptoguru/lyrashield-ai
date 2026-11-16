@@ -77,6 +77,7 @@ jobs:
       deployments: read
     outputs:
       docs-only: ${{ steps.classify.outputs.docs-only }}
+      marketplace-docs: ${{ steps.classify.outputs.marketplace-docs }}
       tooling-only: ${{ steps.classify.outputs.tooling-only }}
       marketing: ${{ steps.classify.outputs.marketing }}
       app: ${{ steps.classify.outputs.app }}
@@ -228,6 +229,12 @@ jobs:
 
       - name: Serial-comma copy ratchet
         run: pnpm lint:copy-comma
+
+      - name: Test marketplace documentation exports
+        if: needs.changes.outputs.marketplace-docs == 'true' && needs.changes.outputs.database-tests != 'true'
+        run: |
+          pnpm exec turbo run build --filter=@lyrashield/agent-plugin... --concurrency=2
+          pnpm exec vitest run packages/agent-plugin/src/__tests__/export.test.ts --maxWorkers=2
 
       - name: Size lint ratchet
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.marketing-tests == 'true' || needs.changes.outputs.motion-tests == 'true'
