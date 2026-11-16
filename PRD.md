@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current production evidence: 2026-11-16 14:29 UTC — product `493d6eae5947605bcf932fb395ef2bf8ffe3caaa`, release `43878552122`, worker `sha256:5f7b469015f9813da1c50c5d1a70d7370164df7a54cf0c1d38683f5ac5cba0e3`, engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`. See §8 for published clients and earlier immutable paid/hosted acceptance identities. This file owns product strategy, accepted scope, release gates, and ordered backlog; running code, schema, CI, and live evidence override prose.
+> Current production evidence: 2026-11-16 19:31 UTC — product `b462ff4370f84ba53036c71ea78702145a4133f4`, release `43925592372`, worker `sha256:4241206120b48229807e9ebec671ee7fa37cc2d7b8d321098532faa88b9e7422`, engine `b4515be8085a0826217c50cd85d09119ede389bb`. See §8 for published clients and earlier immutable paid/hosted acceptance identities. This file owns product strategy, accepted scope, release gates, and ordered backlog; running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
@@ -404,6 +404,14 @@ Detailed file and package mapping: [codebase.md](./codebase.md).
 
 ## 8. Current production evidence
 
+### Cloud readiness readback — 2026-11-17 (IST)
+
+Read-only VM and database observations at `2026-11-16T19:31:33Z` confirmed the deployed product/engine identities below, zero worker restarts, no admission stop and empty scan queues. The runtime database role has neither superuser nor `BYPASSRLS`; an unbound query exposed zero workspace target rows, while the bound workspace query returned seven. `Target`, `Scan`, `Finding` and `Report` retain enabled and forced RLS, and the checked workspace tables have no legacy permissive policies. These are bounded live reads; the three July product findings remain `OPEN`/`DETECTED` until trusted retest evidence exists. The registered LyraShield AI repository target has no current gate verdict for deployed `b462ff437`; both the browser and published MCP read report insufficient assessment evidence.
+
+The retained Syslog receipt at `2026-11-16T12:47:42Z` reports completed Polar/Razorpay reconciliation from `2026-10-22T10:22:35Z` through `2026-11-16T12:47:40Z`, with zero checked eligible receipts, replay, drift, backlog or duplicates and `initialBaseline: false`. The persisted checkpoint matches, with no held lease. This supersedes the October 1 incomplete operational receipt without resetting its baseline or replaying work; zero eligible counters do not establish live financial acceptance. The web app's Cloud billing flags remain `public` and Local flags `off`. The primary operator receiver, sustained 5xx/outage alerts and the three intentionally disabled reconciliation/catalog rules were read back unchanged; individual rule behavior remains unproven. Redis showed `24,474` bytes used of `67,108,864`, `noeviction`, zero evicted keys and 556,915 processed commands. This is one observation, not a longer-window capacity qualification.
+
+[Isolated restore 43730222781](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43730222781) passed on `9fe6bce22408ca85bccd0103207e7ec2891a4364` on November 15: exact encrypted object, private row integrity, schema/audit, application readiness, digest-only provenance and cleanup; retention deletion was skipped. Its schema and restore helpers match reviewed main `c7d18d27`; the later backup-workflow change adds only failure summaries. [Backup 43835890148](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43835890148) passed on November 16 but skipped restore. The November 15 proof covers its own object, not every later backup. A new drill still requires separate owner approval under the [operations procedure](./docs/operations.md#owner-approved-manual-isolated-restore).
+
 ### Final runtime and client distribution — 2026-11-16
 
 [PR #1153](https://github.com/ecryptoguru/lyrashield-ai/pull/1153) merged as `b462ff4370f84ba53036c71ea78702145a4133f4` after all three required checks passed on exact head `4ab6ed0a9e4de4ae5fed22b39b94a700d782803d` ([CI 43922962103](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43922962103)). [Release 43925592372](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43925592372) completed source qualification, exact-image rehearsal, Azure rollout, worker promotion and marketing deployment. The cleanup removes unused projections/capabilities, retired viewer code, redundant tests and duplicate release verification; known marketplace prose takes the existing export-validation route while executable and unknown inputs retain conservative gates. Independent readback at `2026-11-16T18:57Z`–`18:58Z` confirmed:
@@ -564,9 +572,9 @@ The October 25 [isolated restore 40172080687](https://github.com/ecryptoguru/lyr
 
 [Release 36908006265](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36908006265) deployed `4822306e24f375800981bf282fd992a9c15dcde8` with web `sha256:dbc43686e11f95a03d9f163c865683e3949ade4179839ef6d268e6ea55f9b78f`, proxy `sha256:2951a50935f458c16495ccee9005990b2d4a5ba0a5470be1922a90733729bd24`, worker `sha256:d38f8b080ae62b88ba9c6273be76abff42adf5a86b831bde5b19f6d6fce466dc` and engine `9d90be5aaf92f86bb5c1ba55a8138545764fdd44`; readiness returned 200. Release and scan-admission evidence only.
 
-### Operational blockers last verified 2026-10-01
+### Historical operational blockers — 2026-10-01
 
-- The report-only Polar/Razorpay reconciliation is still incomplete: a Polar `insufficient_scope` 403 left a receipt with zero orders checked and no newer completed receipt recorded. Fix the grant, rerun report-only reconciliation, and do not replay events, reset the coverage baseline or infer coverage from zero counters.
+- A Polar `insufficient_scope` 403 left report-only reconciliation incomplete with zero orders checked. The November 17 readback above records a later completed receipt; retain the failed receipt and do not infer financial acceptance from zero counters.
 - The release sync copies the app's Polar credential into worker Key Vault, so a worker-only replacement is overwritten by the next release. Correct the source-of-truth provider grant, then use the guarded refresh/promotion path.
 
 ### Standard/Luna acceptance — 2026-08-26
@@ -596,14 +604,12 @@ These are implementation or revision-scoped milestones, not a claim of universal
 
 The items below include one-time business obligations, historical triage and operational follow-up; webmaster indexing observations and later payout/tax work are not recurring software release gates. Keep essential monitoring and backup drills. Historical findings require triage before they become confirmed defects.
 
-1. Refresh the report-only Polar/Razorpay reconciliation after the incomplete 2026-10-01 receipt, and retain a completed receipt/checkpoint without replay or baseline reset. Cloud billing flags being `public` is configuration evidence, not proof of live checkout, settlement, refunds or commercial readiness.
-2. Preserve the intentionally disabled reconciliation/catalog rules and receiver configuration; one operator test notification was delivered, while individual rule behavior remains unproven.
-3. Read back the public scorecard canonical URL and OG image URL on the deployed revision. The canonical-origin fix is deployed; the page-specific live readback is not in the evidence set.
-4. Retain longer-window Redis command/capacity evidence, verify RazorpayX and Payoneer payout access, and complete payout/tax operations before paid scale. Retain fresh restore drills as the schema changes.
-5. Triage the 25 findings from Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted; keep unverified results `DETECTED` or `INCONCLUSIVE`.
-6. Complete paid model-backed Composer acceptance. The deterministic SCA fix-and-retest chain is recorded in §8 (2026-11-16); `sast` and `iac` findings cannot validate on that fixture, and no other target or deployment is covered.
-7. Complete other native client-runtime acceptance. Hosted MCP reads/mutations, public packaged MCP/CLI consumers, immutable marketplace v0.1.32 and installed Codex plugin verification passed on 2026-11-16 (§8). Individual IDE/native activation and full client-runtime acceptance remain outstanding.
-8. Capture webmaster indexing and answer-engine citation observations; code, simulated crawlers and one LinkedIn unfurl do not prove universal discovery.
+1. Read back an owner-authorized active public scorecard canonical URL and OG image URL on the deployed revision. The canonical-origin fix is deployed; the page-specific live readback is not in the evidence set.
+2. Retain longer-window Redis command/capacity evidence, verify RazorpayX and Payoneer payout access, and complete payout/tax operations before paid scale. Cloud billing flags being `public` do not prove live checkout, settlement, refunds or commercial readiness. Retain fresh restore drills as the schema changes.
+3. Triage the historical Standard findings on OnboardingAI2 separately from the three July LyraShield AI repository candidates, and obtain current release-bound assessment/retest evidence where warranted. Keep unverified results `DETECTED` or `INCONCLUSIVE`; historical fixture findings are not confirmed current product defects.
+4. Complete paid model-backed Composer acceptance. The deterministic SCA fix-and-retest chain is recorded in §8 (2026-11-16); `sast` and `iac` findings cannot validate on that fixture, and no other target or deployment is covered.
+5. Complete other native client-runtime acceptance. Hosted MCP reads/mutations, public packaged MCP/CLI consumers, immutable marketplace v0.1.32 and installed Codex plugin verification passed on 2026-11-16 (§8). Individual IDE/native activation and full client-runtime acceptance remain outstanding.
+6. Capture webmaster indexing and answer-engine citation observations; code, simulated crawlers and one LinkedIn unfurl do not prove universal discovery.
 
 ### Deferred
 

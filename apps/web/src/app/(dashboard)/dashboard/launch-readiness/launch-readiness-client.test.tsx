@@ -84,7 +84,7 @@ describe("LaunchReadinessClient triage relabel", () => {
     const html = renderToStaticMarkup(
       <LaunchReadinessClient
         workspaceId="ws-1"
-        initialReport={inconclusive}
+        initialReport={{ ...inconclusive, triageScore: 0, totalFindings: 3 }}
         targets={[{ targetId: "target-1", targetName: "API" }]}
         initialTargetId="target-1"
         initialReleaseRef=""
@@ -99,6 +99,9 @@ describe("LaunchReadinessClient triage relabel", () => {
     expect(html).toContain("Insufficient current evidence")
     expect(html).not.toContain("Nothing Checked")
     expect(html).toContain("Triage counts open findings; it is not the launch verdict.")
+    expect(html).toContain("Gate blockers unconfirmed")
+    expect(html).toContain("3 total findings")
+    expect(html).not.toContain("0 gate blockers")
   })
 
   it("still colours the ring for a conclusive verdict", () => {
@@ -117,6 +120,7 @@ describe("LaunchReadinessClient triage relabel", () => {
 
     expect(html).toContain('stroke="var(--color-success)"')
     expect(html).toContain("Triage only — not a readiness score")
+    expect(html).toContain("0 gate blockers")
   })
 })
 

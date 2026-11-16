@@ -58,7 +58,11 @@ export function LaunchVerdictCard({
                 : `Triage score: ${report.triageScore}/100`}
             </Badge>
             <Badge variant="muted">{report.totalFindings} total findings</Badge>
-            <Badge variant="muted">{report.blockingFindings} blocking</Badge>
+            <Badge variant="muted">
+              {report.verdict === "INCONCLUSIVE" || report.verdict === "NOT_EVALUATED"
+                ? "Gate blockers unconfirmed"
+                : `${report.blockingFindings} gate blockers`}
+            </Badge>
             <Badge variant="muted">{report.verifiedFindings} independently verified</Badge>
           </div>
         </div>
