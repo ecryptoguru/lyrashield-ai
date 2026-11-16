@@ -47,6 +47,7 @@ describe("scan presentation", () => {
       ["SCAN_ATTACHMENT_CHECKSUM_MISMATCH", "Supporting file unavailable"],
       ["PROMPT_INJECTION", "Unsupported input"],
       ["UNSUPPORTED_CHECKS", "Unsupported checks"],
+      ["RETEST_BASELINE_UNAVAILABLE", "Retest inconclusive"],
     ]
     for (const [errorCategory, label] of cases) {
       const presentation = getScanPresentation("FAILED", { errorCategory })

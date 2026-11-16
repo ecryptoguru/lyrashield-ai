@@ -297,7 +297,22 @@ export const PatchRepoRefSchema = z.object({
   branch: z.string().min(1).max(255).refine(isValidGitRef, "Invalid Git branch or tag"),
 })
 
-export const PatchTargetSchema = z.union([PatchApiSpecSchema.strict(), PatchRepoRefSchema.strict()])
+/**
+ * Rebind a repository target to another active GitHub App installation in the
+ * same workspace. This is the recovery path for a target whose installation was
+ * disconnected or removed; the server revalidates the installation and its
+ * access to the exact repository before writing.
+ */
+export const PatchRepoInstallationSchema = z.object({
+  workspaceId: z.string().min(1),
+  installationId: z.string().regex(/^[1-9][0-9]{0,15}$/, "Invalid GitHub installation id"),
+})
+
+export const PatchTargetSchema = z.union([
+  PatchApiSpecSchema.strict(),
+  PatchRepoRefSchema.strict(),
+  PatchRepoInstallationSchema.strict(),
+])
 
 // Optional emphasis areas — steer engine attention without reducing coverage.
 // Emphasis is recorded on the scan and never restricts what detectors run.

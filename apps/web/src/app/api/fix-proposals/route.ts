@@ -73,9 +73,13 @@ export async function GET(request: Request) {
         )
       : await load()
     if (!("items" in result)) return result
+    // Pagination bypasses the server-rendered page's own derivation, so both
+    // patch flags must be decided here or a valid proposal loaded later hides
+    // its pull-request action.
     const items = result.items.map(({ diffRef, ...proposal }) => ({
       ...proposal,
       hasStoredPatch: Boolean(diffRef),
+      hasPatchBase: Boolean(proposal.finding?.baseCommit),
     }))
     return apiPaginated(items, result.nextCursor)
   } catch (error) {
