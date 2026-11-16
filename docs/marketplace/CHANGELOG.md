@@ -1,12 +1,13 @@
 # Changelog
 
-## 0.1.32 release candidate (unpublished)
+## 0.1.32 coordinated client release — 2026-11-16
 
-- Pin candidate MCP `0.2.13` and CLI `0.2.14` in prepared native artifacts; keep public install
-  instructions on the latest published versions until the coordinated npm release is complete.
-- Bundle shared workflow skills for the candidate plugin and regenerate marketplace provenance.
-- This section records preparation only. Marketplace export, npm publication and listing changes
-  remain separate reviewed release actions.
+- Pin published MCP `0.2.13`, CLI `0.2.15` and Agent Plugin `0.1.32` in prepared native artifacts.
+  Reviewed npm archives and fresh public consumer receipts verify the setup-health tool and CLI
+  scan-loader repair.
+- Bundle shared workflow skills and regenerate marketplace provenance from reviewed product source.
+- Npm publication is complete. Immutable marketplace publication and individual listing/runtime
+  qualification require their own receipts.
 
 ## 0.1.30
 
