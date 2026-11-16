@@ -211,7 +211,7 @@ read_field() {
   printf '%s\n' "$value"
 }
 
-for field in docs-only tooling-only marketing app desktop shared \
+for field in docs-only marketplace-docs tooling-only marketing app desktop shared \
   marketing-tests motion-tests ops-tests engine-worker-contract database-tests \
   database-services desktop-frontend-tests web-component worker-component \
   web-image worker-image egress-image controller-image; do

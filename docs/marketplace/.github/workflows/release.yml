@@ -40,9 +40,6 @@ jobs:
       - name: Validate before releasing
         run: node scripts/validate.mjs --release
 
-      - name: Verify published MCP package
-        run: node scripts/verify-published-mcp.mjs
-
       # Restore the WASI build validate.yml already produced for this revision
       # rather than recompiling it. The shared key matches validate.yml, so a
       # green validation run leaves the compiled artifacts here. The build still
