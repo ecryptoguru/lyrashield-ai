@@ -60,8 +60,8 @@ export function LaunchVerdictCard({
             <Badge variant="muted">{report.totalFindings} total findings</Badge>
             <Badge variant="muted">
               {report.verdict === "INCONCLUSIVE" || report.verdict === "NOT_EVALUATED"
-                ? "Gate blockers unconfirmed"
-                : `${report.blockingFindings} gate blockers`}
+                ? "Blocking findings unconfirmed"
+                : `${report.blockingFindings} assessed blocking findings`}
             </Badge>
             <Badge variant="muted">{report.verifiedFindings} independently verified</Badge>
           </div>
