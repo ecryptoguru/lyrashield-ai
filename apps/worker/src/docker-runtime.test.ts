@@ -172,7 +172,7 @@ describe("worker Docker runtime", () => {
   })
 
   it("pins and records the exact engine revision for release worker builds", () => {
-    const reviewedEngineRevision = "afd71f79675cb4db4187e31ecbf8f58ebcd62e1c"
+    const reviewedEngineRevision = "b4515be8085a0826217c50cd85d09119ede389bb"
     expect(deployWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(desktopReleaseWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(deployWorkflow).toContain("ref: ${{ env.ENGINE_REVISION }}")

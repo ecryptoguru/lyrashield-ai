@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url"
 
 export const routingFlags = [
   "docs-only",
+  "marketplace-docs",
   "tooling-only",
   "marketing",
   "app",

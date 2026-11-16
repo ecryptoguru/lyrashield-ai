@@ -45,6 +45,8 @@ desktop_pattern='^apps/desktop/'
 # digest-pinned images; their sources do not enter the Azure web/worker release.
 controller_pattern='^apps/(broker|supervisor|provider-gateway)/'
 shared_pattern='^(docs/marketplace/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|docker-compose\.yml|Dockerfile|action\.yml|\.gitleaks\.toml|\.env\.example|ops/|e2e/|lint/serial-comma-baseline\.json|run-all-tests\.mjs|\.github/)'
+# Plain marketplace documents need export validation, not runtime services.
+marketplace_docs_pattern='^docs/marketplace/(README|channels|CHANGELOG|CLIENT-CONTRACTS)\.md$'
 # CI validation is deliberately broader than release routing. Workflow, test,
 # Action, and tooling changes must be checked, but do not alter a production
 # artifact. Unknown paths remain fail-closed below.
@@ -67,6 +69,7 @@ tooling_only=true
 tooling_seen=false
 
 docs_only=true
+marketplace_docs=false
 marketing=false
 app=false
 desktop=false
@@ -142,7 +145,11 @@ while IFS= read -r f || [[ -n "$f" ]]; do
     controller_image=true
     path_classified=true
   fi
-  if [[ "$f" =~ $shared_pattern ]]; then
+  if [[ "$f" =~ $marketplace_docs_pattern ]]; then
+    marketplace_docs=true
+    docs_only=false
+    path_classified=true
+  elif [[ "$f" =~ $shared_pattern ]]; then
     shared=true
     engine_worker_contract=true
     path_classified=true
@@ -254,6 +261,7 @@ fi
 emit_flags() {
   printf '%s\n' \
     "docs-only=$docs_only" \
+    "marketplace-docs=$marketplace_docs" \
     "tooling-only=$tooling_only" \
     "marketing=$marketing" \
     "app=$app" \
