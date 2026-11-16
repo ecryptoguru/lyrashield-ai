@@ -8,13 +8,13 @@
     "url": "https://github.com/ecryptoguru/lyrashield-ai",
     "source": "github"
   },
-  "version": "0.2.12",
+  "version": "0.2.13",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@lyrashield/mcp",
-      "version": "0.2.12",
+      "version": "0.2.13",
       "transport": {
         "type": "stdio"
       }

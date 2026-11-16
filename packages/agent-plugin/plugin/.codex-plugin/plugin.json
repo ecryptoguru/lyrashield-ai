@@ -1,6 +1,6 @@
 {
   "name": "lyrashield",
-  "version": "0.1.31",
+  "version": "0.1.32",
   "description": "LyraShield AI security and release-assurance plugin",
   "interface": {
     "displayName": "LyraShield AI",
@@ -94,7 +94,7 @@
         }
       },
       "publication": {
-        "release_notes": "Agent Plugin 0.1.31 candidate adds portable get-started, review-changes, scan-project, fix-and-retest, and launch-readiness workflows. Recorded scans remain explicit, and incomplete or inconclusive evidence remains visible."
+        "release_notes": "Agent Plugin 0.1.32 candidate adds portable get-started, review-changes, scan-project, fix-and-retest, and launch-readiness workflows. Recorded scans remain explicit, and incomplete or inconclusive evidence remains visible."
       }
     }
   }
