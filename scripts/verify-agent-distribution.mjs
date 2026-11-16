@@ -59,6 +59,7 @@ export const EXPECTED_MCP_TOOLS = [
   "lyrashield_get_findings",
   "lyrashield_get_launch_readiness",
   "lyrashield_get_scan_eligibility",
+  "lyrashield_get_setup_health",
   "lyrashield_get_scan_quality",
   "lyrashield_get_scan_status",
   "lyrashield_list_scan_attachments",

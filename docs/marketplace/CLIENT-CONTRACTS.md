@@ -1,14 +1,12 @@
 # Client configuration receipts
 
-## CLI ESM runtime patch candidate — 2026-11-16
+## Coordinated client release candidate — 2026-11-16
 
-Authenticated packed scan resume exposed `Dynamic require of "assert" is not supported`: a bundled CommonJS dependency needs Node built-ins when the scan command loads. CLI `0.2.15` adds the standard ESM `createRequire` banner. The packed CLI resumed existing scan `cmwiqcx4x000901k576f3xqfx` successfully; no new scan or usage was created. Distribution smoke now loads the scan command with a synthetic credential and closed loopback API, so help/version alone cannot mask this regression.
+Published MCP `0.2.12` successfully reads current scan quality but advertises 21 tools and lacks `lyrashield_get_setup_health`; the current source/hosted catalog has 22. Candidate MCP `0.2.13` publishes that missing setup-health tool and current authorization/workflow contracts. Agent Plugin `0.1.32` updates its exact MCP pins; CLI `0.2.15` repairs `Dynamic require of "assert" is not supported` by supplying Node's standard ESM `createRequire` banner. Distribution smoke requires all 22 tools and loads the packed CLI scan command, so help/version alone cannot mask the loader regression.
 
-The candidate tarball SHA-256 is `0b33298b624ab71ec3a87ff732ccad2fc08c04cddffe6c016c5ec8076c804fc4`. All 12 archive/runtime checks passed. npm authentication returned 401; publication and a clean registry consumer readback are pending. Retain published CLI `0.2.14` pins until that readback, then update the registry constant, active install guidance and generated marketplace receipts together. MCP `0.2.12` and Agent Plugin `0.1.31` need no schema change for PR #1147's shared hosted admission fix; 190 client compatibility tests passed. Existing `0.2.14` help/version checks pass but the authenticated scan loader is not qualified. Historical functional claims below do not supersede this finding.
+The source candidate updates exact pins throughout MCP, CLI, plugin shims, active client guides, WebMCP adapters and marketplace templates, preserving transports, permissions and support tiers. The PR stays draft until reviewed MCP → Agent Plugin → CLI tarballs are published and independently read back. npm authentication returned 401. Current public registry versions remain MCP `0.2.12`, plugin `0.1.31` and CLI `0.2.14`; candidate pins are not deployed. The generated candidate marketplace is isolated and is not an immutable public release.
 
-Updated 2026-10-02. Historical package readbacks remain dated at the time they were collected;
-current local native-client receipts are recorded below. They do not establish authenticated access
-or public marketplace acceptance.
+The repaired CLI and fresh candidate consumer successfully read existing URL scan `cmwiqcx4x000901k576f3xqfx`, with no new scan or usage. Published MCP `0.2.12` and the current source MCP both returned the same sealed quality surface; source MCP returned 22 tools. Exact final tarball and marketplace receipts are retained in the hosted acceptance record. Historical help/version and publication receipts below do not establish the new candidate publication or current CLI scan-loader acceptance.
 
 ## Clean source distribution readback — 2026-10-02
 

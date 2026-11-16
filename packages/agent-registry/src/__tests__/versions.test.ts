@@ -18,9 +18,9 @@ const userGuide = readFileSync(resolve(repositoryRoot, "docs/user-guide.md"), "u
 
 describe("release package versions", () => {
   it("pins install commands to the coordinated CLI and MCP release", () => {
-    expect(CLI_PACKAGE_VERSION).toBe("0.2.14")
+    expect(CLI_PACKAGE_VERSION).toBe("0.2.15")
     expect(CLI_PACKAGE_SPEC).toBe(`lyrashield@${CLI_PACKAGE_VERSION}`)
-    expect(MCP_PACKAGE_SPEC).toBe("@lyrashield/mcp@0.2.12")
+    expect(MCP_PACKAGE_SPEC).toBe("@lyrashield/mcp@0.2.13")
     expect(CLI_SKILLS_AVAILABLE).toBe(true)
     expect(CLI_CONFIG_WRITES_AVAILABLE).toBe(true)
     expect(userGuide).toContain("safe config writer")

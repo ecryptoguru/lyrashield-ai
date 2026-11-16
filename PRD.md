@@ -423,7 +423,7 @@ Hosted tenant/credential qualification passed 20 assertions: a temporary read-on
 
 Public report sharing passed 11 assertions on report `cmwimm3vu000f01fuj7yjhby7`: valid anonymous minimal projection, absent private execution/storage/credential fields, refusal of missing/wrong/cross-report tokens, immediate revocation including conditional requests, and retained owner access. The token existed only in process memory and was revoked. No production scorecard was created.
 
-A packed CLI scan-resume check found `Dynamic require of "assert" is not supported`; the CLI ESM banner now supplies Node's standard `createRequire`. The repaired bundle successfully resumed the same URL scan without creating another scan. CLI `0.2.15` is a verified release candidate; npm still publishes `0.2.14` until authenticated publication and readback. MCP `0.2.12`, Agent Plugin `0.1.31` and current public CLI pins are retained until publication; no new tool/schema/package change was needed for the shared server repair.
+A packed CLI scan-resume check found `Dynamic require of "assert" is not supported`; the CLI ESM banner now supplies Node's standard `createRequire`. The repaired bundle successfully resumed the same URL scan without creating another scan. CLI `0.2.15` is a verified release candidate; npm still publishes `0.2.14` until authenticated publication and readback. Published MCP `0.2.12` reads the same scan quality but exposes 21 tools and lacks the current setup-health tool. Coordinated candidate MCP `0.2.13`, Agent Plugin `0.1.32` and CLI `0.2.15` update the tool catalog and exact client pins. Candidate pins are prepared on the draft PR; public versions remain `0.2.12` / `0.1.31` / `0.2.14` until authenticated publication and readback.
 
 Broker authority (#7) remains deferred and unqualified. Physical-device/screen-reader, individual IDE/native marketplace activation and financial qualification are outside this bounded acceptance. These receipts supersede earlier pending paid, tenant/credential and report-sharing statements; they are not universal launch qualification.
 
@@ -540,7 +540,7 @@ PR #386 keeps the earlier bounded scan unchanged and corrects future coverage: p
 
 ## 9. Release status
 
-Cloud launch is not yet qualified. Production runs `679021c0` (§8); the Desktop app has no signed release. The controller/broker admission path stays closed until installed production authority and protected journal evidence exist. Controlled Standard/Deep, deterministic Composer fix/retest, hosted tenant/credential/MCP and temporary report-sharing receipts now pass within their recorded scope. CLI 0.2.15 publication, individual native client/marketplace activation, physical-device/screen-reader and financial qualification remain open.
+Cloud launch is not yet qualified. Production runs `679021c0` (§8); the Desktop app has no signed release. The controller/broker admission path stays closed until installed production authority and protected journal evidence exist. Controlled Standard/Deep, deterministic Composer fix/retest, hosted tenant/credential/MCP and temporary report-sharing receipts now pass within their recorded scope. Coordinated MCP/plugin/CLI publication, individual native client/marketplace activation, physical-device/screen-reader and financial qualification remain open.
 
 ### Delivered features and bounded proofs
 
