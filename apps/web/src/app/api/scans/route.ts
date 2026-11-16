@@ -105,7 +105,6 @@ async function post(request: Request) {
       operationClaim = {
         status: "NEW",
         operation: delegatedAdmission.operation,
-        admissionProof: delegatedAdmission.admission.admissionProof,
       }
     }
 
@@ -299,6 +298,7 @@ async function post(request: Request) {
     })
     if (ordinaryClaim.response) return ordinaryClaim.response
     if (ordinaryClaim.claim) operationClaim = ordinaryClaim.claim
+    delegatedScanAdmission ??= ordinaryClaim.admission
 
     // Spend controls, cheapest check first. The existing per-target guard below stops the
     // same target running twice; neither of these bounded a workspace fanning out across

@@ -186,6 +186,50 @@ describe("scan operation route regressions", () => {
     req.headers.set("Idempotency-Key", "review-probe")
     return req
   }
+  it("binds a newly claimed OAuth scan to its authenticated admission proof", async () => {
+    vi.mocked(requirePermission).mockResolvedValue({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          authorizationVersion: 3,
+          workspaceId: "ws-1",
+          scopes: ["lyrashield.write"],
+          allowedOperations: ["scan.create"],
+          allowedTargetIds: ["t1"],
+          allTargets: false,
+          allowedProfiles: ["SAFE"],
+        },
+      },
+      workspace: { id: "ws-1" },
+    } as never)
+    vi.mocked(claimOrGetAgentOperation).mockResolvedValue({
+      status: "NEW",
+      operation: { id: "op-1" },
+      admissionProof: "p".repeat(64),
+    } as never)
+
+    const req = makeRequest({
+      workspaceId: "ws-1",
+      targetId: "t1",
+      goal: "TEST_APP",
+      mode: "SAFE",
+    })
+    req.headers.set("Idempotency-Key", "oauth-admission")
+    const res = await POST(req)
+
+    expect(res.status).toBe(201)
+    expect(createScan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        delegatedOperation: {
+          operationId: "op-1",
+          admissionProof: "p".repeat(64),
+          connectionId: "conn-1",
+          authorizationVersion: 3,
+        },
+      })
+    )
+  })
   it("never executes a failed claim again", async () => {
     vi.mocked(claimOrGetAgentOperation).mockResolvedValue({
       status: "FAILED",

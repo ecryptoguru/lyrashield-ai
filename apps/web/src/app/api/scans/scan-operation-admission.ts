@@ -94,6 +94,7 @@ export async function claimOrdinaryScanOperation(params: {
   delegated: boolean
 }): Promise<{
   claim?: Awaited<ReturnType<typeof claimOrGetAgentOperation>>
+  admission?: DelegatedScanAdmission
   response?: NextResponse
 }> {
   if (params.delegated) return {}
@@ -203,7 +204,19 @@ export async function claimOrdinaryScanOperation(params: {
       ),
     }
   }
-  return { claim }
+  const admission =
+    claim.status === "NEW" &&
+    claim.admissionProof &&
+    params.oauth?.connectionId &&
+    params.oauth.authorizationVersion
+      ? {
+          operationId: claim.operation.id,
+          admissionProof: claim.admissionProof,
+          connectionId: params.oauth.connectionId,
+          authorizationVersion: params.oauth.authorizationVersion,
+        }
+      : undefined
+  return { claim, admission }
 }
 
 export function isDelegatedScanAdmissionError(error: unknown): boolean {
