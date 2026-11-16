@@ -1,6 +1,6 @@
 # LyraShield AI Gemini CLI extension
 
-PREPARATION ONLY: npm MCP `0.2.13` and CLI `0.2.14` are published, but this extension does not yet
+PREPARATION ONLY: npm MCP `0.2.13` and CLI `0.2.15` are published, but this extension does not yet
 have a matching immutable marketplace release. Do not submit or install it from a public listing
 until the exact export is reviewed and released.
 
