@@ -303,7 +303,7 @@ a successful corrected release or the Composer draft PR → compatibility review
 No finding was marked fixed by these attempts.
 
 See [PRD §8](../PRD.md#8-current-production-evidence) for exact image/scan/run
-identities and [operations](./operations.md#current-production-readback--2026-10-27)
+identities and [operations](./operations.md#historical-production-readback--2026-10-27)
 for guarded continuation. These controls do not establish universal detection,
 customer deployed-runtime patching, vendor-backport status, earlier compromise
 or application compatibility.
