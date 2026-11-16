@@ -67,7 +67,9 @@ cache when that header is absent. Browser TTL and cache keys use their defaults.
 
 Both object paths were read back as HTTP 206 with correct Content-Range and
 `CF-Cache-Status: HIT`. Cache eligibility alone does not establish a latency
-guarantee. See the dated [production evidence](../../docs/evidence/landing-motion-regression-review-2026-10-29.md).
+guarantee. The dated production evidence was recorded in
+`docs/evidence/landing-motion-regression-review-2026-10-29.md`
+(removed 2026-11-16; recover from Git history).
 
 When approving a new render hash, extend the rule to the new exact public MP4
 paths before promotion and verify range delivery, CORS and cache hits. Retain the

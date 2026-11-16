@@ -42,7 +42,7 @@ Superseded releases, each verified at the time and retained in git, [PRD §8](./
 
 Three reconciliation/catalog alert rules remain intentionally disabled under the October 12 noise policy; the operator receiver is verified and one controlled test notification was delivered, which does not prove individual rule behaviour.
 
-Recheck deployed state before operational action. Consult the [dated execution queue](./docs/handoffs/codex-setup-queue-2026-10-02.md) only for relevant follow-up work and refresh its evidence first. Do not create production scorecards, perform live financial actions, or run paid acceptance scans without explicit authorization. Keep unverified findings `DETECTED` or `INCONCLUSIVE`.
+Recheck deployed state before operational action. Current open gates and follow-up work are owned by [PRD §9](./PRD.md#9-release-status); dated handoffs under `docs/handoffs/` must have their source and evidence refreshed before use. Do not create production scorecards, perform live financial actions, or run paid acceptance scans without explicit authorization. Keep unverified findings `DETECTED` or `INCONCLUSIVE`.
 
 ## Founder decisions
 

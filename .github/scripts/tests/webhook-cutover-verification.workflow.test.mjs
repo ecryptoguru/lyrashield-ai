@@ -123,7 +123,7 @@ assert.match(
   /worker_digest: \$\{\{ needs\.resolve-images\.outputs\.worker_digest \}\}/
 )
 assert.match(runtime, /Verify compatible webhook cutover baseline[\s\S]*Run database migrations/)
-assert.match(cutover, /webhook-production-cutover\.md/)
+assert.match(cutover, /durable-webhook-track-utc-schema-cutover/)
 assert.match(cutover, /durable-claims\/1/)
 assert.match(
   deploy,
