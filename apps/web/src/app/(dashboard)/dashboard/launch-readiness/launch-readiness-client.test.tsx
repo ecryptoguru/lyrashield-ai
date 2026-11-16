@@ -99,7 +99,7 @@ describe("LaunchReadinessClient triage relabel", () => {
     expect(html).toContain("Insufficient current evidence")
     expect(html).not.toContain("Nothing Checked")
     expect(html).toContain("Triage counts open findings; it is not the launch verdict.")
-    expect(html).toContain("Gate blockers unconfirmed")
+    expect(html).toContain("Blocking findings unconfirmed")
     expect(html).toContain("3 total findings")
     expect(html).not.toContain("0 gate blockers")
   })
@@ -120,7 +120,8 @@ describe("LaunchReadinessClient triage relabel", () => {
 
     expect(html).toContain('stroke="var(--color-success)"')
     expect(html).toContain("Triage only — not a readiness score")
-    expect(html).toContain("0 gate blockers")
+    expect(html).toContain("0 assessed blocking findings")
+    expect(html).not.toContain("0 gate blockers")
   })
 })
 
