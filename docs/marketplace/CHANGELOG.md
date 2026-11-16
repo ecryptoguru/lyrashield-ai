@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.1.31 release candidate (unpublished)
+## 0.1.32 release candidate (unpublished)
 
-- Pin candidate MCP `0.2.12` and CLI `0.2.14` in prepared native artifacts; keep public install
+- Pin candidate MCP `0.2.13` and CLI `0.2.14` in prepared native artifacts; keep public install
   instructions on the latest published versions until the coordinated npm release is complete.
 - Bundle shared workflow skills for the candidate plugin and regenerate marketplace provenance.
 - This section records preparation only. Marketplace export, npm publication and listing changes
