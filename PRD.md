@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current production evidence: 2026-11-16 13:12 UTC — product `c651cc80c6eb5eb801a10df8661b210cbdd0ce48`, release `43862618892`, worker `sha256:cc26096d7e9283850b821f66808392734cf44385df0f9908c4258f42f8775bcd`, engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`. See §8 for the published clients and earlier immutable paid/hosted acceptance identities. This file owns product strategy, accepted scope, release gates, and ordered backlog; running code, schema, CI, and live evidence override prose.
+> Current production evidence: 2026-11-16 14:29 UTC — product `493d6eae5947605bcf932fb395ef2bf8ffe3caaa`, release `43878552122`, worker `sha256:5f7b469015f9813da1c50c5d1a70d7370164df7a54cf0c1d38683f5ac5cba0e3`, engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`. See §8 for published clients and earlier immutable paid/hosted acceptance identities. This file owns product strategy, accepted scope, release gates, and ordered backlog; running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
@@ -404,6 +404,22 @@ Detailed file and package mapping: [codebase.md](./codebase.md).
 
 ## 8. Current production evidence
 
+### Final runtime and client distribution — 2026-11-16
+
+[PR #1149](https://github.com/ecryptoguru/lyrashield-ai/pull/1149) merged as `493d6eae5947605bcf932fb395ef2bf8ffe3caaa` after all three required checks passed on exact head `04810e19835c3b1c0494763511b94373f66a515e` ([CI 43875159269](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43875159269)). [Release 43878552122](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43878552122) completed source qualification, exact-image rehearsal, Azure rollout, worker promotion and marketing deployment. Independent readback at `2026-11-16T14:29Z` confirmed:
+
+| Component    | Revision / state                                                           | Image digest                                                              |
+| ------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| App          | `lyrashield-app--0000525`, healthy, 100%                                   | `sha256:25b59b8e026233fe09030e441cb56b74e73cfe4f17105685f3916fa55bcb0179` |
+| Scanner      | `lyrashield-scanner--0000499`, healthy, 100%                               | same web digest                                                           |
+| Egress proxy | `lyrashield-egress-proxy--0000365`, healthy, 100%                          | `sha256:e6c4a6b1de64e8f613bc31dfea4d3012bc035f71f0b0eb8a0ca473636fab2b04` |
+| Worker       | product `493d6eae`, healthy, zero restarts, started `2026-11-16T14:27:13Z` | `sha256:5f7b469015f9813da1c50c5d1a70d7370164df7a54cf0c1d38683f5ac5cba0e3` |
+| Engine       | unchanged `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`                       | bound in worker provenance                                                |
+
+All three public health/readiness probes returned 200; marketing serves build `493d6eae5947605bcf932fb395ef2bf8ffe3caaa`. Standard/Deep manifests remain `MATCH` with their original `637a178ae` worker provenance and one unchanged 16/39-minute usage receipt each. No paid scans were rerun for these client updates.
+
+Public MCP `0.2.13`, Agent Plugin `0.1.32` and CLI `0.2.15` archive/integrity and fresh consumer checks pass. [PR #1150](https://github.com/ecryptoguru/lyrashield-ai/pull/1150), merged as `9983264b062763dd0995b5161d1e598b0755e3d7`, aligns Zed's Cargo.lock root version with Cargo.toml `0.1.32` without changing dependencies; local and marketplace CI locked WASM builds pass. [Its release routing](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43886509763) correctly skipped Azure/marketing. Current guide labels match the published CLI; dated historical receipts retain their original versions. Immutable marketplace publication and individual native client activation need separate receipts. Broker authority (#7), physical-device/screen-reader and financial qualification remain outside this acceptance.
+
 ### Coordinated client release — 2026-11-16 13:12 UTC
 
 [PR #1148](https://github.com/ecryptoguru/lyrashield-ai/pull/1148) merged as `c651cc80c6eb5eb801a10df8661b210cbdd0ce48` after all three required checks passed on exact head `36f6c7c0d9f6ada1dcc4d27495005c7d8352b06d` ([CI 43860099222](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43860099222)). [Release 43862618892](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43862618892) passed source qualification, exact-image rehearsal, Azure rollout, worker promotion and marketing deployment. Independent readback confirmed:
@@ -559,7 +575,7 @@ PR #386 keeps the earlier bounded scan unchanged and corrects future coverage: p
 
 ## 9. Release status
 
-Cloud launch is not yet qualified. Production runs `c651cc80` (§8); the Desktop app has no signed release. The controller/broker admission path stays closed until installed production authority and protected journal evidence exist. Controlled Standard/Deep, deterministic Composer fix/retest, hosted tenant/credential/MCP and temporary report-sharing receipts pass within their recorded scope. Coordinated MCP/plugin/CLI publication and public consumer checks pass; immutable marketplace publication, individual native client activation, physical-device/screen-reader and financial qualification require separate receipts.
+Cloud launch is not yet qualified. Production runs `493d6eae` (§8); the Desktop app has no signed release. The controller/broker admission path stays closed until installed production authority and protected journal evidence exist. Controlled Standard/Deep, deterministic Composer fix/retest, hosted tenant/credential/MCP and temporary report-sharing receipts pass within their recorded scope. Coordinated MCP/plugin/CLI publication and public consumer checks pass; immutable marketplace publication, individual native client activation, physical-device/screen-reader and financial qualification require separate receipts.
 
 ### Delivered features and bounded proofs
 
