@@ -2,8 +2,9 @@
 
 The homepage keeps the scroll configuration recovered from PR #1048
 (`bb4c6c3c3387c4b73c9d02322efa9e96aa68f885`) and the subsequently verified
-buffered native player. The detailed regression review is in
-[the recovery evidence](../evidence/landing-motion-regression-review-2026-10-29.md).
+buffered native player. The detailed regression review was recorded in
+`docs/evidence/landing-motion-regression-review-2026-10-29.md`
+(removed 2026-11-16; recover from Git history).
 
 ## Visual story
 

@@ -755,16 +755,13 @@ test("deploy workflows expose an opt-in protected digest and run read-only prefl
   assert.ok(runtimePreflight >= 0 && runtimePreflight < firstProductionMutation)
   assert.ok(runtimeRegistryLogin >= 0 && runtimeRegistryLogin < runtimePreflight)
   assert.doesNotMatch(JSON.stringify([deploy, runtime]), /PAIRED_COMMAND|arbitrary command/)
-  assert.deepEqual(production.jobs["deploy-azure"].needs, ["routing", "qualify-runtime"])
-  assert.equal(
-    production.jobs["qualify-runtime"].with.runtime_fleet_evidence,
-    "${{ vars.LYRASHIELD_RUNTIME_FLEET_EVIDENCE }}"
-  )
-  assert.equal(production.jobs["deploy-azure"].with.cold_release, true)
+  assert.deepEqual(production.jobs["deploy-azure"].needs, ["routing"])
+  assert.equal(production.jobs["qualify-runtime"], undefined)
+  assert.notEqual(production.jobs["deploy-azure"].with.cold_release, true)
   assert.equal(production.jobs["deploy-azure"].with.qualified_release_digest, undefined)
-  assert.equal(runtime.on.workflow_call.inputs.cold_release.default, false)
+  assert.equal(runtime.on.workflow_call.inputs.cold_release, undefined)
   assert.equal(
-    deploy.jobs["preflight-compatible-baseline"].steps[0].if,
-    "inputs.cold_release != true"
+    deploy.jobs["preflight-compatible-baseline"].steps[0].name,
+    "Checkout exact deployment source"
   )
 })

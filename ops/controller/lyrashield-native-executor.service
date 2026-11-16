@@ -1,0 +1,16 @@
+[Unit]
+Description=LyraShield protected native action executor
+Requires=lyrashield-native-executor.socket
+After=docker.service
+
+[Service]
+ExecStart=/usr/bin/python3 -I /opt/lyrashield/runtime-control/native-executor.py
+ExecStopPost=/usr/bin/python3 -I /opt/lyrashield/runtime-control/native-executor.py --reconcile
+User=root
+Group=root
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/lyrashield/native-executor /sys/fs/cgroup
+UMask=0077

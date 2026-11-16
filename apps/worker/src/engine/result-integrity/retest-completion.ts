@@ -528,6 +528,45 @@ export async function completeRetestsForScan(params: {
   })
 }
 
+/**
+ * An expected refusal before execution (no complete deterministic baseline)
+ * must not be reported as an internal failure. Recording the inconclusive
+ * outcome first also stops cleanup from relabelling it as a generic error.
+ */
+export async function inconclusiveRetestsForScan(scanId: string, reason: string): Promise<void> {
+  const retests = await prisma.retest.findMany({
+    where: { scanId, status: { in: ["pending", "running"] } },
+    select: { id: true, workspaceId: true, findingId: true },
+  })
+  if (!retests.length) return
+  for (const retest of retests) {
+    const idempotencyKey = checksum({
+      retestId: retest.id,
+      scanId,
+      findingId: retest.findingId,
+      status: "INCONCLUSIVE",
+    })
+    await prisma.findingVerification.upsert({
+      where: { idempotencyKey },
+      create: {
+        workspaceId: retest.workspaceId,
+        findingId: retest.findingId,
+        scanId,
+        status: "INCONCLUSIVE",
+        method: "RETEST",
+        reason,
+        verifierVersion: "result-integrity-v3",
+        idempotencyKey,
+      },
+      update: {},
+    })
+    await prisma.retest.update({
+      where: { id: retest.id },
+      data: { status: "inconclusive", resultAfter: reason },
+    })
+  }
+}
+
 export async function failTerminalRetestsForScan(scanId: string): Promise<void> {
   const scan = await prisma.scan.findUnique({ where: { id: scanId }, select: { status: true } })
   if (!scan || !["FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(scan.status)) {

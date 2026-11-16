@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import pg from "pg"
-import { beforeAll, afterAll, describe, it, expect } from "vitest"
+import { beforeAll, afterAll, describe, it, expect, vi } from "vitest"
 import { bindScanPreparationContext } from "./scan-preparation-authority"
 import {
   preparationFixture,
@@ -10,6 +10,17 @@ import {
   sealPreparationBundle,
 } from "../scripts/tests/scan-preparation-fixture"
 import { queueFixtureWorker } from "../scripts/tests/queue-outbox-fixture"
+
+// Hoisting runs this guard before imports can construct a client from ambient
+// env. This runner's independent clone has no RLS_RUNTIME_DATABASE_URL, so bind
+// the privileged DATABASE_URL role to its restricted preparation broker role.
+await vi.hoisted(async () => {
+  const runtime = process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1" || !runtime) return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({ ...process.env, RLS_RUNTIME_DATABASE_URL: runtime })
+})
 
 const enabled =
   process.env.SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST === "1" &&

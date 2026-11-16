@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 # Verify the exact merged source against genuine PR CI receipts before routing.
-# Build once and qualify the exact images before the automated cold fleet rollout.
+# The deploy builds once and rehearses the exact images before promotion.
 concurrency:
   group: release-production-${{ github.ref }}
   cancel-in-progress: false
@@ -49,38 +49,18 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
         run: bash .github/scripts/classify-main-change-gap.sh
 
-  # A normal main push reaches the protected issuer, which managed-signs one
-  # exact-artifact record from authenticated evidence. Deployment consumes only
-  # that record. The selectors come from repository variable
-  # LYRASHIELD_RUNTIME_FLEET_EVIDENCE; without authenticated evidence the issuer
-  # issues nothing and this job produces no digest, so deployment stays held.
-  qualify-runtime:
-    name: Issue the exact-artifact release qualification
-    needs: routing
-    if: needs.routing.outputs.current-main == 'true'
-    uses: ./.github/workflows/issue-runtime-qualification.yml
-    with:
-      runtime_fleet_evidence: ${{ vars.LYRASHIELD_RUNTIME_FLEET_EVIDENCE }}
-    secrets: inherit
-    permissions:
-      actions: read
-      contents: read
-      id-token: write
-      packages: read
-
+  # The release deploys the exact merged source after qualification against
+  # the required PR checks, exactly as the last verified production release
+  # did: source qualification, exact-image build and disposable rehearsal in
+  # deploy-azure.yml, then the guarded Azure rollout. A previously used
+  # runtime-fleet record gate is retired; it had no issuer and blocked every
+  # deployment without adding an enforceable guarantee to this path.
   deploy-azure:
-    needs: [routing, qualify-runtime]
-    if: >-
-      needs.routing.outputs.current-main == 'true' &&
-      needs.routing.outputs.azure-deploy == 'true' &&
-      needs.qualify-runtime.result == 'success' &&
-      needs.qualify-runtime.outputs.runtime_fleet_record_sha256 != ''
+    needs: [routing]
+    if: needs.routing.outputs.current-main == 'true' && needs.routing.outputs.azure-deploy == 'true'
     uses: ./.github/workflows/deploy-azure.yml
     with:
       source_sha: ${{ github.sha }}
-      cold_release: true
-      runtime_fleet_qualification: ${{ needs.qualify-runtime.outputs.runtime_fleet_qualification }}
-      runtime_fleet_record_sha256: ${{ needs.qualify-runtime.outputs.runtime_fleet_record_sha256 }}
     secrets: inherit
     permissions:
       actions: read

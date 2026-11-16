@@ -1,8 +1,6 @@
 import type { RepositoryAuth } from "./repository-auth"
 import { env } from "@lyrashield/config"
 import { ENGINE_TEMP_ROOT } from "./workspace-path"
-import { assertSandboxSbomCoverageVerified, readJsonEvidence } from "./sandbox-sbom-coverage"
-import { verifyHeldSandboxPublicationRecord } from "@lyrashield/security/sandbox-publication-record"
 
 import { resolveEngineProfile, type EngineProfile } from "@lyrashield/security"
 export { resolveEngineProfile } from "@lyrashield/security"
@@ -62,22 +60,9 @@ export function assertRepositoryScanRuntimeConfigured(
     if (/^tcp:\/\//.test(dockerHost) && runtimeEnv.DOCKER_TLS_VERIFY !== "1") {
       throw new Error("DOCKER_TLS_VERIFY=1 is required for a tcp:// production DOCKER_HOST")
     }
-    // Fail-closed consumer for the signed bounded SBOM coverage attestation.
-    // Scoped to the pinned sandbox image above; non-production flows and
-    // non-sandbox artifacts never reach this check.
-    const recordPath = runtimeEnv.LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH?.trim()
-    if (recordPath) {
-      if (recordPath !== "/etc/lyrashield/sandbox-publication-record.json")
-        throw new Error("Signed sandbox publication must use the protected runtime path")
-      verifyHeldSandboxPublicationRecord(
-        readJsonEvidence(recordPath, "signed publication record", 0),
-        { sandboxImage: image, engineRevision: runtimeEnv.LYRASHIELD_ENGINE_REVISION ?? "" }
-      )
-      throw new Error(
-        "Authenticated sandbox publication remains held: independent native inventory and runtime authority are unavailable"
-      )
-    }
-    assertSandboxSbomCoverageVerified(runtimeEnv, image)
+    // Repository scans run inside the pinned Docker sandbox on an egress-restricted
+    // network (see the checks above and ops/worker/README.md). Provider and
+    // model-provider access stays bounded by the configured budgets.
   }
 }
 

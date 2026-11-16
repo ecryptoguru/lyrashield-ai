@@ -1,7 +1,20 @@
 import { readFileSync } from "node:fs"
 import pg from "pg"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { observeDisposableExecutionContext } from "./disposable-preparation-observations"
+
+// Hoisting runs this guard before the pool can connect. This harness re-observes
+// the single disposable database through DATABASE_URL, so bind that one database
+// to both sides of the shared disposable-pair guard.
+await vi.hoisted(async () => {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1") return
+  const { assertDisposableDatabasePair } =
+    await import("../../../.github/scripts/vitest-database-env.mjs")
+  assertDisposableDatabasePair({
+    ...process.env,
+    RLS_RUNTIME_DATABASE_URL: process.env.DATABASE_URL,
+  })
+})
 
 const enabled = process.env.LYRA_DISPOSABLE_CONTEXT_TEST === "1"
 describe.skipIf(!enabled)("owned disposable execution context", () => {

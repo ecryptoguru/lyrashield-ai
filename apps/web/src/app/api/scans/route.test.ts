@@ -167,6 +167,16 @@ vi.mock("@lyrashield/integrations", () => ({
   getBranchRefSha: vi.fn(),
   getDefaultBranch: vi.fn(),
   getMergeBaseSha: vi.fn(),
+  resolveRepositoryScanSource: vi.fn(async (target) => {
+    const { getBranchRefSha } = await import("@lyrashield/integrations")
+    const revision = await getBranchRefSha(
+      Number(target.installationId),
+      target.repoOwner,
+      target.repoName,
+      target.branch ?? "main"
+    )
+    return { revision: revision ?? "a".repeat(40) }
+  }),
 }))
 
 vi.mock("@lyrashield/billing", () => ({
@@ -207,6 +217,9 @@ import {
 import { checkFreeUrlScanRateLimit } from "../../../lib/rate-limit"
 import { assertScanAllowed } from "@lyrashield/billing"
 import { getBranchRefSha, getMergeBaseSha } from "@lyrashield/integrations"
+beforeEach(() => {
+  vi.mocked(getBranchRefSha).mockResolvedValue("a".repeat(40))
+})
 
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost:3000/api/scans", {
@@ -1055,7 +1068,7 @@ describe("POST /api/scans", () => {
       )
     })
 
-    it("still creates the scan when head pinning is unavailable", async () => {
+    it("refuses admission when the repository revision is unavailable", async () => {
       vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
       vi.mocked(getBranchRefSha).mockRejectedValue(new Error("GitHub API unreachable"))
       vi.mocked(createScan).mockResolvedValue({
@@ -1076,9 +1089,9 @@ describe("POST /api/scans", () => {
         })
       )
 
-      expect(res.status).toBe(201)
-      const call = vi.mocked(createScan).mock.calls[0]![0]
-      expect(call).not.toHaveProperty("source")
+      expect(res.status).toBe(400)
+      expect(createScan).not.toHaveBeenCalled()
+      expect(enqueueScanJob).not.toHaveBeenCalled()
     })
   })
 

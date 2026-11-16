@@ -5,7 +5,7 @@ Use this index to find the owning document and avoid duplicating current truth.
 ## Current sources of truth
 
 - [`../PRD.md`](../PRD.md) — product scope, release status, backlog and founder decisions.
-- [`../codebase.md`](../codebase.md) — architecture, runtime contracts, code map and compact implementation ledger.
+- [`../codebase.md`](../codebase.md) — architecture, runtime contracts and code map.
 - [`../AGENTS.md`](../AGENTS.md) — immediate engineering handoff, execution queue, rules and landmines.
 
 ## Compact metric, contract and evidence index
@@ -18,7 +18,7 @@ Use this index to find the owning document and avoid duplicating current truth.
 | Manifest integrity             | [`yellowpaper.md`](./yellowpaper.md#4-evidence-and-integrity), [`../codebase.md`](../codebase.md#5-core-contracts)                         | Worker writer and DB verifier; unit tests plus `packages/db/src/manifest-checksum.runtime.test.ts` with disposable `DATABASE_URL` and `RLS_RUNTIME_DATABASE_URL` for the same database. Null legacy inputs remain unavailable. |
 | Runtime and release evidence   | [`../PRD.md`](../PRD.md#8-current-production-evidence), [`../codebase.md`](../codebase.md#11-production-topology-and-accepted-evidence)    | Dated, revision-bound deployment/runtime claims and open gates. Refresh live state before reusing a dated claim.                                                                                                               |
 
-The [v26 local implementation/disposition record](./handoffs/v26-implementation-2026-10-30.md) maps original review IDs to reviewed source and pending final qualifications. It does not replace dated production evidence. The [admission/capacity cutover and compatible rollback procedure](./operations.md#v26-admissioncapacity-cutover-and-compatible-rollback) owns the new schema/drain/grant boundary.
+The dated v26 disposition record and earlier dated handoffs, review evidence and marketing review files were removed on 2026-11-16; recover them from Git history at `c07b91203` or earlier. The [admission/capacity cutover and compatible rollback procedure](./operations.md#v26-admissioncapacity-cutover-and-compatible-rollback) owns the new schema/drain/grant boundary, and [PRD §9](../PRD.md#9-release-status) owns the current open gates.
 
 ## Papers (public + investor safe)
 
@@ -31,22 +31,19 @@ Keep these three documents separate: the litepaper gives a short executive overv
 ## Operational documents
 
 - [`user-guide.md`](./user-guide.md) — end-user workflows, options, permissions and limitations.
-- [`webmcp-runtime.md`](./webmcp-runtime.md) — opt-in WebMCP runtime checker: commands, receipt contract, PASS/INCONCLUSIVE semantics and evidence caveats.
 - [`php-security.md`](./php-security.md) — Conditional Standard/Deep PHP project coverage, the browser-local PHP2Shell review, Composer draft fixes and runtime remediation/retest evidence.
-- [`reviews/worker-consumer-qualification-2026-11-02.md`](./reviews/worker-consumer-qualification-2026-11-02.md) — reproducible local current-reader and unchanged pinned-consumer compatibility gates; no deployment claim.
 - [`environment-ownership.md`](./environment-ownership.md) — central application settings and exact external configuration owners.
-- [`low-rate-error-alert-draft.md`](./low-rate-error-alert-draft.md) — proposal only; preserves the approved operator alert policy.
-- [`operations.md`](./operations.md) — founder/operator runbooks: live checkout verification, license signing-key compromise response and affiliate payout operations.
+- [`operations.md`](./operations.md) — founder/operator runbooks: production readback, live checkout verification, durable webhook cutover, license signing-key compromise response and affiliate payout operations.
 - [`policies.md`](./policies.md) — public `/api/v1` stability and deprecation contract, public claims policy, accepted security-risk register and the customer threat-model worksheet.
 - [`myra-spec.md`](./myra-spec.md) — master implementation specification for the Myra support agent and demo booking.
 
 ## Retained directories
 
+- [`design/`](./design/) — homepage, reading/tools and landing design briefs referenced by [`DESIGN.md`](../DESIGN.md), plus the durable-dispatch-authority ADR.
 - [`editorial/`](./editorial/) — claim maps, briefs, research and image manifests consumed by marketing validators.
 - [`growth/`](./growth/) — analytics taxonomy, experiment ledger and PostHog dashboard spec.
 - [`marketplace/`](./marketplace/) — marketplace export source, licenses, validator and reviewer artifacts.
-- [`handoffs/`](./handoffs/) — dated operational context and execution queues. Refresh their source and evidence before acting; `PRD.md` §9 owns the current open gates.
-- [`reviews/`](./reviews/) — dated review evidence and reproducible probe fixtures. Preserve evidence and executable fixtures referenced by operations; completed review findings belong in the current owner or Git history.
+- [`handoffs/`](./handoffs/) — dated operational context. Refresh their source and evidence before acting; `PRD.md` §9 owns the current open gates.
 
 ## Historical archive
 
@@ -54,7 +51,8 @@ Keep these three documents separate: the litepaper gives a short executive overv
 
 ## Superseded material
 
-- `product.md`, `monetization.md`, `claims-readiness.md`, `lite-scanner.md`, `vibe-security-50.md`, `webmcp-assurance.md`, `ai-assurance-framework-mapping.md`, `ai-safety-test-pack.md`, the superseded AI-assurance release checklist and the executed simplification/billing/launch-review plans were consolidated or retired on 2026-09-12. The completed 2026-09-11 security-review files are retained in Git at `ae7cabc5`; their four continuing accepted risks remain current in [`policies.md`](./policies.md#security-risk-register). Verbatim historical content, including internal unit economics, is recoverable from Git history; `PRD.md` and `codebase.md` remain current truth. The dated `plans/` directory, dated review ledgers and `superpowers/` working artifacts were retired on 2026-09-25; executed plans are never current truth and git history is the recovery path.
+- `product.md`, `monetization.md`, `claims-readiness.md`, `lite-scanner.md`, `vibe-security-50.md`, `webmcp-assurance.md`, `ai-assurance-framework-mapping.md`, `ai-safety-test-pack.md`, the superseded AI-assurance release checklist and the executed simplification/billing/launch-review plans were consolidated or retired on 2026-09-12. The completed 2026-09-11 security-review files are retained in Git at `ae7cabc5`; their four continuing accepted risks remain current in [`policies.md`](./policies.md#security-risk-register). The dated `plans/` directory, dated review ledgers and `superpowers/` working artifacts were retired on 2026-09-25.
+- On 2026-11-16 the remaining dated artifacts were removed: the 2026-09-30/10-03/10-06/10-07/10-28/11-02/11-11 `reviews/` evidence and fixtures, the 2026-10-28/29 `evidence/` marketing and landing reviews, the 2026-10-02 execution queue and the v26 and webhook-empty-state handoffs, the unactivated low-rate alert draft, the WebMCP runtime guide and the executed v26 working plan. Each is recoverable from Git history at `c07b91203` or earlier; operative rules and current truth live in `PRD.md`, `codebase.md`, `AGENTS.md` and the operational documents above.
 
 ## Retention rule
 

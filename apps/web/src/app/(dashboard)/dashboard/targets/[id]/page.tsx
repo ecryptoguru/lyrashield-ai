@@ -8,6 +8,10 @@ import { Card, Badge } from "@lyrashield/ui"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { ScorecardControls } from "./scorecard-controls"
 import { RepositoryRefEditor } from "./repository-ref-editor"
+import {
+  RepositoryConnectionRecovery,
+  type EligibleGitHubConnection,
+} from "./repository-connection-recovery"
 import { DomainVerificationCard } from "./domain-verification-card"
 import { DeleteTargetCard } from "./delete-target-card"
 import { assertTargetAllowed } from "@lyrashield/billing"
@@ -136,9 +140,11 @@ function TargetScoreCard({
 function TargetRepositoryDetails({
   target,
   canUpdateTarget,
+  connections,
 }: {
   target: ScopedTarget
   canUpdateTarget: boolean
+  connections: EligibleGitHubConnection[]
 }) {
   if (target.type !== "REPO") return null
   return (
@@ -171,6 +177,14 @@ function TargetRepositoryDetails({
           </div>
         )}
       </dl>
+      {canUpdateTarget && (
+        <RepositoryConnectionRecovery
+          targetId={target.id}
+          workspaceId={target.workspaceId}
+          currentInstallationId={target.installationId}
+          connections={connections}
+        />
+      )}
     </div>
   )
 }
@@ -391,6 +405,24 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
     assertTargetAllowed(workspaceId, session.userId),
   ])
   const latestScan = target.scans[0]
+  // Only an active GitHub integration of this workspace may be offered as a
+  // rebind target; the API revalidates both ownership and repo access.
+  const githubConnections: EligibleGitHubConnection[] =
+    target.type === "REPO"
+      ? (
+          await withWorkspaceRLS(workspaceId, (tx) =>
+            tx.integration.findMany({
+              where: { workspaceId, type: "GITHUB", status: "active", deletedAt: null },
+              select: { externalId: true, name: true },
+              orderBy: { createdAt: "asc" },
+            })
+          )
+        ).flatMap((integration) =>
+          integration.externalId
+            ? [{ installationId: integration.externalId, name: integration.name }]
+            : []
+        )
+      : []
   const panels = await loadTargetAssessmentPanels({
     workspaceId,
     targetId: target.id,
@@ -455,7 +487,11 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
 
       <TargetScoreCard target={target} membershipRole={membership.role} />
 
-      <TargetRepositoryDetails target={target} canUpdateTarget={canUpdateTarget} />
+      <TargetRepositoryDetails
+        target={target}
+        canUpdateTarget={canUpdateTarget}
+        connections={githubConnections}
+      />
 
       <TargetUrlDetails target={target} />
 

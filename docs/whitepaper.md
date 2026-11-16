@@ -89,7 +89,7 @@ Eight design choices organize the product's value proposition:
 
 1. **Evidence states instead of confidence scores** (§4). Detection, deterministic retest validation and independent verification remain distinct. Confidence helps triage; it never manufactures proof.
 2. **Coverage organized around AI-built failure patterns** (§5.4–5.6). The AI-Built Failure Taxonomy, AI App Security signals and WebMCP controls make agent and model boundaries explicit review subjects.
-3. **Agent-native distribution** (§6). The CLI, 21-tool MCP catalog, portable Agent Plugin and account-less GitHub Action bring the workflow into editors, terminals and CI.
+3. **Agent-native distribution** (§6). The CLI, 22-tool MCP catalog, portable Agent Plugin and account-less GitHub Action bring the workflow into editors, terminals and CI.
 4. **An authorization-bound fix loop** (§3.4). Patches are server-owned and scope-checked; browser requests require approval, while authorized credential paths use their separate permission boundary. Nothing auto-merges. Eligible merged fix PRs initiate fresh retests.
 5. **A versioned verdict and verifiable report** (§5.2–5.3). Launch Gate decisions, report integrity and optional release-identity confirmation answer separate, reviewable questions.
 6. **Honest coverage accounting** (§5.1). Per-control receipts disclose incomplete and evidence-required work. “No finding” is not renamed “passed.”
@@ -432,7 +432,7 @@ Fourteen controls review browser-registered agent tools: annotation/behavior mis
 
 The shared static analyzer supports the browser-local Security Lab, bounded repository analysis, CLI diff workflows and a guarded Action subset. The subset is not the entire catalog executed against the whole repository.
 
-The opt-in [runtime checker](./webmcp-runtime.md) observes authorized fixture behavior separately. One browser observation never silently upgrades a static finding into independent verification or establishes behavior across every client.
+The opt-in runtime checker (`scripts/webmcp-runtime-check.mjs`; its earlier guide `docs/webmcp-runtime.md` was removed 2026-11-16 and is recoverable from Git history) observes authorized fixture behavior separately. One browser observation never silently upgrades a static finding into independent verification or establishes behavior across every client.
 
 Dashboard WebMCP preparation tools can fill a form without starting a scan. This is separate from delegated hosted MCP workflows that can authorize paid operations.
 
@@ -530,7 +530,7 @@ The parity contract discloses which clients measure, derive or do not report eac
 | Surface              | Role                                                                           |
 | -------------------- | ------------------------------------------------------------------------------ |
 | `lyrashield` CLI     | Setup, local pre-filters, recorded scans, findings, reports and gate workflows |
-| `@lyrashield/mcp`    | 21 tools over stdio and hosted Streamable HTTP                                 |
+| `@lyrashield/mcp`    | 22 tools over stdio and hosted Streamable HTTP                                 |
 | Agent workflows      | 51 registry entries resolving to 48 preferred client surfaces                  |
 | GitHub Action        | Account-less, diff-aware local gate with SARIF                                 |
 | Public API `/api/v1` | Versioned integration contract with the documented deprecation policy          |

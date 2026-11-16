@@ -12,10 +12,18 @@ import { R2ConditionalObjectStore } from "./r2-store"
 
 const configurationPath = "/etc/lyrashield/control/journal-seal-control-storage.json"
 const checkpointPath = "/etc/lyrashield/control/journal-seal-checkpoint-key.txt"
+const toolConfigurationPath = "/etc/lyrashield/control/tool-journal-seal-control-storage.json"
+const toolCheckpointPath = "/etc/lyrashield/control/tool-journal-seal-checkpoint-key.txt"
 function requireProof(value: unknown): asserts value {
   if (!value) throw new Error("Installed protected seal pin storage unavailable")
 }
-function privateBytes(path: typeof configurationPath | typeof checkpointPath): Buffer {
+function privateBytes(
+  path:
+    | typeof configurationPath
+    | typeof checkpointPath
+    | typeof toolConfigurationPath
+    | typeof toolCheckpointPath
+): Buffer {
   requireProof(process.getuid?.() === 0)
   for (const parent of ["/etc", "/etc/lyrashield", "/etc/lyrashield/control"]) {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed protected root ancestors
@@ -77,10 +85,12 @@ const storageSchema = z
 export function createInstalledJournalSealPinStore(
   source: string,
   evidence: StoredJournalSealEvidenceReader,
-  epochs: AuthoritySqlPool
+  epochs: AuthoritySqlPool,
+  stream: "controller" | "tools" = "controller"
 ) {
   requireProof(evidence instanceof StoredJournalSealEvidenceReader)
-  const policy = readInstalledJournalSealControlPolicy(source)
+  requireProof(stream === "controller" || stream === "tools")
+  const policy = readInstalledJournalSealControlPolicy(source, stream)
   evidence.assertInstalledStream({
     epochId: policy.epochId,
     supervisorInstanceId: policy.supervisorInstanceId,
@@ -89,7 +99,11 @@ export function createInstalledJournalSealPinStore(
     checkpointKeyHash: policy.checkpointKeyHash,
   })
   const config = storageSchema.parse(
-    JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(privateBytes(configurationPath)))
+    JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(
+        privateBytes(stream === "tools" ? toolConfigurationPath : configurationPath)
+      )
+    )
   )
   requireProof(
     config.accountId === policy.controlAccountId &&
@@ -97,7 +111,7 @@ export function createInstalledJournalSealPinStore(
       config.accessKeyId === policy.controlCredentialId
   )
   const checkpointSecret = new TextDecoder("utf-8", { fatal: true }).decode(
-    privateBytes(checkpointPath)
+    privateBytes(stream === "tools" ? toolCheckpointPath : checkpointPath)
   )
   const client = new S3Client({
     region: "auto",
@@ -109,7 +123,7 @@ export function createInstalledJournalSealPinStore(
     const store = new ProtectedJournalSealPinStore(
       new R2ConditionalObjectStore(client, config.bucket, 4096, 5000),
       evidence,
-      new NativeInstalledJournalSealGate(epochs, source),
+      new NativeInstalledJournalSealGate(epochs, source, stream),
       {
         epochId: policy.epochId,
         epoch: policy.epoch,

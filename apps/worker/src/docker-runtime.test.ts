@@ -52,12 +52,6 @@ const desktopReleaseWorkflow = readFileSync(
   fileURLToPath(new URL("../../../.github/workflows/release-tauri.yml", import.meta.url)),
   "utf8"
 )
-const recoveryCandidateWorkflow = readFileSync(
-  fileURLToPath(
-    new URL("../../../.github/workflows/prepare-worker-recovery-candidate.yml", import.meta.url)
-  ),
-  "utf8"
-)
 // The path is anchored to this test module rather than derived from external input.
 const ciWorkflow = readFileSync(
   fileURLToPath(new URL("../../../.github/workflows/ci.yml", import.meta.url)),
@@ -106,7 +100,9 @@ const pinnedNodeBase =
 describe("worker Docker runtime", () => {
   it("pins every Node base stage to one immutable digest", () => {
     expect(dockerfile).not.toMatch(/^FROM node:24-alpine AS/m)
-    expect(dockerfile.match(/^FROM node:24-alpine@sha256:[0-9a-f]{64} AS/gm) ?? []).toHaveLength(7)
+    // One pin per stage: deps, worker-deps, worker, web, egress, supervisor base
+    // and the shared controller base used by the three control-plane targets.
+    expect(dockerfile.match(/^FROM node:24-alpine@sha256:[0-9a-f]{64} AS/gm) ?? []).toHaveLength(8)
     expect(new Set(dockerfile.match(/node:24-alpine@sha256:[0-9a-f]{64}/g))).toHaveLength(1)
   })
 
@@ -176,10 +172,9 @@ describe("worker Docker runtime", () => {
   })
 
   it("pins and records the exact engine revision for release worker builds", () => {
-    const reviewedEngineRevision = "0793bcb9644a1985165963375586124c993c020a"
+    const reviewedEngineRevision = "afd71f79675cb4db4187e31ecbf8f58ebcd62e1c"
     expect(deployWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(desktopReleaseWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
-    expect(recoveryCandidateWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(deployWorkflow).toContain("ref: ${{ env.ENGINE_REVISION }}")
     expect(deployWorkflow).toContain("io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}")
     const housekeepingStep = deployRuntimeWorkflow

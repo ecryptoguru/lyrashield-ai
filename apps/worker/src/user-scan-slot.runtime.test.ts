@@ -279,7 +279,7 @@ describe.skipIf(!enabled)("nonfinancial user admission with PostgreSQL RLS and R
     }
   })
 
-  it("keeps a queued Redis job and slot after the reconciliation timer", async () => {
+  it("keeps a queued Redis job and slot after the timer while worker authority is closed", async () => {
     const input = await fixture()
     const scan = await db.createScan(input)
     await owner.scan.update({ where: { id: scan.id }, data: { updatedAt: new Date(0) } })
@@ -293,10 +293,15 @@ describe.skipIf(!enabled)("nonfinancial user admission with PostgreSQL RLS and R
         mode: "SAFE",
       })
       const { reconcileExactQueuedScanOrphan } = await import("./queue-reconciliation")
+      const { workerAuthorityStartup } = await import("./worker-authority-startup")
+      expect(workerAuthorityStartup.kind).toBe("closed")
       expect(await reconcileExactQueuedScanOrphan(scan.id, input.workspaceId)).toMatchObject({
+        leaseAcquired: false,
         reconciled: false,
-        jobState: "waiting",
+        jobState: "authority-held",
       })
+      expect(await (await integrations.getScanQueue().getJob(scan.id))?.getState()).toBe("waiting")
+      expect((await owner.scan.findUniqueOrThrow({ where: { id: scan.id } })).status).toBe("QUEUED")
       expect(await owner.userScanSlot.count({ where: { scanId: scan.id } })).toBe(1)
       await expect(db.createScan(input)).rejects.toMatchObject({ code: "SCAN_ALREADY_ACTIVE" })
     })
@@ -322,7 +327,7 @@ describe.skipIf(!enabled)("nonfinancial user admission with PostgreSQL RLS and R
     expect(await integrations.getRedis()!.zscore("lyrashield:scan-workers", workerId)).toBeNull()
   })
 
-  it("reconciles missing queue jobs without replay and retains uncertain execution ownership", async () => {
+  it("retains missing queue jobs and execution slots without replay while worker authority is closed", async () => {
     const { reconcileExactQueuedScanOrphan } = await import("./queue-reconciliation")
     for (const executionStarted of [false, true]) {
       const input = await fixture()
@@ -333,17 +338,22 @@ describe.skipIf(!enabled)("nonfinancial user admission with PostgreSQL RLS and R
           data: { state: "RUNNING" },
         })
       await owner.scan.update({ where: { id: scan.id }, data: { updatedAt: new Date(0) } })
+      const reservation = await owner.scanCapacityReservation.findUniqueOrThrow({
+        where: { scanId: scan.id },
+      })
       expect(await reconcileExactQueuedScanOrphan(scan.id, input.workspaceId)).toMatchObject({
-        reconciled: true,
-        jobState: "missing",
+        leaseAcquired: false,
+        reconciled: false,
+        jobState: "authority-held",
       })
       expect(await integrations.getScanQueue().getJob(scan.id)).toBeUndefined()
-      expect(await owner.userScanSlot.count({ where: { scanId: scan.id } })).toBe(
-        executionStarted ? 1 : 0
-      )
-      if (executionStarted)
-        await expect(db.createScan(input)).rejects.toMatchObject({ code: "SCAN_ALREADY_ACTIVE" })
-      else expect((await db.createScan(input)).id).not.toBe(scan.id)
+      expect((await owner.scan.findUniqueOrThrow({ where: { id: scan.id } })).status).toBe("QUEUED")
+      expect(
+        (await owner.scanCapacityReservation.findUniqueOrThrow({ where: { scanId: scan.id } }))
+          .state
+      ).toBe(reservation.state)
+      expect(await owner.userScanSlot.count({ where: { scanId: scan.id } })).toBe(1)
+      await expect(db.createScan(input)).rejects.toMatchObject({ code: "SCAN_ALREADY_ACTIVE" })
     }
   })
 })

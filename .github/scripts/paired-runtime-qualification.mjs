@@ -99,16 +99,23 @@ export function validateQualifiedFleetArchive(record) {
   matchedTuple(record.pair, record.controlPlane, record)
 }
 
+// Structural validation is useful before transporting immutable bytes. It is
+// not held-state authorization; callers must authenticate the separate readback.
+export function validateHeldBaselineArchive(record) {
+  exact(record, ["kind", "purpose", "pair", "controlPlane", ...proofs])
+  requireRecord(record.kind === "held-baseline" && record.purpose === "rollback-only")
+  matchedTuple(record.pair, record.controlPlane, record)
+  for (const field of proofs)
+    requireRecord(typeof record[field] === "string" && hash.test(record[field]))
+}
+
 // An archive of a held, qualified baseline is rollback evidence only. It never
 // substitutes for the admission-open proof required by qualified-fleet recovery.
 export async function readHeldBaselineArchive(id, expected, dependencies = {}) {
   const verifyArtifact = dependencies.verifyArtifact ?? verifiedArtifact
   const record = await authenticated("held-baseline", id, verifyArtifact)
-  exact(record, ["kind", "purpose", "pair", "controlPlane", ...proofs])
-  requireRecord(record.purpose === "rollback-only")
+  validateHeldBaselineArchive(record)
   matchedTuple(record.pair, record.controlPlane, expected)
-  for (const field of proofs)
-    requireRecord(typeof record[field] === "string" && hash.test(record[field]))
   const readback = await authenticated("release-readback", record.releaseProof, verifyArtifact)
   exact(readback, [
     "kind",

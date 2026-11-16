@@ -1,7 +1,7 @@
 # LyraShield AI OpenClaw skill
 
-**State: PREPARATION.** The local `0.1.31` skill bundle has not been published as a new ClawHub
-release. The npm Agent Plugin `0.1.31` is a separate package. The `0.1.28` release notes below are
+**State: PREPARATION.** The local `0.1.32` skill bundle has not been published as a new ClawHub
+release. The npm Agent Plugin `0.1.32` is a separate package. The `0.1.28` release notes below are
 historical repository records; the current ClawHub listing version and any newer readback remain
 unverified. Do not claim this bundle is listed.
 

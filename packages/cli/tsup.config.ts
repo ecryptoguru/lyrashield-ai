@@ -28,5 +28,7 @@ export default defineConfig({
     "minimist",
     "typescript",
   ],
-  banner: { js: "#!/usr/bin/env node" },
+  banner: {
+    js: "#!/usr/bin/env node\nimport { createRequire } from 'node:module';\nconst require = createRequire(import.meta.url);",
+  },
 })

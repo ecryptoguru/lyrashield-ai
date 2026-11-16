@@ -315,3 +315,19 @@ describe("sanitized server messages (W1/P2-1)", () => {
     expect(presentation.cause).toContain("Too many scans")
   })
 })
+
+/**
+ * The deterministic-retest baseline refusal is recorded as a terminal outcome,
+ * so its recovery must address the missing baseline rather than offer a retry.
+ */
+describe("retest baseline refusal", () => {
+  it("points at a new complete baseline scan instead of a generic retry", () => {
+    const presentation = presentOperationFailure("RETEST_BASELINE_UNAVAILABLE")
+
+    expect(presentation.recoveryHref).toBe("/dashboard/scans?new=1")
+    expect(presentation.recovery).toContain("complete coverage")
+    expect(presentation.effect).toContain("neither confirms nor denies")
+    expect(presentation.retryLabel).toBeUndefined()
+    expect(presentation.requiresReconciliation).toBeUndefined()
+  })
+})

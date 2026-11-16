@@ -46,6 +46,7 @@ const event: SandboxToolEvent = {
     actionChecksum: "a".repeat(64),
     handleChecksum: "b".repeat(64),
     containerId: "c".repeat(64),
+    maxOutputBytes: 1024,
   },
 }
 afterEach(async () => {
@@ -85,6 +86,15 @@ class Mirror implements AuthorityMirror {
   async readHead() {
     return this.head
   }
+  async readHeadBounded(maxBytes: number) {
+    if (Buffer.byteLength(canonicalJson(this.head)) > maxBytes) throw new Error("too large")
+    return this.readHead()
+  }
+  async readRecordBounded(sequence: number, maxBytes: number) {
+    const record = await this.readRecord(sequence)
+    if (record && Buffer.byteLength(canonicalJson(record)) > maxBytes) throw new Error("too large")
+    return record
+  }
   async readRecord(sequence: number) {
     return this.records.get(sequence) ?? null
   }
@@ -107,7 +117,7 @@ class Mirror implements AuthorityMirror {
   }
 }
 
-async function setup() {
+async function setup(installation?: ConstructorParameters<typeof SandboxToolJournal>[6]) {
   const directory = await mkdtemp(join(tmpdir(), "sandbox-tool-journal-"))
   roots.push(directory)
   const source = new SignedJournal(join(directory, "source"), originalSecret, (input) =>
@@ -145,12 +155,99 @@ async function setup() {
       originalSecret,
       "epoch-1",
       "supervisor-1.tools",
-      "supervisor-1"
+      "supervisor-1",
+      installation ? { ...installation, publicationWrapper: local } : undefined
     ),
   }
 }
 
 describe("independent sandbox tool journal", () => {
+  it("creates a separate tool snapshot from signed originals and observed independent acknowledgements", async () => {
+    const { createPublicationRecoverySnapshot } =
+      // @ts-expect-error -- the fixed operations entrypoint is an ESM module without a declaration
+      await import("../../../ops/controller/journal-seal-publication.mjs")
+    const f = await setup({ authorizeStream: async () => true })
+    await f.journal.append(event)
+    const original = (await f.source.load()).at(-1)!
+    const wrapped = (await f.local.load()).at(-1)!
+    const stream = {
+      epochId: "epoch-1",
+      supervisorInstanceId: "supervisor-1.tools",
+      lastSequence: 1,
+      originalLastHash: original.hash,
+      wrapperLastHash: wrapped.hash,
+    }
+    const snapshot = await f.journal.withPublication<{ bytes: Buffer }>((ports) =>
+      createPublicationRecoverySnapshot(ports, stream, () => {}, "tools")
+    )
+    expect(JSON.parse(snapshot.bytes.toString("utf8"))).toMatchObject({
+      schema: "lyrashield-supervisor-tool-recovery-snapshot/1",
+      supervisorInstanceId: "supervisor-1.tools",
+      records: [original],
+    })
+    await expect(
+      f.journal.withPublication((ports) =>
+        createPublicationRecoverySnapshot(
+          ports,
+          { ...stream, supervisorInstanceId: "foreign.tools" },
+          () => {},
+          "tools"
+        )
+      )
+    ).rejects.toThrow("Root journal seal publication is unavailable")
+    await Promise.all([f.source.close(), f.local.close()])
+  })
+
+  it("validates installed append authority before writing a signed source", async () => {
+    const f = await setup({ authorizeStream: async () => true, authorizeAppend: async () => false })
+    await expect(f.journal.append(event)).rejects.toThrow("tool append authority is unavailable")
+    expect(await f.source.load()).toEqual([])
+    await Promise.all([f.source.close(), f.local.close()])
+  })
+  it("rejects an unregistered installed stream before an empty source is accepted", async () => {
+    const f = await setup({ authorizeStream: async () => false })
+    await expect(f.journal.load()).rejects.toThrow("tool stream authority is unavailable")
+    await expect(f.journal.append(event)).rejects.toThrow("tool stream authority is unavailable")
+    expect(await f.source.load()).toEqual([])
+    await Promise.all([f.source.close(), f.local.close()])
+  })
+
+  it("keeps root publication read-only before any source write or recovery", async () => {
+    const operation = vi.fn()
+    const f = await setup({
+      authorizeStream: async () => true,
+      readOnly: true,
+      readOperation: <T>(work: () => Promise<T>) => {
+        operation()
+        return work()
+      },
+    })
+    await expect(f.journal.append(event)).rejects.toThrow("publication tool journal is read-only")
+    await expect(f.journal.recoverExactTail({ sequence: 1, hash: "a".repeat(64) })).rejects.toThrow(
+      "publication tool journal is read-only"
+    )
+    expect(await f.journal.load()).toEqual([])
+    const result = await f.journal.withPublication(async (ports) => {
+      expect(await ports.original.load()).toEqual([])
+      expect(await ports.wrapper.load()).toEqual([])
+      return "published"
+    })
+    expect(result).toBe("published")
+    expect(operation).toHaveBeenCalledTimes(2)
+    expect(await f.source.load()).toEqual([])
+    await Promise.all([f.source.close(), f.local.close()])
+  })
+
+  it("rechecks original facts after a publication callback", async () => {
+    const f = await setup({ authorizeStream: async () => true })
+    await expect(
+      f.journal.withPublication(async (ports) => {
+        await ports.original.append(event)
+      })
+    ).rejects.toThrow("tool source requires exact recovery")
+    await Promise.all([f.source.close(), f.local.close()])
+  })
+
   it("retries only the exact authenticated acknowledgement after mirror response loss", async () => {
     const f = await setup()
     const requestId = "1d5b3040-b775-43a0-a7fb-ac5965fb91fa"
@@ -210,6 +307,55 @@ describe("independent sandbox tool journal", () => {
     expect(
       (await f.journal.load()).filter((record) => record.payload.type === "tool_ack")
     ).toHaveLength(1)
+    await f.source.close()
+    await f.local.close()
+  })
+
+  it("rejects oversized retained output before recovering a pending mirror acknowledgement", async () => {
+    const f = await setup()
+    const requestId = "1d5b3040-b775-43a0-a7fb-ac5965fb91fa"
+    const binding = {
+      attemptId: "attempt-1",
+      operationId: "operation-1",
+      authorityEpochId: "epoch-1",
+      sandboxHandle: "sandbox-1",
+    }
+    const first: SandboxToolEvent = {
+      ...event,
+      tool: {
+        ...event.tool,
+        requestId,
+        commandId: requestId,
+        handleChecksum: "bc2cc17bf72365e870812896e41b82f5a76bd9dc9484e3dca61952c194563fd4",
+      },
+    }
+    await f.journal.append(first)
+    for (const type of ["tool_created", "tool_starting", "tool_started"] as const)
+      await f.journal.append({ ...first, type, tool: { ...first.tool, execId: "e".repeat(64) } })
+    const responses = new SandboxToolResponses(f.store, "r".repeat(48))
+    const proof = await responses.retain(binding, requestId, {
+      binding,
+      requestId,
+      status: "COMPLETED",
+      exitCode: 0,
+      stdoutBase64: Buffer.alloc(1025).toString("base64"),
+      stderrBase64: "",
+    })
+    const responseEvent: SandboxToolEvent = {
+      ...first,
+      type: "tool_response",
+      tool: { ...first.tool, execId: "e".repeat(64), ...proof },
+    }
+    await f.journal.append(responseEvent)
+    f.mirror.loseAck = true
+    await expect(f.journal.append({ ...responseEvent, type: "tool_ack" })).rejects.toThrow()
+    f.mirror.loseAck = false
+    const recoverMirror = vi.spyOn(f.mirror, "compareAndAppend")
+    const ledger = new SandboxToolAcknowledgements(f.journal, responses)
+    await expect(ledger.acknowledge(binding, requestId, proof.responseChecksum)).rejects.toThrow(
+      "sandbox output is too large"
+    )
+    expect(recoverMirror).not.toHaveBeenCalled()
     await f.source.close()
     await f.local.close()
   })

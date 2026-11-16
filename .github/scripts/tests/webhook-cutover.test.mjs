@@ -500,10 +500,8 @@ test("digest-only writer image with explicit revision selects ordinary release",
 
 test("recovery-produced digest-only web reference reaches the installed-writer verifier", (t) => {
   const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
-  const prepare = readFileSync(".github/workflows/prepare-worker-recovery-candidate.yml", "utf8")
   const rollout = readFileSync(".github/scripts/deploy-azure-rollout.sh", "utf8")
   assert.match(runtime, /IMAGE: \$\{\{ inputs\.web_image \}\}@\$\{\{ inputs\.web_digest \}\}/)
-  assert.match(prepare, /org\.opencontainers\.image\.revision=\$\{\{ inputs\.source_sha \}\}/)
   assert.match(rollout, /LYRASHIELD_PRODUCT_REVISION=\$\{DEPLOY_SHA\}/)
   const result = fixture(t, "digest-only recovery-produced writer", "compatible")
   assert.equal(result.status, 0, result.stderr)

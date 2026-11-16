@@ -522,7 +522,7 @@ async function acquisitionFixture({
   const root = await temporary()
   await writeFile(
     path.join(root, ".mcp.kiro.json"),
-    JSON.stringify({ mcpServers: { lyrashield: { args: ["-y", "@lyrashield/mcp@0.2.12"] } } })
+    JSON.stringify({ mcpServers: { lyrashield: { args: ["-y", "@lyrashield/mcp@0.2.13"] } } })
   )
   const npmCommand = path.join(root, "fixture-npm.mjs")
   const calls = path.join(root, "calls.jsonl")
@@ -531,9 +531,9 @@ async function acquisitionFixture({
     `#!${process.execPath}\nimport fs from 'node:fs';import path from 'node:path';
     const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify({args,env:process.env})+'\\n');
     if(args[0]===${JSON.stringify(mode === "pack-hang" ? "pack" : mode === "install-hang" ? "install" : "none")}) {process.on('SIGTERM',()=>{});setInterval(()=>{},1000)}
-    else if(args[0]==='pack') {fs.copyFileSync(args[1],path.join(process.cwd(),'packed.tgz'));process.stdout.write(JSON.stringify([{name:'@lyrashield/mcp',version:'0.2.12',filename:${JSON.stringify(filename)},files:['package.json','dist/stdio-transport.js','bin/lyrashield-mcp.mjs'].map(path=>({path}))}]))}
+    else if(args[0]==='pack') {fs.copyFileSync(args[1],path.join(process.cwd(),'packed.tgz'));process.stdout.write(JSON.stringify([{name:'@lyrashield/mcp',version:'0.2.13',filename:${JSON.stringify(filename)},files:['package.json','dist/stdio-transport.js','bin/lyrashield-mcp.mjs'].map(path=>({path}))}]))}
     else if(args[0]==='install') {const install=args[args.indexOf('--prefix')+1];const packageRoot=path.join(install,'node_modules/@lyrashield/mcp');fs.mkdirSync(path.join(packageRoot,'bin'),{recursive:true});
-      fs.writeFileSync(path.join(packageRoot,'package.json'),JSON.stringify({name:'@lyrashield/mcp',version:'0.2.12',bin:{'lyrashield-mcp':'bin/lyrashield-mcp.mjs'}}));
+      fs.writeFileSync(path.join(packageRoot,'package.json'),JSON.stringify({name:'@lyrashield/mcp',version:'0.2.13',bin:{'lyrashield-mcp':'bin/lyrashield-mcp.mjs'}}));
       fs.writeFileSync(path.join(packageRoot,'bin/lyrashield-mcp.mjs'),${JSON.stringify(fixture({ catalog }))});}
     else process.exit(99);`,
     { mode: 0o700 }
@@ -542,9 +542,9 @@ async function acquisitionFixture({
   const hash = `sha512-${createHash("sha512").update(archive).digest("base64")}`
   const metadata = {
     name: "@lyrashield/mcp",
-    version: "0.2.12",
+    version: "0.2.13",
     dist: {
-      tarball: "https://registry.npmjs.org/@lyrashield/mcp/-/mcp-0.2.12.tgz",
+      tarball: "https://registry.npmjs.org/@lyrashield/mcp/-/mcp-0.2.13.tgz",
       integrity: integrity ? hash : `sha512-${"A".repeat(86)}==`,
     },
   }
@@ -570,7 +570,7 @@ async function acquisitionFixture({
 
 test("acquisition installs and executes exactly the integrity-verified archive without npx", async () => {
   const config = await acquisitionFixture()
-  assert.equal(await verifyPublishedMcp(config), "@lyrashield/mcp@0.2.12")
+  assert.equal(await verifyPublishedMcp(config), "@lyrashield/mcp@0.2.13")
   const calls = (await readFile(config.calls, "utf8")).trim().split("\n").map(JSON.parse)
   assert.equal(config.requests.length, 2)
   assert.deepEqual(
@@ -591,7 +591,7 @@ test("acquisition installs and executes exactly the integrity-verified archive w
 test("pinned .12 acquisition rejects E404 before executing npm", async () => {
   const config = await acquisitionFixture()
   config.fetchImpl = async (url) => {
-    assert.equal(url, "https://registry.npmjs.org/@lyrashield%2fmcp/0.2.12")
+    assert.equal(url, "https://registry.npmjs.org/@lyrashield%2fmcp/0.2.13")
     return new Response('{"error":"E404"}', { status: 404 })
   }
   await assert.rejects(verifyPublishedMcp(config), /pinned MCP package is unavailable: HTTP 404/)
@@ -637,7 +637,7 @@ test("real local npm pack/install suppress lifecycle scripts and preserve archiv
     path.join(packageRoot, "package.json"),
     JSON.stringify({
       name: "@lyrashield/mcp",
-      version: "0.2.12",
+      version: "0.2.13",
       type: "module",
       bin: { "lyrashield-mcp": "bin/lyrashield-mcp.mjs" },
       scripts: { prepare: `touch ${marker}`, install: `touch ${marker}` },
@@ -663,14 +663,14 @@ test("real local npm pack/install suppress lifecycle scripts and preserve archiv
       ++requests === 1
         ? JSON.stringify({
             name: "@lyrashield/mcp",
-            version: "0.2.12",
+            version: "0.2.13",
             dist: {
-              tarball: "https://registry.npmjs.org/@lyrashield/mcp/-/mcp-0.2.12.tgz",
+              tarball: "https://registry.npmjs.org/@lyrashield/mcp/-/mcp-0.2.13.tgz",
               integrity: hash,
             },
           })
         : archive
     )
-  assert.equal(await verifyPublishedMcp(config), "@lyrashield/mcp@0.2.12")
+  assert.equal(await verifyPublishedMcp(config), "@lyrashield/mcp@0.2.13")
   await assert.rejects(readFile(marker), /ENOENT/)
 })

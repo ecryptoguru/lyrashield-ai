@@ -140,6 +140,13 @@ function fixture(t, behavior = {}) {
 test("TOC filtering preserves all content except the one public schema create", () => {
   assert.equal(prepareRestoreList(toc), toc.replace("1; 2615", ";1; 2615"))
 })
+test("TOC filtering drops the reviewed pgcrypto compat wrapper only", () => {
+  const wrapper = "6; 1255 10001 FUNCTION public digest(bytea, text) restore\n"
+  assert.equal(
+    prepareRestoreList(toc + wrapper),
+    toc.replace("1; 2615", ";1; 2615") + `;${wrapper}`
+  )
+})
 for (const [name, change] of [
   ["legacy public-only", (value) => value.replace(/^2;.*\n/m, "")],
   ["other PostgreSQL major", (value) => value.replaceAll("17.11", "18.1")],

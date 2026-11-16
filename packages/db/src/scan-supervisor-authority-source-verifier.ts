@@ -112,10 +112,12 @@ export async function authenticateRetainedSupervisorAuthoritySource(
   const required = new Map(
     [authenticated, ...ownership].map((record) => [record.wrapper.sequence, record.wrapper.hash])
   )
+  let currentAttemptReceipt = ""
+  const commandPredecessors = new Map<string, string>()
   for (;;) {
     const result = await client.query(
       `SELECT sequence::text,"originalInputJson","wrapperInputJson" FROM "ScanSupervisorJournalRecord"
-      WHERE "streamId"=$1 AND sequence>$2::bigint AND sequence<=$3::bigint ORDER BY sequence LIMIT 100`,
+      WHERE "streamId"=$1 AND sequence>$2::bigint AND sequence<=$3::bigint ORDER BY "ScanSupervisorJournalRecord".sequence LIMIT 100`,
       [authority.streamId, String(sequence), String(head.sequence)]
     )
     for (const value of result.rows) {
@@ -131,6 +133,33 @@ export async function authenticateRetainedSupervisorAuthoritySource(
       )
         receiptFailure("SUPERVISOR_AUTHORITY_SOURCE_MISMATCH")
       required.delete(record.wrapper.sequence)
+      if (
+        record.wrapper.payload.operationId === authenticated.wrapper.payload.operationId &&
+        record.wrapper.payload.attemptId === authenticated.wrapper.payload.attemptId &&
+        record.wrapper.payload.workspaceId === authenticated.wrapper.payload.workspaceId
+      ) {
+        const event = record.original.payload
+        if (event.type === "command_intent") {
+          const command = z
+            .object({ commandId: z.string(), type: z.string() })
+            .passthrough()
+            .parse(event.command)
+          if (command.type !== "PREPARE")
+            commandPredecessors.set(command.commandId, currentAttemptReceipt)
+        } else if (
+          !["prepare_invocation_completed", "native_invocation_retired"].includes(
+            String(event.type)
+          ) &&
+          !(
+            event.type === "native_invocation_ack" &&
+            ["SANDBOX_TOOL_START_ACK", "SANDBOX_TOOL_MUTATION_ACK"].includes(
+              String(event.nativeOperation)
+            )
+          )
+        ) {
+          currentAttemptReceipt = record.original.hash
+        }
+      }
       sequence = record.wrapper.sequence
       wrapperHash = record.wrapper.hash
       originalHash = record.original.hash
@@ -150,5 +179,5 @@ export async function authenticateRetainedSupervisorAuthoritySource(
     tail.payload.eventId !== head.eventId
   )
     receiptFailure("SUPERVISOR_HEAD_MISMATCH")
-  return { ...fresh, ...authenticated, head, ownership }
+  return { ...fresh, ...authenticated, head, ownership, currentAttemptReceipt, commandPredecessors }
 }

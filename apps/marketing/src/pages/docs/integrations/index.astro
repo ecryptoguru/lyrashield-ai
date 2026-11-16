@@ -33,7 +33,7 @@ const faqItems = [
   },
   {
     q: "Do I need an API key to use the MCP server?",
-    a: "Local stdio uses npx -y lyrashield@0.2.14 login --oauth in the same OS account; the server reads the selected workspace credential store. Hosted OAuth-capable clients authenticate inside the client. Copilot Cloud Agent uses a private read-only Agents secret. Never commit credentials.",
+    a: "Local stdio uses npx -y lyrashield@0.2.15 login --oauth in the same OS account; the server reads the selected workspace credential store. Hosted OAuth-capable clients authenticate inside the client. Copilot Cloud Agent uses a private read-only Agents secret. Never commit credentials.",
   },
   {
     q: "Which editors use the remote MCP endpoint instead of the local stdio server?",
@@ -41,7 +41,7 @@ const faqItems = [
   },
   {
     q: "Is the @lyrashield/mcp package available on npm now?",
-    a: "Yes — @lyrashield/mcp is published on npm. Run npx -y @lyrashield/mcp@0.2.12 (Node.js 24+) with your LYRASHIELD_API_KEY set or add it to your editor's MCP config as shown in each guide.",
+    a: "Yes — @lyrashield/mcp is published on npm. Run npx -y @lyrashield/mcp@0.2.13 (Node.js 24+) with your LYRASHIELD_API_KEY set or add it to your editor's MCP config as shown in each guide.",
   },
   {
     q: "Can I use LyraShield in a CI pipeline without an AI editor?",
@@ -49,7 +49,7 @@ const faqItems = [
   },
   {
     q: "How does CLI login work without pasting a secret?",
-    a: "Run npx --yes lyrashield@0.2.14 login --oauth. The CLI opens hosted OAuth consent with PKCE, lets you choose one workspace and stores the short-lived bearer locally. API-key login remains available for CI and non-interactive environments.",
+    a: "Run npx --yes lyrashield@0.2.15 login --oauth. The CLI opens hosted OAuth consent with PKCE, lets you choose one workspace and stores the short-lived bearer locally. API-key login remains available for CI and non-interactive environments.",
   },
   {
     q: "Is there a CLI or do I have to hand-edit config files?",
@@ -118,12 +118,12 @@ const jsonLd: unknown[] = [
   <p>
     Follow the client-specific guide. Where CLI 0.2.14 provides a matching installer, preview the
     planned changes and run its pinned command; otherwise merge the LyraShield entry manually using{" "}
-    <code>command: "npx"</code> and <code>args: ["-y", "@lyrashield/mcp@0.2.12"]</code> for local
+    <code>command: "npx"</code> and <code>args: ["-y", "@lyrashield/mcp@0.2.13"]</code> for local
     stdio. Preserve existing settings and symlinks. Authenticate in the same OS account, restart the
     client, confirm tool discovery and make a read-only authenticated call. Hosted OAuth uses the
     client’s own sign-in flow.
   </p>
-  <pre><code>npx -y lyrashield@0.2.14 login --oauth</code></pre>
+  <pre><code>npx -y lyrashield@0.2.15 login --oauth</code></pre>
   <p>
     The CLI also installs shared skills where a client has one documented LyraShield skill path.
     Each client guide shows whether that command is available. A completed install does not prove
@@ -138,11 +138,11 @@ const jsonLd: unknown[] = [
 
   <h2>Public Agent Plugin listings pending</h2>
   <p>
-    The portable Agent Plugin package <code>@lyrashield/agent-plugin@0.1.31</code> is published and
+    The portable Agent Plugin package <code>@lyrashield/agent-plugin@0.1.32</code> is published and
     passes offline schema validation. Public listings and authenticated client acceptance remain
     pending. The marketplace default branch contains preparation artifacts. Use the current direct
-    MCP guides with <code>@lyrashield/mcp@0.2.12</code>, authenticate
-    local stdio separately with <code>npx -y lyrashield@0.2.14 login --oauth</code>, then confirm
+    MCP guides with <code>@lyrashield/mcp@0.2.13</code>, authenticate
+    local stdio separately with <code>npx -y lyrashield@0.2.15 login --oauth</code>, then confirm
     client discovery and an authenticated read-only workspace call.
   </p>
   <p>
@@ -154,7 +154,7 @@ const jsonLd: unknown[] = [
   </p>
   <div class="callout">
     <strong>No credential in committed files:</strong> For local stdio, after{" "}
-    <code>npx --yes lyrashield@0.2.14 login --oauth</code>,
+    <code>npx --yes lyrashield@0.2.15 login --oauth</code>,
     the MCP server reads the selected workspace credential from{" "}
     <code>~/.lyrashield/credentials.json</code>. Hosted OAuth does not need that local file. API keys remain a CI and non-OAuth-client fallback;
     do not commit either credential.
@@ -193,7 +193,7 @@ const jsonLd: unknown[] = [
   <h2>Local MCP server (stdio)</h2>
   <p>
     For editors that can run local processes, install the LyraShield MCP server via <code
-      >npx -y @lyrashield/mcp@0.2.12</code
+      >npx -y @lyrashield/mcp@0.2.13</code
     >. The server uses stdio transport and exposes LyraShield tools directly inside your AI
     assistant.
   </p>
