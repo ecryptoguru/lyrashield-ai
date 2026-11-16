@@ -1,7 +1,7 @@
 # LyraShield Review for Codebuff
 
-PREPARATION ONLY: the `0.1.32` Agent Plugin, MCP `0.2.13` and CLI `0.2.14` npm packages are
-published. This Codebuff agent bundle is separate from the Agent Plugin npm package; update the
+PREPARATION ONLY: Agent Plugin `0.1.32`, MCP `0.2.13` and CLI `0.2.15` are coordinated
+release candidates pending npm publication. This Codebuff agent bundle is separate from the Agent Plugin npm package; update the
 existing listing only after reviewing and testing the exact Codebuff artifact.
 
 Maintainer preparation source: `docs/marketplace/codebuff` in the product checkout. The mutable
