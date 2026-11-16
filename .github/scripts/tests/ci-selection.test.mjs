@@ -205,6 +205,47 @@ test("only web CSS and public assets narrow runtime gates; mixed, renamed and se
   }
 })
 
+test("marketplace prose retains export validation without runtime services", () => {
+  const step = workflow.jobs["code-quality"].steps.find(
+    (entry) => entry.name === "Test marketplace documentation exports"
+  )
+  assert.ok(step)
+  assert.ok(step.run.includes("--filter=@lyrashield/agent-plugin..."))
+  assert.ok(step.run.includes("packages/agent-plugin/src/__tests__/export.test.ts"))
+  const selected = (outputs) =>
+    runInNewContext(
+      step.if.replace(/needs\.changes\.outputs\.([\w-]+)/g, (_, key) =>
+        JSON.stringify(outputs[key])
+      ),
+      {},
+      { timeout: 100 }
+    )
+  for (const name of ["README", "channels", "CHANGELOG", "CLIENT-CONTRACTS"]) {
+    const outputs = classify(`docs/marketplace/${name}.md`)
+    assert.equal(outputs["marketplace-docs"], "true")
+    for (const flag of ["shared", "database-tests", "database-services", "engine-worker-contract"])
+      assert.equal(outputs[flag], "false", flag)
+    assert.equal(selected(outputs), true)
+    const needs = results(outputs)
+    validateResults(needs)
+    assert.throws(() => validateResults({ ...needs, "code-quality": { result: "failure" } }))
+  }
+  for (const file of [
+    "docs/marketplace/openclaw/SKILL.md",
+    "docs/marketplace/scripts/validate.mjs",
+  ]) {
+    const outputs = classify(file)
+    assert.equal(outputs["marketplace-docs"], "false")
+    assert.equal(outputs["database-tests"], "true")
+    assert.equal(selected(outputs), false)
+  }
+  for (const file of ["apps/web/src/app/page.tsx", "unclassified-file"]) {
+    const outputs = classify("docs/marketplace/README.md", file)
+    assert.equal(outputs["database-tests"], "true")
+    assert.equal(selected(outputs), false)
+  }
+})
+
 test("selected images qualify packaging while required source consumers remain selected", () => {
   for (const file of [
     "Dockerfile",

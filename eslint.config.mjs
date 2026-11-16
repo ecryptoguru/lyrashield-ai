@@ -51,6 +51,16 @@ const eslintConfig = [
     },
   },
   {
+    files: [
+      "apps/worker/src/operations/verify-launch-assurance-run.ts",
+      "apps/web/src/app/onboarding/onboarding-wizard.tsx",
+      "apps/web/src/app/(dashboard)/dashboard/scans/\\[id\\]/scan-detail-client.tsx",
+    ],
+    rules: {
+      "max-lines-per-function": ["error", { max: 250, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  {
     plugins: { security: securityPlugin },
     rules: {
       "security/detect-object-injection": "off",

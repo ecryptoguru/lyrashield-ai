@@ -659,7 +659,8 @@ describe("exported validator", () => {
       "utf8"
     )
     expect(releaseWorkflow).toContain("node scripts/validate.mjs --release")
-    expect(releaseWorkflow).toContain("node scripts/verify-published-mcp.mjs")
+    expect(releaseWorkflow.match(/node scripts\/validate\.mjs --release\b/g)).toHaveLength(1)
+    expect(releaseWorkflow).not.toContain("node scripts/verify-published-mcp.mjs")
     const workflow = parse(
       await readFile(path.join(output, ".github/workflows/validate.yml"), "utf8")
     ) as {
