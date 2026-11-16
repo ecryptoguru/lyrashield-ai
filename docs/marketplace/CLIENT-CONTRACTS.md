@@ -1,8 +1,12 @@
 # Client configuration receipts
 
-Updated 2026-10-02. Historical package readbacks remain dated at the time they were collected;
-current local native-client receipts are recorded below. They do not establish authenticated access
-or public marketplace acceptance.
+## Coordinated client publication — 2026-11-16
+
+Published MCP `0.2.12` successfully reads current scan quality but advertises 21 tools and lacks `lyrashield_get_setup_health`; the current source/hosted catalog has 22. Published MCP `0.2.13` supplies that missing setup-health tool and current authorization/workflow contracts. Agent Plugin `0.1.32` updates its exact MCP pins; CLI `0.2.15` repairs `Dynamic require of "assert" is not supported` by supplying Node's standard ESM `createRequire` banner. Distribution smoke requires all 22 tools and loads the packed CLI scan command, so help/version alone cannot mask the loader regression.
+
+The source candidate updates exact pins throughout MCP, CLI, plugin shims, active client guides, WebMCP adapters and marketplace templates, preserving transports, permissions and support tiers. Reviewed MCP → Agent Plugin → CLI tarballs were published after a scoped granular publishing token was configured. Public latest versions are MCP `0.2.13`, plugin `0.1.32` and CLI `0.2.15`; SHA-256 and npm integrity match all reviewed archives. Package publication does not establish production deployment of the client pins. The generated candidate marketplace is isolated and is not an immutable public release.
+
+The repaired CLI and fresh candidate consumer successfully read existing URL scan `cmwiqcx4x000901k576f3xqfx`, with no new scan or usage. Published MCP `0.2.12` and the current source MCP both returned the same sealed quality surface; source MCP returned 22 tools. Exact final tarball and marketplace receipts are retained in the hosted acceptance record. Historical help/version and publication receipts below do not establish the new candidate publication or current CLI scan-loader acceptance.
 
 ## Clean source distribution readback — 2026-10-02
 

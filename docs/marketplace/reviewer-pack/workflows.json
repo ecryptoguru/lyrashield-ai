@@ -2,8 +2,8 @@
   "preparation": "PREPARATION_NOT_RUN",
   "candidate": {
     "package": "@lyrashield/agent-plugin",
-    "version": "0.1.31",
-    "publishedPackageVersion": "0.1.31",
+    "version": "0.1.32",
+    "publishedPackageVersion": "0.1.32",
     "portableSchema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
     "mcpSchema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
     "mcpServer": "lyrashield",

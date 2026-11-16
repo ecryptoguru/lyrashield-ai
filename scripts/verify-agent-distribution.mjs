@@ -27,7 +27,7 @@
 import { execFile, spawn } from "node:child_process"
 import { createHash } from "node:crypto"
 import { existsSync } from "node:fs"
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
@@ -59,6 +59,7 @@ export const EXPECTED_MCP_TOOLS = [
   "lyrashield_get_findings",
   "lyrashield_get_launch_readiness",
   "lyrashield_get_scan_eligibility",
+  "lyrashield_get_setup_health",
   "lyrashield_get_scan_quality",
   "lyrashield_get_scan_status",
   "lyrashield_list_scan_attachments",
@@ -784,6 +785,29 @@ async function runSmokeChecks(pkgDir, manifest, options) {
             ? "exit 0"
             : `exit ${help.code}: ${(help.stdout + help.stderr).split("\n")[0]?.slice(0, 200)}`
       )
+      if (manifest.name === "lyrashield") {
+        const credentialDir = path.join(home, ".lyrashield")
+        await mkdir(credentialDir, { recursive: true })
+        await writeFile(
+          path.join(credentialDir, "credentials.json"),
+          JSON.stringify({ installId: "smoke", workspaceId: "ws-smoke" })
+        )
+        const scan = await spawnJson([binPath, "scan", "--scan-id", "smoke", "--wait", "--json"], {
+          cwd: pkgDir,
+          env,
+          timeoutMs,
+        })
+        let error
+        try {
+          error = JSON.parse(scan.stdout).error
+        } catch {}
+        // Reach the closed loopback API; --version/--help never load scan dependencies.
+        check(
+          "smoke:cli-scan-loader",
+          scan.code === 4 && !scan.timedOut && error === "fetch failed",
+          error ?? `exit ${scan.code}: ${scan.stderr.slice(0, 200)}`
+        )
+      }
     }
   } else if (typeof manifest.main === "string" && manifest.main.trim()) {
     const entry = path.join(pkgDir, manifest.main.replace(/^\.\//, ""))
