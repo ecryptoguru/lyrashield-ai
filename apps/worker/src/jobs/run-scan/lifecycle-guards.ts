@@ -1,6 +1,12 @@
+import { logger as log } from "@lyrashield/logger"
 import { EngineProcessStopUnconfirmedError } from "../../engine/runner-process"
 import { ColdDatabaseEpochError } from "../../cold-database-epoch"
-import { withWorkspaceRLS, updateUnclaimedScanStatus, type ScanStatus } from "@lyrashield/db"
+import {
+  withWorkspaceRLS,
+  updateScanStatus,
+  updateUnclaimedScanStatus,
+  type ScanStatus,
+} from "@lyrashield/db"
 import { ScanBillableClaimError } from "@lyrashield/db/src/scan-billable-claim"
 import type { ScanExecutionResult } from "./execution"
 import type { ScanJobData, ScanJobResult } from "../../types"
@@ -88,4 +94,27 @@ export async function finalizeExecutionDenial(
     await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
   }
   return result
+}
+
+export async function persistScanFailure(
+  scanId: string,
+  billablePhaseStarted: boolean,
+  finalErrorCategory: string,
+  finalErrorMessage: string,
+  error: unknown
+) {
+  try {
+    const update = billablePhaseStarted ? updateScanStatus : updateUnclaimedScanStatus
+    await update(scanId, "FAILED" as ScanStatus, {
+      errorCategory: finalErrorCategory,
+      errorMessage: finalErrorMessage,
+    })
+  } catch (updateErr) {
+    log.error("Failed to update scan status on error", {
+      scanId,
+      errorType: updateErr instanceof Error ? updateErr.name : "UNKNOWN",
+    })
+    // ponytail: let BullMQ retain the terminal infrastructure failure when the DB cannot.
+    throw error
+  }
 }

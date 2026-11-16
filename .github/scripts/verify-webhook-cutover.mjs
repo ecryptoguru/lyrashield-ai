@@ -9,7 +9,7 @@ const firstEngineRevision = "9d90be5aaf92f86bb5c1ba55a8138545764fdd44"
 const firstWriterDigest = "sha256:dbc43686e11f95a03d9f163c865683e3949ade4179839ef6d268e6ea55f9b78f"
 const firstWorkerDigest = "sha256:d38f8b080ae62b88ba9c6273be76abff42adf5a86b831bde5b19f6d6fce466dc"
 // Each row binds reviewed legacy source to role-specific immutable artifacts.
-// Evidence: docs/reviews/2026-10-07/webhook-legacy-image-profile.md.
+// Evidence: docs/reviews/2026-10-07/webhook-legacy-image-profile.md (removed 2026-11-16; recover from Git history).
 const legacyImageProfiles = [
   {
     source: firstWriterRevision,
@@ -121,7 +121,7 @@ const legacyConstraints = [
   },
 ]
 const runbook =
-  "https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/reviews/2026-09-30/webhook-production-cutover.md"
+  "https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/operations.md#durable-webhook-track-utc-schema-cutover"
 const fail = (message) => {
   throw new Error(`${message}. No deployment mode was selected. See ${runbook}.`)
 }

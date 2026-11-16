@@ -12,7 +12,7 @@ test("deployment jobs bound runtime by responsibility", () => {
       if (!body.includes("    runs-on:")) continue
       const minutes = /    timeout-minutes: (\d+)/.exec(body)?.[1]
       const expected =
-        job === "build" || job === "prepare-dependencies" ? "60" : job === "deploy" ? "45" : "15"
+        job === "build" || job === "prepare-dependencies" ? "60" : job === "deploy" ? "75" : "15"
       assert.equal(minutes, expected, `${name}/${job}`)
     }
   }
@@ -22,7 +22,7 @@ test("CSS and marketing edits select their narrow source contracts", () => {
   const source = read(".github/workflows/ci.yml")
   assert.match(
     source,
-    /name: Web presentation contracts\n        if: needs.changes.outputs.app == 'true'[\s\S]*?vitest run --maxWorkers=2 apps\/web\/src\/app\/mobile-shell.contract.test.ts/
+    /name: Web presentation contracts\n        if: needs.changes.outputs.app == 'true' && needs.changes.outputs.database-tests != 'true'[\s\S]*?vitest run --maxWorkers=2 apps\/web\/src\/app\/mobile-shell\.contract\.test\.ts/
   )
   assert.match(
     source,

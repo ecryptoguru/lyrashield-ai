@@ -26,6 +26,7 @@ import {
   authorizeDeterministicRetest,
   assertRetestFilesystemCapacity,
   checkoutDeterministicRetest as checkout,
+  RetestBaselineUnavailableError,
 } from "./deterministic-retest"
 const checkoutDeterministicRetest = (
   params: Omit<Parameters<typeof checkout>[0], "scanId" | "workspaceId">
@@ -104,7 +105,9 @@ describe("deterministic retest authority", () => {
   it("requires persisted baseline, candidates and completed family coverage", async () => {
     await expect(authorizeDeterministicRetest("s", "w", "t")).resolves.toBeUndefined()
     vi.mocked(prisma.scanCoverageReceipt.findMany).mockResolvedValue([])
-    await expect(authorizeDeterministicRetest("s", "w", "t")).rejects.toThrow("provenance")
+    await expect(authorizeDeterministicRetest("s", "w", "t")).rejects.toBeInstanceOf(
+      RetestBaselineUnavailableError
+    )
   })
   it("rejects forged target or model candidates", async () => {
     await expect(authorizeDeterministicRetest("s", "w", "other")).rejects.toThrow("lineage")

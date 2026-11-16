@@ -28,10 +28,15 @@ function list(api, path, key) {
     const items = key ? response?.[key] : response
     requireValue(Array.isArray(items), "invalid paginated response")
     result.push(...items)
-    if (items.length < 100) {
-      requireValue(!key || response.total_count === result.length, "incomplete paginated response")
-      return result
-    }
+    if (items.length === 100) continue
+    if (!key || response.total_count === result.length) return result
+    // The runs API reports a total that can lead or lag the rows it serves while a
+    // run changes state. Re-read the total once before trusting either view: a real
+    // truncation still fails, a transient skew must not fail the whole job.
+    const reread = api(`${path}${path.includes("?") ? "&" : "?"}per_page=100&page=1`)
+    requireValue(Array.isArray(reread?.[key]), "invalid paginated response")
+    requireValue(reread.total_count === result.length, "incomplete paginated response")
+    return result
   }
   throw new Error("Automatic merge: pagination limit exceeded")
 }
@@ -55,12 +60,19 @@ function isDependabot(pr) {
   return pr.user?.id === dependabotId && pr.user?.login === "dependabot[bot]"
 }
 
-// The installation token lacks the workflows permission, so it cannot update a
-// branch whose diff touches .github/workflows. Skip those behind PRs for a human.
-function touchesWorkflows(api, pr) {
-  return list(api, `${root}/pulls/${pr.number}/files`).some((file) =>
-    file?.filename?.startsWith(".github/workflows/")
-  )
+// The installation holds the workflows permission, so branch updates normally
+// succeed. If that permission is ever removed, GitHub refuses the update; hold
+// the pull request for a human instead of failing the whole queue run.
+function updateOrHold(pr, update, hold) {
+  try {
+    update(pr.number, pr.head.sha)
+    return { action: "update", number: pr.number }
+  } catch (error) {
+    const detail = `${error?.code ?? ""} ${error?.stderr ?? ""}`
+    if (!/create or update workflow/i.test(detail)) throw error
+    hold(pr.number, pr.head.sha)
+    return { action: "disable-auto-merge", number: pr.number }
+  }
 }
 
 function latestCi(api, head) {
@@ -228,12 +240,7 @@ export function runAutoMergeQueue({ api, updateBranch, mergeReady, disableAutoMe
       return { action: "disable-auto-merge", number: pr.number }
     }
     if (pr.mergeable_state === "behind") {
-      if (touchesWorkflows(api, pr)) {
-        disableAutoMerge(pr.number, pr.head.sha)
-        return { action: "disable-auto-merge", number: pr.number }
-      }
-      updateBranch(pr.number, pr.head.sha)
-      return { action: "update", number: pr.number }
+      return updateOrHold(pr, updateBranch, disableAutoMerge)
     }
     return { action: "wait", reason: "checks pending", number: pr.number }
   }
@@ -249,7 +256,7 @@ export function runAutoMergeQueue({ api, updateBranch, mergeReady, disableAutoMe
     if (pr.mergeable_state === "dirty" || pr.mergeable_state === "unknown" || pr.mergeable === null)
       continue
     if (pr.mergeable_state === "behind") {
-      if (!touchesWorkflows(api, pr)) staleCandidate ??= pr
+      staleCandidate ??= pr
       continue
     }
     if (!["clean", "blocked", "unstable"].includes(pr.mergeable_state)) continue
@@ -264,10 +271,7 @@ export function runAutoMergeQueue({ api, updateBranch, mergeReady, disableAutoMe
     return { action: "auto-merge", number: pr.number }
   }
   if (pendingNumber) return { action: "wait", reason: "checks pending", number: pendingNumber }
-  if (staleCandidate) {
-    updateBranch(staleCandidate.number, staleCandidate.head.sha)
-    return { action: "update", number: staleCandidate.number }
-  }
+  if (staleCandidate) return updateOrHold(staleCandidate, updateBranch, disableAutoMerge)
   return { action: "wait", reason: "no eligible pull requests" }
 }
 

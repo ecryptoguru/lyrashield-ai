@@ -99,6 +99,8 @@ export async function readJournalSegments<T>({
       segment.indexedStat = statStamp(after)
       segment.size = size
       raw = buffer.toString("utf8")
+      if (!Buffer.from(raw, "utf8").equals(buffer))
+        throw new JournalIntegrityError("journal segment has invalid UTF-8")
     } finally {
       await file.close()
     }

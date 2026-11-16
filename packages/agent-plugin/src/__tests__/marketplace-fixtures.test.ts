@@ -31,8 +31,8 @@ describe("marketplace fixtures", () => {
   it("describes the regenerated export through its manifest", async () => {
     const readme = await readFile(path.join(marketplaceRoot, "README.md"), "utf8")
     expect(readme).toContain("exact product revision recorded in `manifest.json`")
-    expect(readme).toContain("untagged release candidate")
-    expect(readme).toContain("No matching immutable marketplace release has been verified")
+    expect(readme).toContain("Use a reviewed immutable")
+    expect(readme).toContain("verify its checksums before customer installation")
     expect(readme).not.toContain("has not yet been regenerated")
   })
 
@@ -73,7 +73,7 @@ describe("marketplace fixtures", () => {
     const cline = JSON.parse(
       await readFile(path.join(marketplaceRoot, "cline", "submission.json"), "utf8")
     ) as Record<string, unknown>
-    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.31" })
+    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.32" })
     expect(gemini.mcpServers).toBeTruthy()
     expect(cline).toMatchObject({
       license: "Apache-2.0",

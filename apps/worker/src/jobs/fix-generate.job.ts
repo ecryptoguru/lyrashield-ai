@@ -372,6 +372,14 @@ export async function processFixGenerateJob(
         fixLocation.fix_before === undefined ||
         fixLocation.fix_after === undefined)
     ) {
+      // Nothing deterministic can be assembled from this finding's evidence
+      // (typical for dependency advisories, which need a reviewed upgrade).
+      // Settle the proposal so it stops presenting as an inert draft.
+      await settleFailedGeneration(
+        workspaceId,
+        fixProposalId,
+        "This finding carries no server-generated patch. Its remediation is a reviewed change, not an automated hunk — for example a dependency upgrade. Apply it and retest."
+      )
       return { status: "skipped", reason: "no structured fix in the finding's evidence" }
     }
 

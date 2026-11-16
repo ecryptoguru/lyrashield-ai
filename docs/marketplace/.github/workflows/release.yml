@@ -106,12 +106,9 @@ jobs:
           body: |
             Marketplace export for the LyraShield Agent Plugin, version ${{ inputs.version }}.
 
-            Clients install from this repository directly:
-
-            ```
-            claude plugin marketplace add ecryptoguru/lyrashield-marketplace
-            claude plugin install lyrashield@lyrashield-ai
-            ```
+            This release tag binds the reviewed marketplace snapshot. Use the
+            client's documented installation flow with this immutable tag or
+            source archive; a mutable branch is not an equivalent release pin.
 
             The attached `SHA256SUMS` lists the per-file checksums declared by
             `manifest.json` for this release — verify any checked-out file

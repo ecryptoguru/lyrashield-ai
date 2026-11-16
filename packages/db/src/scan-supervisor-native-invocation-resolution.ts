@@ -9,6 +9,11 @@ import {
 } from "@lyrashield/runtime-control"
 import { sha256Hex } from "./scan-supervisor-receipt-verifier"
 import { receiptFailure } from "./scan-supervisor-receipt-ingestion-verifier"
+import {
+  sandboxInvocationProofSchema,
+  verifySandboxInvocationAck,
+  verifyOriginalSandboxMutationTargets,
+} from "./scan-sandbox-tool-ack"
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const id = z.string().min(3).max(192)
@@ -37,8 +42,9 @@ export const prepareInvocationCompletedSchema = nativeInvocationAckSchema
   .omit({ executorKey: true, nativeOperation: true, ownership: true, inspection: true })
   .extend({ type: z.literal("prepare_invocation_completed") })
   .strict()
-const invocationProofSchema = z.discriminatedUnion("type", [
+const invocationProofSchema = z.union([
   nativeInvocationAckSchema,
+  sandboxInvocationProofSchema,
   prepareInvocationCompletedSchema,
 ])
 
@@ -102,10 +108,45 @@ export async function resolveNativeInvocationReceipt(
   )
   if (result.rows.length !== 1) receiptFailure("SUPERVISOR_NATIVE_INVOCATION_GUARD_UNAVAILABLE")
   const guard = result.rows[0]!
+  const toolIntent =
+    parsed.type === "native_invocation_ack" &&
+    (parsed.nativeOperation === "SANDBOX_TOOL_START_ACK" ||
+      parsed.nativeOperation === "SANDBOX_TOOL_MUTATION_ACK")
+      ? (
+          await client.query<{
+            actionInputJson: string
+            actionChecksum: string
+            authorityChecksum: string
+            requestId: string
+            prepareCommandId: string
+          }>(
+            `SELECT "actionInputJson","actionChecksum","authorityChecksum","requestId","prepareCommandId" FROM "ScanExecutionActionIntent"
+       WHERE "operationId"=$1 AND "attemptId"=$2 AND "workspaceId"=app.current_workspace_id() AND phase='SANDBOX_TOOL' AND "requestId"=$3 AND "actionChecksum"=$4`,
+            [guard.operationId, guard.attemptId, parsed.requestId, guard.actionChecksum]
+          )
+        ).rows[0]
+      : undefined
+  if (
+    parsed.type === "native_invocation_ack" &&
+    (parsed.nativeOperation === "SANDBOX_TOOL_START_ACK" ||
+      parsed.nativeOperation === "SANDBOX_TOOL_MUTATION_ACK") &&
+    !toolIntent
+  )
+    receiptFailure("SUPERVISOR_NATIVE_INVOCATION_GUARD_UNAVAILABLE")
   const ack =
-    parsed.type === "native_invocation_ack"
-      ? verifyNativeInvocationAck(parsed, guard, commandInputChecksum)
-      : verifyPrepareInvocationCompleted(parsed, guard, commandInputChecksum)
+    parsed.type === "native_invocation_ack" &&
+    (parsed.nativeOperation === "SANDBOX_TOOL_START_ACK" ||
+      parsed.nativeOperation === "SANDBOX_TOOL_MUTATION_ACK")
+      ? verifySandboxInvocationAck(parsed, guard, commandInputChecksum, toolIntent!)
+      : parsed.type === "native_invocation_ack"
+        ? verifyNativeInvocationAck(parsed, guard, commandInputChecksum)
+        : verifyPrepareInvocationCompleted(parsed, guard, commandInputChecksum)
+  if (ack.type === "native_invocation_ack" && ack.nativeOperation === "SANDBOX_TOOL_MUTATION_ACK")
+    await verifyOriginalSandboxMutationTargets(client, ack, {
+      ...guard,
+      workspaceId: (await client.query("SELECT app.current_workspace_id() AS workspace", []))
+        .rows[0].workspace,
+    })
   const proofInputJson = canonicalJson(ack),
     proofChecksum = sha256Hex(proofInputJson)
   const existing = await client.query<{

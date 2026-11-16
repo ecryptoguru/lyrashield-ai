@@ -30,7 +30,7 @@ const socketTmpfs = "rw,noexec,nosuid,size=8m"
 const entry =
   /^(\d+); \d+ \d+ (FK CONSTRAINT|TABLE DATA|SEQUENCE SET|ROW SECURITY|SCHEMA|COMMENT|TYPE|TABLE|SEQUENCE|FUNCTION|DEFAULT|CONSTRAINT|INDEX|TRIGGER|POLICY) (public|app|-) (.+) \S+$/
 
-/** Accept the reviewed object classes only; preserve every entry except public CREATE SCHEMA. */
+/** Accept the reviewed object classes only; preserve every entry except public CREATE SCHEMA and the reviewed pgcrypto compat wrapper. */
 export function prepareRestoreList(text) {
   requireCheck(
     typeof text === "string" && Buffer.byteLength(text) <= 2 * 1024 * 1024,
@@ -64,6 +64,13 @@ export function prepareRestoreList(text) {
     )
     // This archive omits extensions. Supplying extension objects or digest replacements
     // is a different contract, even when the TOC calls them ordinary functions.
+    // Production carries one reviewed exception: the idempotent
+    // `public.digest(bytea, text)` compat wrapper its migrations add because
+    // pgcrypto lives in `extensions` there. The restore fixture installs pgcrypto
+    // into `public`, which supplies the same signature, so the entry is dropped
+    // instead of installed. Anything else matching this shape still rejects.
+    if (descriptor === "FUNCTION" && schema === "public" && name === "digest(bytea, text)")
+      return `;${line}`
     requireCheck(
       !(
         descriptor === "FUNCTION" &&

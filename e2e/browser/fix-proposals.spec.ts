@@ -120,6 +120,7 @@ test("later pages preserve stored-patch action eligibility", async ({ page }) =>
               summary: "Review the generated patch.",
               status: "ready",
               hasStoredPatch: true,
+              hasPatchBase: true,
               createdAt: "2026-10-23T00:00:00Z",
               finding: {
                 id: "later-finding",

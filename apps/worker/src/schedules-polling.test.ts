@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   getDueSchedules: vi.fn(),
   getNextRunAt: vi.fn(),
   createScheduledScan: vi.fn(),
+  resolveRepositoryScanSource: vi.fn(),
   advanceBlockedSchedule: vi.fn(),
   restoreUnsubmittedScheduleOccurrence: vi.fn(),
   releaseUnstartedScanSlot: vi.fn(),
@@ -24,12 +25,17 @@ vi.mock("@lyrashield/db", () => ({
   // Stub admission without invoking its entitlement callback.
   runWithAccountContext: async () => ({ allowed: true }),
   runWithWorkspaceContext: async (_workspaceId: string, fn: () => unknown) => fn(),
-  prisma: { scan: { count: mocks.count }, schedule: { updateMany: vi.fn() } },
+  prisma: {
+    scan: { count: mocks.count },
+    schedule: { updateMany: vi.fn() },
+    integration: { findFirst: vi.fn() },
+  },
 }))
 vi.mock("@lyrashield/billing", () => ({ evaluateScanEntitlement: mocks.entitlement }))
 vi.mock("@lyrashield/types", () => ({ MAX_CONCURRENT_WORKSPACE_SCANS: 3 }))
 vi.mock("@lyrashield/integrations", () => ({
   resolveAvailableUrlReview: async () => ({ ok: true, engineBacked: false }),
+  resolveRepositoryScanSource: mocks.resolveRepositoryScanSource,
   ScanEnqueueNotSubmittedError: class extends Error {
     constructor(
       readonly scanId: string,
@@ -73,6 +79,11 @@ const schedules = Array.from({ length: 101 }, (_, index) => ({
     type: "WEB_APP",
     url: "https://example.invalid",
     apiSpecUrl: null,
+    installationId: null,
+    repoOwner: null,
+    repoName: null,
+    repoFullName: null,
+    branch: null,
   },
 }))
 
@@ -107,6 +118,10 @@ describe("schedule runner polling (isolated admission)", () => {
     mocks.getDueSchedules.mockImplementation(async (_now: Date, afterId?: string) =>
       schedules.filter((schedule) => !afterId || schedule.id > afterId).slice(0, 50)
     )
+    mocks.resolveRepositoryScanSource.mockImplementation(async (target: { type: string }) => {
+      if (target.type === "REPO") throw new Error("Repository source fixture is not configured")
+      return undefined
+    })
     mocks.getNextRunAt.mockReturnValue(nextRun)
     mocks.assertScanWorkerAvailable.mockResolvedValue(undefined)
     // Every target is busy: each schedule keeps its single pending occurrence.

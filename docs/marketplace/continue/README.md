@@ -1,6 +1,6 @@
 # LyraShield AI for Continue — preparation
 
-**State: PREPARATION.** The local MCP block, rule and slash prompts are staged for review. `@lyrashield/mcp@0.2.12` is published, but no Continue Hub entry or authenticated client-runtime receipt is confirmed.
+**State: PREPARATION.** The local MCP block, rule and slash prompts are staged for review. `@lyrashield/mcp@0.2.13` is published, but no Continue Hub entry or authenticated client-runtime receipt is confirmed.
 
 ## Install the local integration
 

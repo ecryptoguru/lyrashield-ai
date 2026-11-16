@@ -1,6 +1,6 @@
 # LyraShield AI for Kiro
 
-PREPARATION ONLY: CLI `0.2.14` and MCP `0.2.12` are published; this Kiro Power has not yet been
+PREPARATION ONLY: CLI `0.2.15` and MCP `0.2.13` are published; this Kiro Power has not yet been
 released to a public listing. Submit or install it only from the exact reviewed public export.
 
 This folder is a self-contained Kiro Power in the current Agent Plugins format. It includes
@@ -38,7 +38,7 @@ If the installed Kiro version does not offer Power import/activation, use the le
 MCP route. It requires Node.js 24 or later. First run:
 
 ```sh
-npx -y lyrashield@0.2.14 login --oauth
+npx -y lyrashield@0.2.15 login --oauth
 ```
 
 Then merge only the `lyrashield` server object from the marketplace root's `.mcp.kiro.json` into

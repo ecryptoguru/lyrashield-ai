@@ -148,6 +148,43 @@ importers:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.12)(vite@8.2.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
+  apps/broker:
+    dependencies:
+      '@lyrashield/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@lyrashield/evidence-storage':
+        specifier: workspace:*
+        version: link:../../packages/evidence-storage
+      '@lyrashield/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
+      '@lyrashield/runtime-control':
+        specifier: workspace:*
+        version: link:../../packages/runtime-control
+      '@lyrashield/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.12
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.3
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+
   apps/desktop:
     devDependencies:
       '@tauri-apps/cli':
@@ -333,6 +370,9 @@ importers:
       pg:
         specifier: ^8.23.0
         version: 8.23.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.12
       zod:
         specifier: 'catalog:'
         version: 4.6.6
@@ -343,9 +383,6 @@ importers:
       '@types/pg':
         specifier: ^8.23.1
         version: 8.23.1
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.12
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -358,6 +395,12 @@ importers:
       '@lyrashield/runtime-control':
         specifier: workspace:*
         version: link:../../packages/runtime-control
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.12
       zod:
         specifier: 'catalog:'
         version: 4.6.6
@@ -365,9 +408,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.12
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -550,6 +593,9 @@ importers:
       '@lyrashield/myra':
         specifier: workspace:*
         version: link:../../packages/myra
+      '@lyrashield/runtime-control':
+        specifier: workspace:*
+        version: link:../../packages/runtime-control
       '@lyrashield/security':
         specifier: workspace:*
         version: link:../../packages/security

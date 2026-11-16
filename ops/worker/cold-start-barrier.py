@@ -113,8 +113,12 @@ def execute_barrier(options, invoke=command, owner_lock=None, complete=lambda re
             raise RuntimeError('Preserved stopped-container identity changed')
         invoke('systemctl', ['stop', 'docker.socket', 'docker.service'])
         for unit in ('docker.socket', 'docker.service'):
-            for prop, expected in (('ActiveState', 'inactive'), ('MainPID', '0')):
-                if invoke('systemctl', ['show', unit, f'--property={prop}', '--value']).strip() != expected:
+            # An inactive socket unit has no MainPID at all (systemd 255 reports
+            # an empty value), while a service must report the literal 0. Both
+            # still require the unit itself to be inactive.
+            allowed = (('inactive',), ('0', '')) if unit.endswith('.socket') else (('inactive',), ('0',))
+            for prop, candidates in (('ActiveState', allowed[0]), ('MainPID', allowed[1])):
+                if invoke('systemctl', ['show', unit, f'--property={prop}', '--value']).strip() not in candidates:
                     raise RuntimeError('Native Docker owner did not terminate')
         invoke('systemctl', ['start', 'docker.service'])
         after, remaining_foreign = classify(inventory(), trusted)

@@ -170,7 +170,7 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
     }
   })
 
-  it("a read-only key is denied on scope, not offered connect", async () => {
+  it("a read-only key needs a connected grant for hosted mutations", async () => {
     verifyApiKey.mockResolvedValue({
       keyId: "k",
       workspaceId: "ws-1",
@@ -191,8 +191,7 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
       structuredContent?: Record<string, unknown>
     }
     expect(result?.isError).toBe(true)
-    expect(result?.structuredContent?.code).not.toBe("connect_required")
-    expect(result?.content?.[0]?.text).toContain("write scope")
+    expect(result?.structuredContent?.code).toBe("connect_required")
     expect(createApprovalMock).not.toHaveBeenCalled()
   })
 

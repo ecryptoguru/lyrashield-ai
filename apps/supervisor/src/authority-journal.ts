@@ -2,19 +2,15 @@ import {
   IndependentAuthorityError,
   IndependentAuthorityJournal,
   JournalReadLimitError,
-  MAX_SUPERVISOR_JOURNAL_PAGE_BYTES,
   MAX_SUPERVISOR_JOURNAL_RECORD_BYTES,
   SignedJournal,
   authorityEventSchema,
   canonicalJson,
-  bindSupervisorJournalSnapshot,
+  sha256Hex,
   supervisorJournalCursorSchema,
   supervisorRecoveryRequestSchema,
   type AttemptBinding,
-  type AuthorityEvent,
-  type IndependentAuthorityJournalOptions,
   type JournalPort,
-  type JournalRecord,
   type BoundedAuthorityMirror,
   type BoundedConditionalObjectStore,
   type SupervisorJournalPage,
@@ -22,6 +18,8 @@ import {
   type SupervisorJournalReader,
   type SupervisorJournalRecovery,
   type SupervisorJournalRecoveryPort,
+  type SupervisorCommand,
+  type SupervisorRecoveryRequest,
 } from "@lyrashield/runtime-control"
 import {
   supervisorJournalEventSchema,
@@ -29,19 +27,24 @@ import {
   type SupervisorJournalEvent,
 } from "./journal-events"
 import { inspectJournalPath, journalPathsOverlap } from "./journal-paths"
+import { readBoundedJournalPage, fallbackJournalPage } from "./authority-journal-pages"
+import type {
+  DurabilityOptions,
+  OriginalRecord,
+  OriginalEventPosition,
+  WrappedEvent,
+  WrappedRecord,
+  SupervisorAuthorityJournalOptions,
+} from "./authority-journal-options"
+export type { SupervisorAuthorityJournalOptions } from "./authority-journal-options"
 import { bindingFor, attemptFor, same, conflict } from "./authority-bindings"
 import {
   recoverSignedEvent,
   RecoverySelectionError,
   validRecoveryHold,
   validRecoverySuffix,
-  type RecoveryAuthorizer,
+  eventCommandId,
 } from "./authority-recovery"
-
-type OriginalRecord = JournalRecord<SupervisorJournalEvent>
-type OriginalEventPosition = Pick<OriginalRecord, "payload" | "sequence">
-type WrappedEvent = AuthorityEvent<OriginalRecord>
-type WrappedRecord = JournalRecord<WrappedEvent>
 
 // Closed prototype safeguard. Continuing production recovery needs authenticated
 // checkpoints/compaction or truly bounded paging; STOP/append have no such ceiling.
@@ -51,27 +54,6 @@ export const SUPERVISOR_CURSOR_HISTORY_LIMITS = {
   wrappedMaxBytes: 1024 * 1024,
 } as const
 type LocalSnapshot = { originals: OriginalRecord[]; wrapped: WrappedRecord[] }
-
-type DurabilityOptions = Omit<
-  IndependentAuthorityJournalOptions<OriginalRecord>,
-  "local" | "payloadSchema" | "authorize"
-> & {
-  // Must atomically validate current persisted epoch, operation, attempt,
-  // workspace, scan and authority revision. Journal evidence is not permission
-  // to perform an executor or provider action.
-  authorize: (event: WrappedEvent, binding: AttemptBinding) => Promise<boolean>
-  // Mandatory even for genesis: authenticate the persisted active stream/epoch
-  // independently of whether there are any events to authorize.
-  authorizeStream: (stream: { epochId: string; supervisorInstanceId: string }) => Promise<boolean>
-  // Independently compare current persisted command/attempt/epoch/grant authority;
-  // request IDs/digest only select the original record and never grant permission.
-  authorizeRecovery: RecoveryAuthorizer
-}
-
-export interface SupervisorAuthorityJournalOptions extends DurabilityOptions {
-  original: JournalPort<SupervisorJournalEvent>
-  local: JournalPort<WrappedEvent>
-}
 
 /**
  * Two signed local streams: originals remain intact, while the independent
@@ -92,10 +74,17 @@ export class SupervisorAuthorityJournal
   private readonly cursorBindings = new Map<string, { binding: AttemptBinding; sequence: number }>()
   private rangeRead = false
   private boundedRead = false
+  private recoveryAuthority: {
+    request: SupervisorRecoveryRequest
+    original: OriginalRecord
+    command: SupervisorCommand
+    binding: AttemptBinding
+  } | null = null
 
   constructor(private readonly options: SupervisorAuthorityJournalOptions) {
+    const { authorizeConfirmed, ...independentOptions } = options
     this.independent = new IndependentAuthorityJournal({
-      ...options,
+      ...independentOptions,
       local: {
         load: () => this.loadLocal(),
         append: (event) => options.local.append(event),
@@ -127,8 +116,42 @@ export class SupervisorAuthorityJournal
           : bindingFor(original, originals)
         const expected = this.eventFor(original, originals, binding)
         if (!same(event, expected)) conflict("independent event has a foreign authority binding")
+        const recovery = this.recoveryAuthority
+        if (
+          recovery &&
+          (same(original, recovery.original) ||
+            validRecoveryHold(original.payload, recovery.original, originals))
+        ) {
+          return options.authorizeRecovery(
+            recovery.request,
+            recovery.original,
+            recovery.command,
+            recovery.binding
+          )
+        }
         return options.authorize(event, binding)
       },
+      ...(authorizeConfirmed
+        ? {
+            authorizeConfirmed: async (record: WrappedRecord) => {
+              const originals = this.originals
+              if (!originals)
+                throw new IndependentAuthorityError(
+                  "AUTHORITY_UNKNOWN",
+                  "no authenticated local snapshot"
+                )
+              const original = originals[record.payload.payload.sequence - 1]
+              if (!original || !same(original, record.payload.payload))
+                conflict("confirmed event differs from its original signed envelope")
+              const binding = this.rangeRead
+                ? this.cursorBindingFor(original)
+                : bindingFor(original, originals)
+              if (!same(record.payload, this.eventFor(original, originals, binding)))
+                conflict("confirmed event has a foreign authority binding")
+              return authorizeConfirmed(record, binding)
+            },
+          }
+        : {}),
     })
   }
 
@@ -149,6 +172,7 @@ export class SupervisorAuthorityJournal
         this.originals = null
         this.boundedRead = false
         this.rangeRead = false
+        this.recoveryAuthority = null
       }
     })
     this.serial = run.then(
@@ -336,7 +360,12 @@ export class SupervisorAuthorityJournal
   }
 
   async append(input: SupervisorJournalEvent): Promise<OriginalRecord> {
-    return this.serialized(() => this.appendCurrent(input))
+    if (this.options.readOnly) conflict("Publication journal is read-only")
+    const record = await this.serialized(() => this.appendCurrent(input))
+    // Installed receipt projection reads this journal; run after releasing its
+    // serialization queue so private readback cannot deadlock the append.
+    await this.options.onConfirmed?.(record)
+    return record
   }
 
   private async stageRecoveryHold(
@@ -412,6 +441,7 @@ export class SupervisorAuthorityJournal
   }
 
   async recoverStored(input: unknown): Promise<SupervisorJournalRecovery<SupervisorJournalEvent>> {
+    if (this.options.readOnly) conflict("Publication journal is read-only")
     const parsed =
       input === undefined ? undefined : supervisorRecoveryRequestSchema.safeParse(input)
     if (parsed && !parsed.success)
@@ -436,8 +466,33 @@ export class SupervisorAuthorityJournal
           },
           stageHold: (event, originals) => this.stageRecoveryHold(event, originals),
           assertStreamAuthorized: () => this.assertStreamAuthorized(),
-          authorizeRecord: (record, originals) =>
-            this.options.authorize(this.eventFor(record, originals), bindingFor(record, originals)),
+          authorizeRecord: async (record, originals) => {
+            const binding = bindingFor(record, originals)
+            if (!this.options.authorizeConfirmed)
+              return this.options.authorize(this.eventFor(record, originals), binding)
+            const id = eventCommandId(record.payload)
+            const intent = originals.find(
+              (item) =>
+                item.payload.type === "command_intent" && item.payload.command.commandId === id
+            )
+            if (!intent || intent.payload.type !== "command_intent")
+              conflict("recovery has no original command")
+            const command = intent.payload.command
+            const request: SupervisorRecoveryRequest = {
+              epochId: binding.authorityEpochId,
+              supervisorInstanceId: record.payload.supervisorInstanceId,
+              workspaceId: binding.workspaceId,
+              scanId: binding.scanId,
+              operationId: binding.operationId,
+              attemptId: binding.attemptId,
+              commandId: command.commandId,
+              expectedCommandHash: sha256Hex(canonicalJson(command)),
+            }
+            if (!(await this.options.authorizeRecovery(request, record, command, binding)))
+              return false
+            this.recoveryAuthority = { request, original: record, command, binding }
+            return true
+          },
           authorizeRecovery: this.options.authorizeRecovery,
         },
         parsed?.data
@@ -447,6 +502,29 @@ export class SupervisorAuthorityJournal
 
   async recoverPending(): Promise<SupervisorJournalRecovery<SupervisorJournalEvent>> {
     return this.recoverStored(undefined)
+  }
+
+  /** Root sealing keeps the authenticated snapshot alive and excludes local appends. */
+  async withPublication<T>(
+    operation: (ports: {
+      original: JournalPort<SupervisorJournalEvent>
+      wrapper: JournalPort<WrappedEvent>
+      independent: IndependentAuthorityJournal<OriginalRecord>
+      validateOriginal: typeof supervisorJournalEventSchema.parse
+    }) => Promise<T>
+  ): Promise<T> {
+    return this.serialized(async () => {
+      const before = await this.confirmedHistory()
+      const result = await operation({
+        original: this.options.original,
+        wrapper: this.options.local,
+        independent: this.independent,
+        validateOriginal: supervisorJournalEventSchema.parse,
+      })
+      if (!same(before, await this.confirmedHistory()))
+        conflict("journal authority changed during seal publication")
+      return result
+    })
   }
 
   async readCursor(input: unknown): Promise<SupervisorJournalPage<SupervisorJournalEvent>> {
@@ -480,68 +558,12 @@ export class SupervisorAuthorityJournal
         }
         this.originals = this.cursorOriginals
         this.rangeRead = true
-        const originals = await this.options.original.readRange!(cursor.afterSequence, {
-          maxBytes: 1024 * 1024,
-          maxRecords: cursor.limit,
-        })
-        if (originals.previousHash !== cursor.afterHash) {
-          throw new IndependentAuthorityError(
-            "CURSOR_CONFLICT",
-            "cursor predecessor does not match"
-          )
-        }
-        if (!same(originals.head, this.cursorOriginals!.at(-1) ?? null)) {
-          conflict("original range head changed outside the supervisor")
-        }
-        const confirmed = await this.independent.loadConfirmedRange(cursor.afterSequence, {
-          maxBytes: 2 * 1024 * 1024,
-          maxRecords: originals.records.length || cursor.limit,
-        })
-        if (
-          !same(confirmed.head?.payload.payload ?? null, originals.head) ||
-          !same(
-            confirmed.records.map((record) => record.payload.payload),
-            originals.records
-          )
-        ) {
-          conflict("bounded original and independent streams disagree")
-        }
-        const snapshotHead = this.independent.confirmedHead()
-        const snapshotCursor = bindSupervisorJournalSnapshot(cursor, snapshotHead)
-        const page: SupervisorJournalPage<SupervisorJournalEvent> = {
-          records: [],
-          snapshotHead,
-          nextCursor: snapshotCursor,
-          hasMore: originals.hasMore,
-        }
-        for (const record of confirmed.records) {
-          const next = {
-            records: [...page.records, record],
-            snapshotHead,
-            nextCursor: {
-              ...snapshotCursor,
-              afterSequence: record.sequence,
-              afterHash: record.payload.payload.hash,
-            },
-            hasMore: record.sequence < (originals.head?.sequence ?? 0),
-          }
-          if (Buffer.byteLength(canonicalJson(next)) > MAX_SUPERVISOR_JOURNAL_PAGE_BYTES) {
-            if (!page.records.length)
-              throw new IndependentAuthorityError("READ_LIMIT", "page cannot make bounded progress")
-            break
-          }
-          Object.assign(page, next)
-        }
-        if (
-          !same(
-            originals,
-            await this.options.original.readRange!(cursor.afterSequence, {
-              maxBytes: 1024 * 1024,
-              maxRecords: cursor.limit,
-            })
-          )
+        const page = await readBoundedJournalPage(
+          this.options.original,
+          this.independent,
+          cursor,
+          this.cursorOriginals!.at(-1) ?? null
         )
-          conflict("original range changed during readback")
         await this.assertStreamAuthorized()
         return page
       })
@@ -565,49 +587,7 @@ export class SupervisorAuthorityJournal
         )
       }
       const history = await this.confirmedHistory()
-      const previous = cursor.afterSequence
-        ? history[cursor.afterSequence - 1]?.payload.payload
-        : null
-      if (
-        cursor.afterSequence > history.length ||
-        cursor.afterHash !== (previous?.hash ?? "0".repeat(64))
-      ) {
-        throw new IndependentAuthorityError("CURSOR_CONFLICT", "cursor predecessor does not match")
-      }
-      const snapshotHead = this.independent.confirmedHead()
-      const snapshotCursor = bindSupervisorJournalSnapshot(cursor, snapshotHead)
-      const page: SupervisorJournalPage<SupervisorJournalEvent> = {
-        records: [],
-        snapshotHead,
-        nextCursor: snapshotCursor,
-        hasMore: cursor.afterSequence < history.length,
-      }
-      for (const record of history.slice(
-        cursor.afterSequence,
-        cursor.afterSequence + cursor.limit
-      )) {
-        const candidate = {
-          records: [...page.records, record],
-          snapshotHead,
-          nextCursor: {
-            ...snapshotCursor,
-            afterSequence: record.payload.payload.sequence,
-            afterHash: record.payload.payload.hash,
-          },
-          hasMore: record.payload.payload.sequence < history.length,
-        }
-        if (Buffer.byteLength(canonicalJson(candidate)) > MAX_SUPERVISOR_JOURNAL_PAGE_BYTES) {
-          if (!page.records.length) {
-            throw new IndependentAuthorityError(
-              "RECORD_TOO_LARGE",
-              "original record exceeds read limit"
-            )
-          }
-          break
-        }
-        Object.assign(page, candidate)
-      }
-      return structuredClone(page)
+      return fallbackJournalPage(cursor, this.independent.confirmedHead(), history)
     }, snapshot)
   }
 }

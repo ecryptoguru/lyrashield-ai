@@ -190,6 +190,24 @@ export class PostgresAuthorityMirror implements AuthorityMirror, BoundedAuthorit
     return head
   }
 
+  /** Narrow installed-supervisor pin check; the mirror login cannot read product journal rows. */
+  async verifySupervisorStreamBinding(
+    streamId: string,
+    originalKeyHash: string,
+    wrapperKeyHash: string
+  ): Promise<boolean> {
+    id.parse(streamId)
+    hash.parse(originalKeyHash)
+    hash.parse(wrapperKeyHash)
+    const result = await this.transaction((connection) =>
+      connection.query(
+        "SELECT app.scan_supervisor_journal_stream_matches($1,$2,$3,$4,$5) AS matched",
+        [streamId, this.epochId, this.supervisorInstanceId, originalKeyHash, wrapperKeyHash]
+      )
+    )
+    return result.rows.length === 1 && result.rows[0]?.matched === true
+  }
+
   async readRecord(sequence: number): Promise<JournalRecord<unknown> | null> {
     z.number().int().positive().safe().parse(sequence)
     const result = await this.transaction((connection) =>
