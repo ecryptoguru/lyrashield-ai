@@ -34,10 +34,19 @@ const scopedScanFindFirst = vi.hoisted(() => vi.fn())
 vi.mock("../engine/deterministic-retest", () => ({
   authorizeDeterministicRetest: vi.fn(),
   checkoutDeterministicRetest: vi.fn(),
+  RetestBaselineUnavailableError: class RetestBaselineUnavailableError extends Error {
+    readonly reason =
+      "The original scan does not provide a complete deterministic baseline, so this retest cannot confirm or deny the fix."
+    constructor() {
+      super("Deterministic retest baseline provenance is incomplete")
+      this.name = "RetestBaselineUnavailableError"
+    }
+  },
 }))
 import {
   authorizeDeterministicRetest,
   checkoutDeterministicRetest,
+  RetestBaselineUnavailableError,
 } from "../engine/deterministic-retest"
 
 const configMocks = vi.hoisted(() => ({
@@ -328,6 +337,7 @@ import {
   failTerminalRetestsForScan,
   completeRetestsForScan,
   persistResultManifest,
+  inconclusiveRetestsForScan,
 } from "../engine/result-integrity"
 import { resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import { verifyRelayGrant } from "@lyrashield/security"
@@ -1978,6 +1988,47 @@ describe("processScanJob", () => {
     vi.mocked(authorizeDeterministicRetest).mockRejectedValueOnce(new Error("Invalid lineage"))
     await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "failed" })
     expect(runEngine).not.toHaveBeenCalled()
+  })
+
+  it("treats a recorded retest baseline refusal as terminal, uncharged and unretried", async () => {
+    mockStoredScanAuthority({ determinismMode: "targeted_scanner" })
+    vi.mocked(authorizeDeterministicRetest).mockRejectedValueOnce(
+      new RetestBaselineUnavailableError()
+    )
+    const retryingJobFixture = {
+      id: "scan-1",
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      },
+    }
+    const retryingJob = retryingJobFixture as never
+
+    await expect(processScanJob(retryingJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: "RETEST_BASELINE_UNAVAILABLE",
+      errorMessage: expect.stringContaining("does not provide a complete deterministic baseline"),
+    })
+    // The inconclusive receipt is retained and charged work never starts.
+    expect(inconclusiveRetestsForScan).toHaveBeenCalledWith(
+      "scan-1",
+      expect.stringContaining("complete deterministic baseline")
+    )
+    expect(runEngine).not.toHaveBeenCalled()
+    expect(checkoutDeterministicRetest).not.toHaveBeenCalled()
+    expect(recordAgentMinutes).not.toHaveBeenCalled()
+    // A terminal refusal must not be requeued into another attempt.
+    expect(requeueScanForRetry).not.toHaveBeenCalled()
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({ errorCategory: "RETEST_BASELINE_UNAVAILABLE" })
+    )
   })
   it("completes successfully when engine returns exit code 0", async () => {
     const result = await processScanJob(mockJob)

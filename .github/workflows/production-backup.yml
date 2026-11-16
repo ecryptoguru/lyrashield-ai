@@ -276,6 +276,22 @@ jobs:
         if: ${{ always() && inputs.isolated_restore }}
         run: bash .github/scripts/isolated-restore-private.sh cleanup
 
+      - name: Record backup failure in the run summary
+        if: failure()
+        run: |
+          set -euo pipefail
+          {
+            echo "## Production backup failed"
+            echo
+            echo "No new backup object was proven for this attempt, and the restore drill may not run."
+            echo
+            echo "- Run: ${{ github.run_id }} (attempt ${{ github.run_attempt }})"
+            echo "- Trigger: ${{ github.event_name }}"
+            echo
+            echo "Private backup logs stay hidden. Investigate the failing step; retention only deletes after a successful upload."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=Production backup failed::No backup proof was published for this attempt. Inspect the failing step."
+
   restore:
     name: Weekly isolated restore drill
     needs: backup
@@ -608,3 +624,26 @@ jobs:
       - name: Remove private isolated restore files and process group
         if: ${{ always() }}
         run: bash .github/scripts/isolated-restore-private.sh cleanup
+
+      # A silent scheduled failure leaves recent backups unproven. Record a
+      # public-safe failure summary so the next reader sees what did not run.
+      - name: Record restore-drill failure in the run summary
+        if: failure()
+        env:
+          BACKUP_JOB_RESULT: ${{ needs.backup.result }}
+          BACKUP_DAY: ${{ needs.backup.outputs.backup_day }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Isolated restore drill failed"
+            echo
+            echo "This attempt published no restore proof. Earlier successful drills do not prove these backups."
+            echo
+            echo "- Run: ${{ github.run_id }} (attempt ${{ github.run_attempt }})"
+            echo "- Trigger: ${{ github.event_name }}"
+            echo "- Backup job result: ${BACKUP_JOB_RESULT:-unknown}"
+            echo "- Backup day: ${BACKUP_DAY:-unknown}"
+            echo
+            echo "Private restore logs stay hidden. Inspect the failing step before relying on recent backups."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=Isolated restore drill failed::No restore proof was published for this attempt. Recent backups stay unproven until a drill passes."

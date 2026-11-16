@@ -44,7 +44,6 @@ import { resolveScanProfile, type UrlScanProfile } from "@lyrashield/types"
 import { prepareScanExecution } from "./run-scan/preparation"
 import { interpretExitCode, resolveEngineProfile, type EngineRunResult } from "../engine/runner"
 import type { TargetType } from "../engine/command-builder"
-import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { markRetestsRunning } from "../engine/result-integrity"
 import { type ScanJobData, type ScanJobResult } from "../types"
@@ -59,6 +58,7 @@ import {
   persistScanFailure,
 } from "./run-scan/lifecycle-guards"
 import { resumePendingScanFinalization } from "./run-scan/pending-finalization"
+import { classifyScanFailure } from "./run-scan/terminal-failure"
 import {
   imageDigest,
   isTimeoutError,
@@ -649,18 +649,9 @@ async function processStoredScanJob(
       }
       if (error instanceof ScanCapacityWaitingError && !billablePhaseStarted)
         await deferScanCapacityWait(job, workspaceId, scanId)
-      const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
       const timedOut = globalScanTimeoutReached || isTimeoutError(error)
-      const finalErrorCategory = timedOut
-        ? "TIMEOUT"
-        : isTerminalPrerequisiteFailure
-          ? "EVIDENCE_STORAGE_CONFIGURATION"
-          : "INTERNAL_ERROR"
-      const finalErrorMessage = timedOut
-        ? timeoutErrorMessage(scanRuntimeBudgetMs)
-        : isTerminalPrerequisiteFailure
-          ? "Evidence storage is not configured"
-          : "The scan could not be completed because an internal service failed."
+      const { finalErrorCategory, finalErrorMessage, isTerminalPrerequisiteFailure } =
+        classifyScanFailure(error, { timedOut, scanRuntimeBudgetMs })
 
       log.error("Scan job failed", {
         scanId,

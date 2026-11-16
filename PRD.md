@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current production evidence: 2026-11-02 (deployed product revision `b03f0bbe2b42f3a49e24e103655187372ba0a5f6`, released by run `41518076035`; marketing serves build revision `c69f11ce64ecde4df92c441b80b8b06b89451ac9`). This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
+> Current production evidence: 2026-11-16 record (released `2026-11-15T22:16Z`) — product revision `637a178ae589a4545224afb1e13c4b694fefd679`, released by run `43764099383`; worker image `sha256:138d435fd5b17d819bd8136ec43d8d0856434f0d93067bd9275c15749d44ea70` on engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c`; marketing serves the same build revision. This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
@@ -404,6 +404,35 @@ Detailed file and package mapping: [codebase.md](./codebase.md).
 
 ## 8. Current production evidence
 
+### Current deployed production — 2026-11-16 record (released 2026-11-15 22:16 UTC)
+
+[PR #1143](https://github.com/ecryptoguru/lyrashield-ai/pull/1143) merged as `637a178ae589a4545224afb1e13c4b694fefd679` after `SCA & Secret Scan`, `Lint, Typecheck, Test & Build` and `Pinned Engine / Worker Contract` passed on its exact head `acf00c1e4875666ff5b22c6bc031210a034b2ba4`. [Release 43764099383](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43764099383) succeeded end to end: source qualification, exact-image build, disposable worker rehearsal, production migration preparation, Container Apps rollout, marketing deploy, worker promotion and smoke. The optional `queue` check failed on that head; it is a known optional failure and is not relabeled successful.
+
+This release closes the three gaps recorded in the 2026-11-16 independent verification, plus restore-failure visibility:
+
+- `GET /api/fix-proposals` derives `hasPatchBase` from the nested finding base commit, so a valid proposal loaded through pagination keeps its pull-request action.
+- A deterministic-retest baseline refusal is classified terminal before execution as `RETEST_BASELINE_UNAVAILABLE` (`apps/worker/src/jobs/run-scan/terminal-failure.ts`): the inconclusive receipt is retained, no provider execution or agent-minutes are charged, no queue attempt is consumed, and the scan detail offers a baseline recovery action instead of an internal failure.
+- `PATCH /api/targets/[id]` accepts `installationId` for repository targets and rebinds only to an active `GITHUB` integration of the same workspace that proves access to the exact repository (`apps/web/src/lib/target-installation-rebind.ts`), auditing `target.github_installation_rebound`. The target page offers the connection choice or a link to connect GitHub.
+- Failed `backup` and weekly `restore` drill runs write a public-safe failure summary and an `::error` annotation instead of failing silently.
+
+An independent Azure and VM readback at `2026-11-15T22:16:36Z` confirmed the deployed tuple:
+
+| Surface      | Revision                                                                                      | Identity                                                                                                                                                                               |
+| ------------ | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| app          | `lyrashield-app--0000521` (100% traffic, Healthy)                                             | web digest `sha256:a6519ad2405396ead775d8290640a7b3ed149c60d185c9c9cd7513ebe24d5126`                                                                                                   |
+| scanner      | `lyrashield-scanner--0000495` (100% traffic, Healthy)                                         | same web digest                                                                                                                                                                        |
+| egress proxy | `lyrashield-egress-proxy--0000361` (100% traffic, Healthy)                                    | proxy digest `sha256:695a12e102dfedea1aff0a812f72c80b35f761af87f6eb086e93afc083211fb5`                                                                                                 |
+| worker       | `lyrashield-worker` VM, active since `2026-11-15T22:14:46Z`, container healthy, zero restarts | image `sha256:138d435fd5b17d819bd8136ec43d8d0856434f0d93067bd9275c15749d44ea70`, product `637a178ae589a4545224afb1e13c4b694fefd679`, engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c` |
+| marketing    | Cloudflare deploy from `637a178ae`                                                            | homepage serves build revision `637a178ae589a4545224afb1e13c4b694fefd679`                                                                                                              |
+
+All revisions use the product tag `637a178ae`. The superseded revisions (`0000520`, `0000494`, `0000360`) are retained at 0% traffic for rollback.
+
+Public probes at `2026-11-15T22:16:36Z`: `https://lyrashieldai.com/` 200, `https://app.lyrashieldai.com/api/ready` 200 (`database`, `redis`), `https://app.lyrashieldai.com/api/ready/scans` 200 (`worker: true`), `https://scanner.lyrashieldai.com/api/ready` 200. The scan admission stop key `lyrashield:scan-admission:stopped` was absent (`EXISTS` = 0) and the scan queue was empty in wait, active, failed, delayed, prioritized and paused states.
+
+Recorded honestly: `/api/ready/scans` returned `503` `{"status":"not_ready","checks":{"worker":false}}` earlier in the same rollout, while the worker was being promoted. That is a real planned window in which new scans were refused (`codebase.md` §11 documents it as the controlled promotion stop); it was not unexpected unavailability, and it cleared when promotion finished.
+
+This is a deployment fact only. It does not establish authenticated customer journeys, paid model-backed scan acceptance on OnboardingAI2, a positive provider Fix PR → retest receipt, physical-device or screen-reader qualification, or any financial readiness. D5 remains deferred. No scorecard, public sharing or paid acceptance follows from this release.
+
 ### Controller integration release and production hold — 2026-11-14
 
 The current candidate pins merged engine `afd71f79675cb4db4187e31ecbf8f58ebcd62e1c` ([engine PR #240](https://github.com/ecryptoguru/lyrashield-engine/pull/240), [engine PR #242](https://github.com/ecryptoguru/lyrashield-engine/pull/242)). The root producer builds the canonical SDK manifest in the pinned engine image, and controller attachment consumes those same bytes. Scoped sandbox tool credentials and short-lived signed state grants bind the confirmed sandbox ownership and immutable attempt. This is source implementation; protected image qualification, measured SDK capability acceptance, installed runtime authority, authenticated fleet/journal evidence, compatible rollback and live acceptance remain **HELD**. Production remains the November 2 tuple below.
@@ -440,7 +469,7 @@ No paid acceptance, positive provider Fix PR/retest, physical-device or screen-r
 
 No paid acceptance, positive provider Fix PR/retest, physical-device/screen-reader qualification, or financial readiness follows from this change. Git history and the merged PRs retain the deleted lane's implementation.
 
-### Current deployed production — 2026-11-15 (recovery release; deployed)
+### Current deployed production — 2026-11-15 (recovery release; superseded 2026-11-16 record)
 
 [PR #1133](https://github.com/ecryptoguru/lyrashield-ai/pull/1133) merged as `fa1679b374700ae6b6b866bca29d44aac92d3eb6`; compatibility migration PRs #1134 (`c89e1d370ad0875d98372f137163a6eb9b1212dd`) and #1135 (`9faf5a903090525cfcbc43dde3abd1bc7cedb2db`) followed; [release 43700283334](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43700283334) succeeded at 2026-11-15 including source qualification, exact-image build, disposable rehearsal, production migration application, web/worker deploy, worker promotion and production smoke.
 
