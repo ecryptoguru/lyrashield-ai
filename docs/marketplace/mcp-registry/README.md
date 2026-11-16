@@ -1,12 +1,12 @@
 # Official MCP Registry preparation
 
-**State: CANDIDATE; NPM PUBLICATION AND REGISTRY SUBMISSION PENDING.** `@lyrashield/mcp@0.2.13` carries `mcpName: io.github.ecryptoguru/lyrashield-ai` and the current 22-tool catalog. Its prepared Registry metadata remains an offline release candidate. The earlier 0.2.12 package was published and passed publisher validation; those receipts do not establish publication of 0.2.13. Authenticate, publish the reviewed npm bytes, submit and read back the public Registry version before claiming availability.
+**State: NPM PUBLISHED; REGISTRY SUBMISSION PENDING.** `@lyrashield/mcp@0.2.13` carries `mcpName: io.github.ecryptoguru/lyrashield-ai` and the current 22-tool catalog. Its prepared Registry metadata remains an offline release candidate. The 0.2.13 public npm tarball matches its reviewed SHA-256 and integrity. Registry submission and exact public Registry version readback remain required before claiming a listing.
 
 ## Verified identities and endpoints
 
 - Source repository: https://github.com/ecryptoguru/lyrashield-ai (git remote origin).
 - Hosted product domain: https://lyrashieldai.com.
-- Candidate stdio package: @lyrashield/mcp 0.2.13 includes the 22-tool catalog. npm publication and registry readback are pending; the prior 0.2.12 publication was verified on 2026-10-02.
+- Published stdio package: @lyrashield/mcp 0.2.13 includes the 22-tool catalog. npm bytes were independently verified on 2026-11-16; Registry listing readback remains pending; the prior 0.2.12 publication was verified on 2026-10-02.
 - Hosted MCP endpoint: https://app.lyrashieldai.com/api/mcp, documented by the current MCP package README. It uses Streamable HTTP and hosted OAuth discovery; the Registry remote intentionally declares no static bearer header or secret.
 - Candidate Registry name: io.github.ecryptoguru/lyrashield-ai, matching the official GitHub username namespace pattern. This is a prepared identity, not proof of namespace ownership or publication.
 - The exact prepared identity readback returned HTTP 404 and public search returned no LyraShield entry on 2026-10-02. This verifies absence for the prepared identity, not every possible alternate identity.

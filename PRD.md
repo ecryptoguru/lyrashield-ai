@@ -27,7 +27,7 @@ The eight commitments that separate LyraShield from point scanners and generic S
 
 1. Evidence states instead of confidence scores (§3).
 2. Coverage organized around how AI-built apps fail — AI-Built Failure Taxonomy, AI App Security AI-01–AI-08 (OWASP LLM Top 10, 2025), WebMCP controls (§4).
-3. Agent-native distribution — CLI, MCP (21 tools), portable Agent Plugin, 51-entry registry / 48 preferred client surfaces, account-less GitHub Action (§2).
+3. Agent-native distribution — CLI, MCP (22 tools), portable Agent Plugin, 51-entry registry / 48 preferred client surfaces, account-less GitHub Action (§2).
 4. Approval-gated fix loop with automatic retest and gate re-evaluation on merge (§4 Remediation).
 5. Versioned Launch Gate verdicts plus signed, publicly verifiable reports and release-identity confirmation (§4 Launch gate).
 6. Honest coverage ledger — Vibe Security 50 (`vibe-security-50/1.2.0`) per-control outcomes; "no finding" never reads as "passed" (§3).
@@ -423,7 +423,7 @@ Hosted tenant/credential qualification passed 20 assertions: a temporary read-on
 
 Public report sharing passed 11 assertions on report `cmwimm3vu000f01fuj7yjhby7`: valid anonymous minimal projection, absent private execution/storage/credential fields, refusal of missing/wrong/cross-report tokens, immediate revocation including conditional requests, and retained owner access. The token existed only in process memory and was revoked. No production scorecard was created.
 
-A packed CLI scan-resume check found `Dynamic require of "assert" is not supported`; the CLI ESM banner now supplies Node's standard `createRequire`. The repaired bundle successfully resumed the same URL scan without creating another scan. CLI `0.2.15` is a verified release candidate; npm still publishes `0.2.14` until authenticated publication and readback. Published MCP `0.2.12` reads the same scan quality but exposes 21 tools and lacks the current setup-health tool. Coordinated candidate MCP `0.2.13`, Agent Plugin `0.1.32` and CLI `0.2.15` update the tool catalog and exact client pins. Candidate pins are prepared on the draft PR; public versions remain `0.2.12` / `0.1.31` / `0.2.14` until authenticated publication and readback.
+A packed CLI scan-resume check found `Dynamic require of "assert" is not supported`; the CLI ESM banner now supplies Node's standard `createRequire`. The repaired bundle successfully resumed the same URL scan without creating another scan. CLI `0.2.15` is published; its public tarball matches the reviewed archive. Published MCP `0.2.12` reads the same scan quality but exposes 21 tools and lacks the current setup-health tool. Published coordinated MCP `0.2.13`, Agent Plugin `0.1.32` and CLI `0.2.15` update the tool catalog and exact client pins. Public latest versions are `0.2.13` / `0.1.32` / `0.2.15`, with exact SHA-256 and npm integrity readback. This publication receipt does not establish a product rollout or immutable marketplace release.
 
 Broker authority (#7) remains deferred and unqualified. Physical-device/screen-reader, individual IDE/native marketplace activation and financial qualification are outside this bounded acceptance. These receipts supersede earlier pending paid, tenant/credential and report-sharing statements; they are not universal launch qualification.
 
