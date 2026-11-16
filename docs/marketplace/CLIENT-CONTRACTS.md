@@ -4,7 +4,7 @@
 
 Published MCP `0.2.12` successfully reads current scan quality but advertises 21 tools and lacks `lyrashield_get_setup_health`; the current source/hosted catalog has 22. Published MCP `0.2.13` supplies that missing setup-health tool and current authorization/workflow contracts. Agent Plugin `0.1.32` updates its exact MCP pins; CLI `0.2.15` repairs `Dynamic require of "assert" is not supported` by supplying Node's standard ESM `createRequire` banner. Distribution smoke requires all 22 tools and loads the packed CLI scan command, so help/version alone cannot mask the loader regression.
 
-The source candidate updates exact pins throughout MCP, CLI, plugin shims, active client guides, WebMCP adapters and marketplace templates, preserving transports, permissions and support tiers. Reviewed MCP → Agent Plugin → CLI tarballs were published after a scoped granular publishing token was configured. Public latest versions are MCP `0.2.13`, plugin `0.1.32` and CLI `0.2.15`; SHA-256 and npm integrity match all reviewed archives. Package publication does not establish production deployment of the client pins. The generated candidate marketplace is isolated and is not an immutable public release.
+The coordinated release updates exact pins throughout MCP, CLI, plugin shims, active client guides, WebMCP adapters and marketplace templates, preserving transports, permissions and support tiers. Reviewed MCP → Agent Plugin → CLI tarballs were published after a scoped granular publishing token was configured. Public latest versions are MCP `0.2.13`, plugin `0.1.32` and CLI `0.2.15`; SHA-256 and npm integrity match all reviewed archives. Fresh public consumers passed MCP discovery of 22 tools, setup-health, sealed quality reads and CLI resume without new execution or usage. Production deployment, immutable marketplace publication and native client activation require their own receipts.
 
 The repaired CLI and fresh candidate consumer successfully read existing URL scan `cmwiqcx4x000901k576f3xqfx`, with no new scan or usage. Published MCP `0.2.12` and the current source MCP both returned the same sealed quality surface; source MCP returned 22 tools. Exact final tarball and marketplace receipts are retained in the hosted acceptance record. Historical help/version and publication receipts below do not establish the new candidate publication or current CLI scan-loader acceptance.
 
@@ -38,7 +38,7 @@ The published MCP package reports `mcpName: io.github.ecryptoguru/lyrashield-ai`
 
 The published `lyrashield@0.2.14` tarball (SHA-256 `430a66a4a61302d1143b6857f729e52a2178ae459f0036fda8ea0dc865ece14f`) is the reviewed artifact from product source `f4765de6d3b55ca7db37cb1ba0e22ec0512c54da`. Product source `c83660d76273c8208e34c33524b5aa77667beb9e` has since updated only user-facing CLI and registry copy: the withheld Copilot Cloud Agent skill message now explains that its workflow bundle is not validated for that surface, and manual setup guidance reflects the published Agent Plugin package and current listing/runtime status for Copilot Cloud Agent, Claude Code, Cursor, VS Code, Codex and Copilot. The CLI bundles `@lyrashield/agent-registry`, so these newer instructions are not present in the immutable `0.2.14` archive; its public tarball still contains the earlier withheld-skill message.
 
-This source drift does not change support tiers, transports, config paths, version constraints, installer routing, authentication, authorization or filesystem effects. Skill installation for the withheld Copilot Cloud Agent surface still returns `FAILED` before touching project files; the focused source test verifies that no skill or ownership manifest is written. Existing `0.2.14` installs remain functional and fail closed, but their manual/withheld-install copy is stale. Do not republish or retag `0.2.14`. Track a new CLI patch release from the final merged product source as a remaining task for full CLI-guidance parity; until then, follow the current product integration docs and pinned direct-MCP fallback.
+This source drift does not change support tiers, transports, config paths, version constraints, installer routing, authentication, authorization or filesystem effects. Skill installation for the withheld Copilot Cloud Agent surface still returns `FAILED` before touching project files; the focused source test verifies that no skill or ownership manifest is written. This dated source-copy review did not qualify the scan loader. A later fresh `0.2.14` consumer exposed its ESM/CommonJS loader failure, repaired in published CLI `0.2.15` above. Use `0.2.15` for current CLI guidance and scan execution; do not republish or retag `0.2.14`.
 
 ## Safe native CLI runtime smoke — 2026-10-02
 
@@ -158,11 +158,11 @@ On 2026-10-02, the [official Codebuff MCP guide](https://www.codebuff.com/docs/t
 explicitly documented project `.agents/mcp.json`, parent `.agents/mcp.json`, then global
 `~/.agents/mcp.json` (later locations override earlier), under `mcpServers`, with local stdio
 and HTTP/SSE entries plus `$VAR_NAME` shell interpolation. The registry config-file path matches
-that current documented direct-MCP contract. Use published MCP `0.2.12` and separate CLI `0.2.14`
-OAuth for the local fallback. Static remote headers are not evidence of hosted OAuth or authorization
+that documented direct-MCP contract. The current local fallback uses published MCP `0.2.13` and
+separate CLI `0.2.15` OAuth. Static remote headers are not evidence of hosted OAuth or authorization
 for mutations.
 
-The separate `codebuff/lyrashield-review.ts` preparation artifact uses per-agent `mcpServers`,
-a read-only tool allowlist and published MCP `0.2.12` / CLI `0.2.14`. The Codebuff-specific agent
+The current separate `codebuff/lyrashield-review.ts` preparation artifact uses per-agent `mcpServers`,
+a read-only tool allowlist and published MCP `0.2.13` / CLI `0.2.15`. The Codebuff-specific agent
 listing still needs a reviewed update and readback. This source review establishes the documented
 configuration distinction, not authenticated Codebuff runtime acceptance.
