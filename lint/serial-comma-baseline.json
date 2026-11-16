@@ -17,9 +17,6 @@
     "packages/types/src/openapi"
   ],
   "files": {
-    "apps/marketing/src/content/blog/copilot-cli-mcp-security-workflow.mdx": {
-      "7a79c4b28cf23a2083af993d8e1277da2530a68bc1271804d1d24caf682bca46": 1
-    },
     "apps/marketing/src/lib/blog-categories.ts": {
       "032b1599f3253254bd3a45b16de917a0b11f67ca9f520ea2fe0f0c6c19d68cc0": 1
     },

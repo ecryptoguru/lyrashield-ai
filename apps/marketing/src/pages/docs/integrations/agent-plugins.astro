@@ -53,7 +53,7 @@ const faqItems = [
   },
   {
     q: "Do I need to log in before installing the plugin?",
-    a: "For local stdio, run npx --yes lyrashield@0.2.14 login --oauth first so the MCP server can read the selected workspace credential. Hosted clients use their documented OAuth flow. The plugin listing remains pending; follow each client guide for its supported direct MCP fallback.",
+    a: "For local stdio, run npx --yes lyrashield@0.2.15 login --oauth first so the MCP server can read the selected workspace credential. Hosted clients use their documented OAuth flow. The plugin listing remains pending; follow each client guide for its supported direct MCP fallback.",
   },
   {
     q: "Does the plugin let the agent change my code on its own?",
@@ -61,7 +61,7 @@ const faqItems = [
   },
   {
     q: "Why does VS Code use an MCP config file instead of the plugin?",
-    a: "No generated VS Code Agent Plugin shim exists. Its documented config path is .vscode/mcp.json, and CLI 0.2.14 includes a matching config installer. Preview it with npx --yes lyrashield@0.2.14 install vscode --dry-run, then run the install command after reviewing its changes. The VS Code guide documents the servers root key and per-entry stdio type. Runtime verification remains client-specific.",
+    a: "No generated VS Code Agent Plugin shim exists. Its documented config path is .vscode/mcp.json, and CLI 0.2.14 includes a matching config installer. Preview it with npx --yes lyrashield@0.2.15 install vscode --dry-run, then run the install command after reviewing its changes. The VS Code guide documents the servers root key and per-entry stdio type. Runtime verification remains client-specific.",
   },
 ]
 
@@ -109,12 +109,12 @@ const jsonLd: unknown[] = [
 
   <h2>Public Agent Plugin listings pending</h2>
   <p>
-    The portable Agent Plugin package <code>@lyrashield/agent-plugin@0.1.31</code> is published and
+    The portable Agent Plugin package <code>@lyrashield/agent-plugin@0.1.32</code> is published and
     passes offline Agent Plugins schema validation. Public marketplace listings and authenticated
     client acceptance remain pending. The marketplace default branch is preparation only. Until each
     client's listing and runtime are verified, follow its direct MCP
-    guides with <code>@lyrashield/mcp@0.2.12</code> and authenticate separately using{" "}
-    <code>npx -y lyrashield@0.2.14 login --oauth</code>.
+    guides with <code>@lyrashield/mcp@0.2.13</code> and authenticate separately using{" "}
+    <code>npx -y lyrashield@0.2.15 login --oauth</code>.
   </p>
 
   <h2>CLI config and skills setup</h2>
@@ -127,9 +127,9 @@ const jsonLd: unknown[] = [
     command. Shared skills can be installed only for clients with one documented skill path. For
     other clients, use the linked guide's documented manual or client-native setup.
   </p>
-  <pre><code>npx --yes lyrashield@0.2.14 install vscode --dry-run</code></pre>
+  <pre><code>npx --yes lyrashield@0.2.15 install vscode --dry-run</code></pre>
   <p>
-    Review the output, then run <code>npx --yes lyrashield@0.2.14 install vscode</code> to write the
+    Review the output, then run <code>npx --yes lyrashield@0.2.15 install vscode</code> to write the
     supported VS Code entry. Use the linked client guides for other commands and skill paths. A
     config or skill install does not prove the client discovered or authenticated the integration.
   </p>
@@ -169,8 +169,8 @@ const jsonLd: unknown[] = [
 
   <div class="callout">
     <strong>VS Code uses MCP configuration:</strong> no generated Agent Plugin shim exists for VS
-    Code. Preview with <code>npx --yes lyrashield@0.2.14 install vscode --dry-run</code>, then run{" "}
-    <code>npx --yes lyrashield@0.2.14 install vscode</code> after reviewing the changes. See the{" "}
+    Code. Preview with <code>npx --yes lyrashield@0.2.15 install vscode --dry-run</code>, then run{" "}
+    <code>npx --yes lyrashield@0.2.15 install vscode</code> after reviewing the changes. See the{" "}
     <a href="/docs/integrations/vscode">VS Code guide</a> for the current settings and manual path.
   </div>
 
@@ -202,8 +202,8 @@ const jsonLd: unknown[] = [
     For CLI-managed config, preview removal for a supported client, then remove only the LyraShield
     entry. Preserve all other configuration.
   </p>
-  <pre><code>npx --yes lyrashield@0.2.14 uninstall vscode --dry-run
-npx --yes lyrashield@0.2.14 uninstall vscode</code></pre>
+  <pre><code>npx --yes lyrashield@0.2.15 uninstall vscode --dry-run
+npx --yes lyrashield@0.2.15 uninstall vscode</code></pre>
 
   <h2>Frequently asked questions</h2>
   {faqItems.map((item) => (
