@@ -1,5 +1,19 @@
 # Client configuration receipts
 
+## Coordinated client publication — 2026-11-17
+
+[Product PR #1158](https://github.com/ecryptoguru/lyrashield-ai/pull/1158) merged as `d5807da10885416c65fdc141b3c3a6af271a84d7` after all three required checks passed on exact head `e68ad5e105c09489131372fbbcf15e65a0bd91cf` ([CI 43989355111, attempt 2](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43989355111/attempts/2)). The targeted failed-job rerun passed marketing's temporary-browser-artifact check without changing its assertion. MCP `0.2.14` retains terminal scan status in capped responses while preserving `truncated: true`, `complete: false` and the 256KiB limit. Canonical registry/config writers, generated adapters and current guides pin MCP `0.2.14`, Agent Plugin `0.1.33` and CLI `0.2.16`.
+
+Reviewed archives were published in MCP → Agent Plugin → CLI order from the clean merged tree matching the reviewed source tree `5ff29aa754dac5691f8a67d22b8ad11d93359444`. Public latest versions, downloaded bytes, SHA-1 and SHA-512 integrity matched every reviewed archive after npm processing completed. A fresh consumer install with lifecycle scripts disabled resolved SDK `1.32.2` and patched `@hono/node-server@2.1.8`; the source lock remains SDK `1.32.0` with Hono `2.1.8`. CLI version/help and package boundary smoke passed. These package receipts do not establish a native IDE listing, financial qualification or a new paid scan.
+
+After production release 43993286907, fresh public MCP returned 22 tools, passed setup-health and read completed scan `cmwjwpix0000101j84lhhmfze` with terminal status retained in a 177,227-byte capped response (`originalBytes: 291075`, `truncated: true`, `complete: false`). MCP and CLI `0.2.16` both matched stored manifest `7d7e2bfbccd579d4c8e3716e40d1f0e89351ae054380d3248e770b18930796a8` and quality checksum `c8b06b76a97eff3ba6c2ad95c77b5cc4e66acb5f620d445e2d4f796ecee5d53c`, without new scans. Requested readiness for the newer deployed source remains insufficient and does not match the older scan identity. Individual native client activation and broader launch qualification remain open.
+
+| Package                    | Version  | Public archive SHA-256                                             |
+| -------------------------- | -------- | ------------------------------------------------------------------ |
+| `@lyrashield/mcp`          | `0.2.14` | `89b35324dcb9397616af72b5788a4fab028ccde261b4e9afa7e8206956f9d96f` |
+| `@lyrashield/agent-plugin` | `0.1.33` | `31ce4f544032f62c40808327b3a51f0aa677d3687670451ad9ff0919c388297b` |
+| `lyrashield`               | `0.2.16` | `e8eb6dd1061cdaeaaa8df09bfa31a6b87f4c84ad88fac4bc190c00b8fc2950d7` |
+
 ## Coordinated client publication — 2026-11-16
 
 Published MCP `0.2.12` successfully reads current scan quality but advertises 21 tools and lacks `lyrashield_get_setup_health`; the current source/hosted catalog has 22. Published MCP `0.2.13` supplies that missing setup-health tool and current authorization/workflow contracts. Agent Plugin `0.1.32` updates its exact MCP pins; CLI `0.2.15` repairs `Dynamic require of "assert" is not supported` by supplying Node's standard ESM `createRequire` banner. Distribution smoke requires all 22 tools and loads the packed CLI scan command, so help/version alone cannot mask the loader regression.

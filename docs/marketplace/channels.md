@@ -1,5 +1,13 @@
 # Distribution channel ledger
 
+## Current package and immutable export receipt — 2026-11-17
+
+Public npm latest is MCP `0.2.14`, Agent Plugin `0.1.33` and CLI `0.2.16`; all three downloaded archives match the reviewed SHA-256 and npm SHA-512 integrity ([client receipts](./CLIENT-CONTRACTS.md#coordinated-client-publication--2026-11-17)). [Marketplace PR #52](https://github.com/ecryptoguru/lyrashield-marketplace/pull/52) passed required `validate` on exact head `db01bfea6e5e9047a44d7f9b55f19d1c1f352272` and merged as `0987a38a5ae06697e7e2975b8e217c8a25833360`. Its clean `0.1.33` manifest binds merged product `d5807da10885416c65fdc141b3c3a6af271a84d7`, with all 306 file hashes matching the canonical export.
+
+[Release 43994210079](https://github.com/ecryptoguru/lyrashield-marketplace/actions/runs/43994210079) succeeded; immutable [v0.1.33](https://github.com/ecryptoguru/lyrashield-marketplace/releases/tag/v0.1.33) was published at `2026-11-17T01:16:41Z`. Independent tag, source-archive and `SHA256SUMS` readback matched that marketplace commit, product source and every declared file hash (307 archive files including `manifest.json`). Earlier tags remain unchanged. This publishes the reviewed GitHub export, not every vendor directory listing or authenticated native client integration. Historical channel states below retain their observation dates; no private publisher dashboard was accessed.
+
+## Historical channel readbacks
+
 Public channel readbacks checked: 2026-10-02 (Asia/Kolkata; receipts collected 2026-10-01 UTC). This ledger separates **client compatibility** from **directory status**. A submission, approval or listing does not prove an integration works in a client. Promote compatibility only from a surface-, version-, OS-, artifact- and transport-specific runtime receipt; promote a directory state only after public readback.
 
 Use these states for listing work: PREPARATION, READY, SUBMITTED, APPROVED, PUBLISHED, REJECTED and UNKNOWN. UNKNOWN means no current readback. Treat application dashboards and old PRs as historical until checked again. Do not claim "available in marketplace" without a live public listing URL and version.
