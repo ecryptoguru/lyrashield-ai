@@ -5,11 +5,11 @@ The `lyrashield` command-line interface installs, configures, and drives LyraShi
 ## Quick start
 
 ```sh
-npx -y lyrashield@0.2.15 login --oauth      # hosted PKCE OAuth login (recommended)
-npx -y lyrashield@0.2.15 use <workspace>
-npx -y lyrashield@0.2.15 project use        # detect the current git repo and set it as the default project
-npx -y lyrashield@0.2.15 scan               # scan the default project (uses default mode)
-npx -y lyrashield@0.2.15 pr-scan --auto     # run a bounded PR check on the current repo
+npx -y lyrashield@0.2.16 login --oauth      # hosted PKCE OAuth login (recommended)
+npx -y lyrashield@0.2.16 use <workspace>
+npx -y lyrashield@0.2.16 project use        # detect the current git repo and set it as the default project
+npx -y lyrashield@0.2.16 scan               # scan the default project (uses default mode)
+npx -y lyrashield@0.2.16 pr-scan --auto     # run a bounded PR check on the current repo
 ```
 
 You can also set `LYRASHIELD_API_KEY` (and optionally `LYRASHIELD_API_URL`) in the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com`.
@@ -43,13 +43,13 @@ CLI `0.2.14` includes the config writers and shared-skill installer described ab
 this CLI version and the matching MCP package:
 
 ```sh
-npx -y lyrashield@0.2.15 login --oauth
-npx -y lyrashield@0.2.15 install <agent> --project --dry-run
-npx -y lyrashield@0.2.15 skills install <agent> --project --dry-run
+npx -y lyrashield@0.2.16 login --oauth
+npx -y lyrashield@0.2.16 install <agent> --project --dry-run
+npx -y lyrashield@0.2.16 skills install <agent> --project --dry-run
 ```
 
 Remove `--dry-run` only after reviewing the preview. Use `--global` instead of `--project` for a
-user-level install. The direct MCP configuration uses `@lyrashield/mcp@0.2.13`, matching this
+user-level install. The direct MCP configuration uses `@lyrashield/mcp@0.2.14`, matching this
 CLI release. Follow the current [client guides](https://lyrashieldai.com/docs/integrations/agent-plugins)
 for client-specific plugin, MCP and skill discovery. Marketplace listing and authenticated client
 runtime acceptance are separate from npm package availability; use direct-MCP guidance when a

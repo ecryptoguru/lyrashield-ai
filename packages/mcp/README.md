@@ -1,13 +1,13 @@
 # @lyrashield/mcp
 
-This guide documents `@lyrashield/mcp@0.2.13` and its matching `lyrashield@0.2.15` CLI setup.
+This guide documents `@lyrashield/mcp@0.2.14` and its matching `lyrashield@0.2.16` CLI setup.
 
 The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an AI coding tool run bounded security scans, read findings with their recorded evidence states and drive the fix → verify loop against your LyraShield workspace — without leaving the editor.
 
 Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0). The server is also distributed as a portable Agent Plugin via [`@lyrashield/agent-plugin`](../agent-plugin/README.md) (Agent Plugins v1.0.0).
 
 Use hosted OAuth when the client supports remote MCP authorization. For local stdio clients,
-run `npx -y lyrashield@0.2.15 login --oauth` once and reuse the user-only credential store.
+run `npx -y lyrashield@0.2.16 login --oauth` once and reuse the user-only credential store.
 Workspace API keys are the explicit CI/headless fallback, not the default interactive setup.
 
 ## Protocol compatibility
@@ -62,8 +62,8 @@ Every API-backed tool calls the LyraShield REST API with a workspace API key or 
 
 ## Setup
 
-1. Run `npx -y lyrashield@0.2.15 login --oauth` and select one workspace in the browser.
-2. Add `npx -y @lyrashield/mcp@0.2.13` to the client. No secret belongs in a project config file.
+1. Run `npx -y lyrashield@0.2.16 login --oauth` and select one workspace in the browser.
+2. Add `npx -y @lyrashield/mcp@0.2.14` to the client. No secret belongs in a project config file.
 
 For CI or another environment that cannot complete OAuth, create a workspace API key in
 LyraShield under **Settings → API keys** (prefer read-only), then inject these through the
@@ -81,13 +81,13 @@ The interactive examples below use the OAuth credential store and therefore cont
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.13"]
+      "args": ["-y", "@lyrashield/mcp@0.2.14"]
     }
   }
 }
 ```
 
-Claude Code one-liner: `claude mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.13`
+Claude Code one-liner: `claude mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.14`
 
 ### VS Code (note: the root key is `servers`, not `mcpServers`)
 
@@ -99,7 +99,7 @@ Claude Code one-liner: `claude mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.
     "lyrashield": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.13"]
+      "args": ["-y", "@lyrashield/mcp@0.2.14"]
     }
   }
 }
@@ -112,7 +112,7 @@ OpenAI Codex keeps MCP servers under the `[mcp_servers.<name>]` table. Explicit 
 ```toml
 [mcp_servers.lyrashield]
 command = "npx"
-args = ["-y", "@lyrashield/mcp@0.2.13"]
+args = ["-y", "@lyrashield/mcp@0.2.14"]
 ```
 
 For the API-key fallback, add explicit values under `[mcp_servers.lyrashield.env]` or use
@@ -141,17 +141,17 @@ completed an authenticated runtime matrix.
   Pi (legacy registry ID `picode`), OpenClaw, Hermes and Devin, subject to each registry entry's support tier.
 
 Follow the [client guides](https://lyrashieldai.com/docs/integrations/agent-plugins) with
-`@lyrashield/mcp@0.2.13` and `npx -y lyrashield@0.2.15 login --oauth`. The CLI provides documented
-config writers and shared-skill installation; use `npx -y lyrashield@0.2.15 install <agent>` and
-`npx -y lyrashield@0.2.15 skills install <agent>` where the selected client has a supported path.
+`@lyrashield/mcp@0.2.14` and `npx -y lyrashield@0.2.16 login --oauth`. The CLI provides documented
+config writers and shared-skill installation; use `npx -y lyrashield@0.2.16 install <agent>` and
+`npx -y lyrashield@0.2.16 skills install <agent>` where the selected client has a supported path.
 Do not install from a mutable marketplace preparation branch. Do not reuse a nearby client's
 JSON/TOML shape: root keys, transport names, credential interpolation and discovery locations differ.
 
 ### Credentials resolution
 
-The server gives `LYRASHIELD_API_KEY` or `LYRASHIELD_OAUTH_ACCESS_TOKEN` precedence over `~/.lyrashield/credentials.json`, the credentials file written by `lyrashield login` (with `0o600` permissions). `LYRASHIELD_API_URL` independently overrides the API origin without replacing a stored OAuth credential. `npx -y @lyrashield/mcp@0.2.13` works without any env credential after a single `npx -y lyrashield@0.2.15 login --oauth`.
+The server gives `LYRASHIELD_API_KEY` or `LYRASHIELD_OAUTH_ACCESS_TOKEN` precedence over `~/.lyrashield/credentials.json`, the credentials file written by `lyrashield login` (with `0o600` permissions). `LYRASHIELD_API_URL` independently overrides the API origin without replacing a stored OAuth credential. `npx -y @lyrashield/mcp@0.2.14` works without any env credential after a single `npx -y lyrashield@0.2.16 login --oauth`.
 
-`@lyrashield/mcp` is an MCP stdio server, not a command-line scanner: start it with `npx -y @lyrashield/mcp@0.2.13` and let your MCP client call its tools. For pull-request CI, use the [LyraShield GitHub Action](../../README.md#use-it-from-your-coding-agent) instead.
+`@lyrashield/mcp` is an MCP stdio server, not a command-line scanner: start it with `npx -y @lyrashield/mcp@0.2.14` and let your MCP client call its tools. For pull-request CI, use the [LyraShield GitHub Action](../../README.md#use-it-from-your-coding-agent) instead.
 
 `lyrashield login --oauth` opens hosted consent using authorization code flow with PKCE and an issuer-bound loopback callback. It saves the selected workspace and tokens only after successful exchange and authenticated workspace discovery. Failed login preserves existing credentials. `lyrashield login` accepts an API key instead. `packages/credentials` owns storage, environment precedence, origin binding, refresh locking and atomic updates for both CLI and MCP.
 
@@ -206,7 +206,7 @@ Coding-agent hosts may impose their own tool permission dialogs. LyraShield cann
 
 ## Compatibility receipts
 
-- Package: `@lyrashield/mcp@0.2.13`; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/mcp@0.2.14`; runtime: Node.js 24 or newer.
 - SDK lock: `@modelcontextprotocol/sdk` 1.31.0; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
 - `pnpm --filter @lyrashield/mcp exec vitest run src` covers protocol negotiation for every SDK-supported

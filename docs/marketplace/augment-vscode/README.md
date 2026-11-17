@@ -2,7 +2,7 @@
 
 **Native workflow bundle: PREPARATION ONLY.** Augment has native skills, custom commands, rules and
 MCP support in its VS Code extension. Direct MCP tools can be connected with the published CLI
-`0.2.15` and MCP `0.2.13`. The workflow bundle is prepared but does not yet have a matching
+`0.2.16` and MCP `0.2.14`. The workflow bundle is prepared but does not yet have a matching
 immutable marketplace release. Do not copy skills from the mutable source branch. No authenticated
 Augment runtime receipt or marketplace listing is confirmed for this IDE surface. This guide is for
 Augment's VS Code extension, not the Auggie CLI plugin at [`../augment/`](../augment/README.md).
@@ -31,7 +31,7 @@ JSON**. The public custom-server docs do not establish generic OAuth or bearer-h
 for arbitrary remote MCP servers, so use the local stdio server and LyraShield's user-scoped CLI
 credential store with the published packages:
 
-1. On Node.js 24 or later, run `npx -y lyrashield@0.2.15 login --oauth` in the same OS account that
+1. On Node.js 24 or later, run `npx -y lyrashield@0.2.16 login --oauth` in the same OS account that
    will run VS Code, then select the intended workspace.
 2. Open the Augment panel, open **Settings → MCP → Import from JSON** and import:
 
@@ -40,7 +40,7 @@ credential store with the published packages:
      "mcpServers": {
        "lyrashield": {
          "command": "npx",
-         "args": ["-y", "@lyrashield/mcp@0.2.13"]
+         "args": ["-y", "@lyrashield/mcp@0.2.14"]
        }
      }
    }

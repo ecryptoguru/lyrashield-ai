@@ -1,12 +1,12 @@
 # Official MCP Registry preparation
 
-**State: NPM PUBLISHED; REGISTRY SUBMISSION PENDING.** `@lyrashield/mcp@0.2.13` carries `mcpName: io.github.ecryptoguru/lyrashield-ai` and the current 22-tool catalog. Its prepared Registry metadata remains an offline release candidate. The 0.2.13 public npm tarball matches its reviewed SHA-256 and integrity. Registry submission and exact public Registry version readback remain required before claiming a listing.
+**State: NPM PUBLISHED; REGISTRY SUBMISSION PENDING.** `@lyrashield/mcp@0.2.14` carries `mcpName: io.github.ecryptoguru/lyrashield-ai` and the current 22-tool catalog. Its prepared Registry metadata remains an offline release candidate. The 0.2.14 public npm tarball matches its reviewed SHA-256 and integrity. Registry submission and exact public Registry version readback remain required before claiming a listing.
 
 ## Verified identities and endpoints
 
 - Source repository: https://github.com/ecryptoguru/lyrashield-ai (git remote origin).
 - Hosted product domain: https://lyrashieldai.com.
-- Published stdio package: @lyrashield/mcp 0.2.13 includes the 22-tool catalog. npm bytes were independently verified on 2026-11-16; Registry listing readback remains pending; the prior 0.2.12 publication was verified on 2026-10-02.
+- Published stdio package: @lyrashield/mcp 0.2.14 includes the 22-tool catalog. npm bytes were independently verified on 2026-11-16; Registry listing readback remains pending; the prior 0.2.12 publication was verified on 2026-10-02.
 - Hosted MCP endpoint: https://app.lyrashieldai.com/api/mcp, documented by the current MCP package README. It uses Streamable HTTP and hosted OAuth discovery; the Registry remote intentionally declares no static bearer header or secret.
 - Candidate Registry name: io.github.ecryptoguru/lyrashield-ai, matching the official GitHub username namespace pattern. This is a prepared identity, not proof of namespace ownership or publication.
 - The exact prepared identity readback returned HTTP 404 and public search returned no LyraShield entry on 2026-10-02. This verifies absence for the prepared identity, not every possible alternate identity.
@@ -36,7 +36,7 @@ Only an authenticated `mcp-publisher publish` and public Registry API readback c
 ## Submission sequence
 
 1. Authenticate with GitHub as the namespace owner using the official publisher flow.
-2. Reconfirm both server.json version fields match `@lyrashield/mcp@0.2.13` and rerun both validators.
+2. Reconfirm both server.json version fields match `@lyrashield/mcp@0.2.14` and rerun both validators.
 3. Publish the reviewed package using the authenticated official CLI.
 4. Read back the exact public version and URL from the Registry API; record it in the [distribution channel ledger](https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/marketplace/channels.md).
 

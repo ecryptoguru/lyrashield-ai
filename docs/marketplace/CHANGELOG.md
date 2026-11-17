@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.33 coordinated client release — 2026-11-17
+
+- Preserve scan lifecycle status in capped MCP results while retaining the incomplete marker and 256 KiB limit.
+- Pin MCP `0.2.14`, CLI `0.2.16` and Agent Plugin `0.1.33` in prepared client artifacts.
+
 ## 0.1.32 coordinated client release — 2026-11-16
 
 - Pin published MCP `0.2.13`, CLI `0.2.15` and Agent Plugin `0.1.32` in prepared native artifacts.

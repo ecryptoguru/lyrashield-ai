@@ -1,6 +1,6 @@
 # LyraShield AI for Oh-My-Pi
 
-**State: PREPARATION.** Native config and shared skills are staged. The local alternative pins published `@lyrashield/mcp@0.2.13` and CLI `lyrashield@0.2.15`. No authenticated runtime receipt or public listing is confirmed.
+**State: PREPARATION.** Native config and shared skills are staged. The local alternative pins published `@lyrashield/mcp@0.2.14` and CLI `lyrashield@0.2.16`. No authenticated runtime receipt or public listing is confirmed.
 
 Oh-My-Pi has its own loader and config paths; do not use Pi-core `.pi/mcp.json` or `~/.pi/agent/mcp.json` here.
 

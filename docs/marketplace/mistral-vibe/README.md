@@ -1,6 +1,6 @@
 # LyraShield AI for Mistral Vibe Code — preparation
 
-**State: PREPARATION.** This bundle contains an additive local stdio MCP snippet and shared Agent Skills. `@lyrashield/mcp@0.2.13` and CLI `lyrashield@0.2.15` are published, but no authenticated Vibe client-runtime receipt or public listing is confirmed.
+**State: PREPARATION.** This bundle contains an additive local stdio MCP snippet and shared Agent Skills. `@lyrashield/mcp@0.2.14` and CLI `lyrashield@0.2.16` are published, but no authenticated Vibe client-runtime receipt or public listing is confirmed.
 
 ## Configure the MCP server
 
