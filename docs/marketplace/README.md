@@ -1,6 +1,6 @@
 # LyraShield AI marketplace release source
 
-PREPARATION ONLY: npm Agent Plugin `0.1.32`, MCP `0.2.13` and CLI `0.2.15` are published.
+PREPARATION ONLY: this coordinated release pins Agent Plugin `0.1.33`, MCP `0.2.14` and CLI `0.2.16`.
 This export binds the exact product revision recorded in `manifest.json`. Use a reviewed immutable
 marketplace tag or archive and verify its checksums before customer installation. Package publication
 or a mutable branch does not prove a marketplace listing or authenticated client acceptance.
@@ -18,9 +18,9 @@ with a plugin marketplace, import it into VS Code, enable it in shared settings 
 plugin release without matching portable-schema validation. Plugin installation recommendations
 for Claude Code, Cursor, Copilot CLI, Codex and VS Code await a reviewed matching immutable release.
 
-Use the published pinned direct MCP server `@lyrashield/mcp@0.2.13` meanwhile. Local
+Use the pinned direct MCP server `@lyrashield/mcp@0.2.14` meanwhile. Local
 stdio requires Node.js 24 or newer. Authenticate separately in the same OS account with
-`npx -y lyrashield@0.2.15 login --oauth`, then merge the client-specific config while preserving
+`npx -y lyrashield@0.2.16 login --oauth`, then merge the client-specific config while preserving
 existing entries. The published CLI includes the safe config writer and supported-surface skills
 installer; preview changes with `--dry-run`, and follow guided manual setup where no writer is
 verified for that client.
@@ -75,7 +75,7 @@ files and forbidden hosted-service paths; the export test fails if an artifact d
 Before the marketplace release, regenerate from the exact merged product revision, review the
 export, update and validate every stdio pin, then pack and verify the exact plugin and CLI
 artifacts. The recorded-scan and retest skills require the explicit `idempotencyKey` fields in MCP
-`0.2.13`; do not release those workflows against an older stdio server.
+`0.2.14`; do not release those workflows against an older stdio server.
 
 The export includes native artifacts from each supported client wave. Listing applications remain
 separate; the [channel ledger](https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/marketplace/channels.md) records the verified intake route, package identity,

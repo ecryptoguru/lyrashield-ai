@@ -97,16 +97,18 @@ describe("MCP result cap (v17)", () => {
       status: 200,
       statusText: "OK",
       headers: new Headers(),
-      json: async () => ({ success: true, data: { blob: big } }),
+      json: async () => ({ success: true, data: { id: "scan-1", status: "COMPLETED", blob: big } }),
     }))
     const server = new McpServer({ toolContext: context })
-    const res = await server.callTool("lyrashield_get_findings", {
+    const res = await server.callTool("lyrashield_get_scan_status", {
       workspaceId: "w1",
+      scanId: "scan-1",
     })
     const sc = res.structuredContent as Record<string, unknown> | undefined
     expect(sc?.truncated).toBe(true)
     expect(sc?.marker).toBe(MCP_TRUNCATION_MARKER)
     expect(sc?.complete).toBe(false)
+    expect(sc?.status).toBe("COMPLETED")
     expect(Buffer.byteLength(JSON.stringify(res), "utf8")).toBeLessThanOrEqual(MCP_RESULT_MAX_BYTES)
   })
 

@@ -6,7 +6,7 @@ import { buildLlmsPricingSummary } from "../lib/llms-pricing"
 
 describe("agent onboarding contract", () => {
   it("labels supported workflows and delegated authorization accurately", () => {
-    expect(agentOnboarding.commands).toEqual(["npx --yes lyrashield@0.2.15 login --oauth"])
+    expect(agentOnboarding.commands).toEqual(["npx --yes lyrashield@0.2.16 login --oauth"])
     expect(agentOnboarding.setupHeading).toBe("Set up and authenticate")
     expect(agentOnboarding.setupDescription).toContain("Use the pinned CLI installer")
     expect(agentOnboarding.safety.join(" ")).toContain("Read-only")

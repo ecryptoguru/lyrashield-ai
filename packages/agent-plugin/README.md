@@ -1,6 +1,6 @@
 # @lyrashield/agent-plugin
 
-**Agent Plugins 1.0.0** package `@lyrashield/agent-plugin@0.1.32` for LyraShield AI. It bundles LyraShield's MCP
+**Agent Plugins 1.0.0** package `@lyrashield/agent-plugin@0.1.33` for LyraShield AI. It bundles LyraShield's MCP
 connection and skills into one portable plugin. Conforming clients can load the canonical
 manifest; generated client shims cover the launch clients listed below.
 
@@ -33,12 +33,12 @@ path or authenticated client acceptance.
 
 ## Current customer setup
 
-Use the matching release versions `@lyrashield/agent-plugin@0.1.32`,
-`@lyrashield/mcp@0.2.13` and `lyrashield@0.2.15`. Run
-`npx -y lyrashield@0.2.15 login --oauth` for local stdio authentication in the same OS account.
+Use the matching release versions `@lyrashield/agent-plugin@0.1.33`,
+`@lyrashield/mcp@0.2.14` and `lyrashield@0.2.16`. Run
+`npx -y lyrashield@0.2.16 login --oauth` for local stdio authentication in the same OS account.
 Node.js 24 or newer is required. The CLI provides supported config writers and shared-skill
-installation; review `npx -y lyrashield@0.2.15 install <agent> --dry-run` or
-`npx -y lyrashield@0.2.15 skills install <agent> --dry-run` before writing files. Preserve existing
+installation; review `npx -y lyrashield@0.2.16 install <agent> --dry-run` or
+`npx -y lyrashield@0.2.16 skills install <agent> --dry-run` before writing files. Preserve existing
 servers and keep credentials out of shared configuration.
 
 Client-owned marketplace publication and authenticated runtime acceptance remain separate from
@@ -83,8 +83,8 @@ workflows for selected targets and scan profiles so matching calls need no addit
 review; mutating calls from API-key callers receive a `connect_required` response pointing at OAuth
 connect and the legacy exact-input approval path remains only for nondelegated hosted credentials.
 
-For local stdio fallback, run `npx -y lyrashield@0.2.15 login --oauth` first, then use
-`npx -y @lyrashield/mcp@0.2.13`; the server reads the user-only
+For local stdio fallback, run `npx -y lyrashield@0.2.16 login --oauth` first, then use
+`npx -y @lyrashield/mcp@0.2.14`; the server reads the user-only
 `~/.lyrashield/credentials.json` file. Environment variables remain an explicit CI/headless
 fallback, with `LYRASHIELD_API_KEY` taking precedence.
 Headless writes without an approval channel fail closed on the local stdio server; API-key writes
@@ -96,7 +96,7 @@ against the remote endpoint receive `connect_required` instead.
 
 ## Version and release receipts
 
-- Package: `@lyrashield/agent-plugin@0.1.32`; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/agent-plugin@0.1.33`; runtime: Node.js 24 or newer.
 - Standard schema: Agent Plugins 1.0.0.
 - `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
   OAuth-first manifests, mutation exclusions, artifact versions and the public export boundary.

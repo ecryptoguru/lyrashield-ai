@@ -193,7 +193,7 @@ export const picode: AgentEntry = {
     state: "PREPARATION",
   },
   manualInstructions:
-    "Use Pi's built-in MCP client: add the hosted server with `pi mcp add lyrashield --url https://app.lyrashieldai.com/api/mcp`, then sign in with `pi mcp login lyrashield`. Install LyraShield's shared workflow skills with `npx -y lyrashield@0.2.15 skills install pi`, then confirm they appear in Pi's skills list. Keep project MCP configuration and skills under project trust; Pi stores OAuth credentials separately.",
+    "Use Pi's built-in MCP client: add the hosted server with `pi mcp add lyrashield --url https://app.lyrashieldai.com/api/mcp`, then sign in with `pi mcp login lyrashield`. Install LyraShield's shared workflow skills with `npx -y lyrashield@0.2.16 skills install pi`, then confirm they appear in Pi's skills list. Keep project MCP configuration and skills under project trust; Pi stores OAuth credentials separately.",
   rulesFiles: [],
   source: {
     checkedOn: "2026-10-01",
