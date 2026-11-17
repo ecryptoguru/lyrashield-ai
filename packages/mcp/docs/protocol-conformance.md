@@ -1,19 +1,19 @@
 # MCP protocol conformance
 
-Baseline: `@modelcontextprotocol/sdk` **1.31.0** and `@lyrashield/mcp` 0.2.14. The SDK
-floor is `^1.31.0` in `packages/mcp` and `packages/cli` (the CLI uses the SDK as an MCP
-client); `pnpm-lock.yaml` resolves `1.31.0` with integrity
-`sha512-UvTMgnNlnIBO/22ob2RcVGDlcvOslQs8T59+FTGdA0L27a39fdGF/EDETNtDVK4DZGpwomlsYpRdA8UXcVL/pw==`.
+Baseline: `@modelcontextprotocol/sdk` **1.32.0** and `@lyrashield/mcp` 0.2.14. The SDK
+floor is `^1.32.0` in `packages/mcp` and `packages/cli` (the CLI uses the SDK as an MCP
+client); `pnpm-lock.yaml` resolves `1.32.0` with integrity
+`sha512-8BviX/hK4Gd2eL1KdTwm0gfl4d3wdoErW0Jd00h6nomUAtk6IJk5vwQJc6kfWtJTzN5OEV/lgIiJKI8fiDGAlA==`.
 
-## SDK version decision
+## SDK version decision and historical selection
 
 - At the npm registry snapshot on 2026-10-06, the SDK's `latest` dist-tag is 1.32.1
   (published 2026-10-05); 1.32.0 was published 2026-10-02. Both releases are younger
   than the repository's seven-day `minimumReleaseAge: 10080` policy. Version 1.31.0,
   published 2026-09-28, is the patched v1 release for
   [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h) and passes
-  the age gate without an SDK-specific exclusion, so the workspace resolves to it.
-- Importing the locked 1.31.0 package reports `LATEST_PROTOCOL_VERSION` as `2025-11-25`
+  the age gate without an SDK-specific exclusion, so the workspace resolved to it at that snapshot. The current reviewed lock resolves 1.32.0 under the same age policy.
+- Importing the locked 1.32.0 package reports `LATEST_PROTOCOL_VERSION` as `2025-11-25`
   and the five supported versions listed below; the MCP package's `src/protocol.test.ts`
   asserts these installed-package values.
 
