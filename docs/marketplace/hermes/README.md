@@ -1,8 +1,8 @@
 # LyraShield AI for Hermes Agent
 
-**State: PREPARATION.** This Hermes bundle is not part of a matching immutable marketplace release; no authenticated Hermes runtime receipt or Plugin Catalog listing is confirmed. Its npm dependencies `@lyrashield/mcp@0.2.13`, CLI `lyrashield@0.2.15` and Agent Plugin `0.1.32` are published.
+**State: PREPARATION.** This Hermes bundle is not part of a matching immutable marketplace release; no authenticated Hermes runtime receipt or Plugin Catalog listing is confirmed. Its npm dependencies `@lyrashield/mcp@0.2.14`, CLI `lyrashield@0.2.16` and Agent Plugin `0.1.33` are published.
 
-[`plugin/`](./plugin/) contains the shared skills and a local stdio MCP server. Run `npx -y lyrashield@0.2.15 login --oauth`, then:
+[`plugin/`](./plugin/) contains the shared skills and a local stdio MCP server. Run `npx -y lyrashield@0.2.16 login --oauth`, then:
 
 ```sh
 hermes plugins install --local /path/to/lyrashield-ai/docs/marketplace/hermes/plugin --no-enable

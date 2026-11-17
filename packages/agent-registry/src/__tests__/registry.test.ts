@@ -353,8 +353,8 @@ describe("agent registry", () => {
     expect(augmentJetBrains.rulesFiles).toContain(".augment/rules/lyrashield.md")
     for (const augment of [augmentVsCode, augmentJetBrains]) {
       expect(augment.manualInstructions).toContain("no verified LyraShield marketplace listing")
-      expect(augment.manualInstructions).toContain("lyrashield@0.2.15")
-      expect(augment.manualInstructions).toContain("@lyrashield/mcp@0.2.13")
+      expect(augment.manualInstructions).toContain("lyrashield@0.2.16")
+      expect(augment.manualInstructions).toContain("@lyrashield/mcp@0.2.14")
       expect(augment.manualInstructions).toContain(`skills install ${augment.id}`)
       expect(augment.manualInstructions).toContain("Public Beta opt-in")
       expect(augment.manualInstructions).toContain("read-only workspace call")

@@ -227,7 +227,7 @@ describe("exportMarketplace", () => {
     expect(manifest.forbidden).toContain("apps/worker")
     expect(manifest.manifestSchemaVersion).toBe("marketplace-export/2")
     expect(manifest.sourceCommit).toMatch(/^[a-f0-9]{40}$/)
-    expect(manifest.generator).toEqual({ package: "@lyrashield/agent-plugin", version: "0.1.32" })
+    expect(manifest.generator).toEqual({ package: "@lyrashield/agent-plugin", version: "0.1.33" })
     expect(manifest.publication?.status).toBe("unpublished")
     expect(manifest.files?.some((file) => file.path === "manifest.json")).toBe(false)
     const exportedPaths = manifest.files?.map((file) => file.path) ?? []
@@ -267,7 +267,7 @@ describe("exportMarketplace", () => {
     expect(claudeManifest).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
       repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
-      version: "0.1.32",
+      version: "0.1.33",
     })
     // The marketplace catalog is what makes the exported repo addressable via
     // `/plugin marketplace add` and VS Code's "Install Plugin From Source".
@@ -283,14 +283,14 @@ describe("exportMarketplace", () => {
     expect(marketplace).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-marketplace.json",
       name: "lyrashield-ai",
-      version: "0.1.32",
+      version: "0.1.33",
       owner: { name: "LyraShield AI" },
     })
     expect(marketplace.plugins).toHaveLength(1)
     expect(marketplace.plugins?.[0]).toMatchObject({
       name: "lyrashield",
       source: "./",
-      version: "0.1.32",
+      version: "0.1.33",
       license: "Apache-2.0",
     })
     const codexManifest = JSON.parse(
@@ -310,7 +310,7 @@ describe("exportMarketplace", () => {
     )
     expect(codexMarketplace.plugins?.[0]).toMatchObject({
       name: "lyrashield",
-      version: "0.1.32",
+      version: "0.1.33",
       source: { source: "local", path: "./codex-plugin" },
     })
     const installedCodexManifest = JSON.parse(
@@ -318,7 +318,7 @@ describe("exportMarketplace", () => {
     )
     expect(installedCodexManifest).toMatchObject({
       name: "lyrashield",
-      version: "0.1.32",
+      version: "0.1.33",
       mcpServers: "./.mcp.json",
     })
     expect(
@@ -355,7 +355,7 @@ describe("exportMarketplace", () => {
     ).resolves.toContain("lyrashield-mcp")
     await expect(
       readFile(path.join(output, "codebuff", "lyrashield-review.ts"), "utf8")
-    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.32"[\s\S]*mcpServers:/)
+    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.33"[\s\S]*mcpServers:/)
     await expect(
       readFile(path.join(output, "gemini-extension", "gemini-extension.json"), "utf8")
     ).resolves.toContain("lyrashield-ai")
@@ -519,10 +519,10 @@ describe("exportMarketplace", () => {
 
     // Manifest versions must match each artifact's own source-of-truth file.
     expect(manifest.artifactVersions).toEqual({
-      zed: "0.1.32",
-      gemini: "0.1.32",
-      codebuff: "0.1.32",
-      openclaw: "0.1.32",
+      zed: "0.1.33",
+      gemini: "0.1.33",
+      codebuff: "0.1.33",
+      openclaw: "0.1.33",
     })
   })
 
@@ -636,7 +636,7 @@ describe("exported validator", () => {
     await writeFile(
       preload,
       `globalThis.fetch = async url => {
-      if (url !== "https://registry.npmjs.org/@lyrashield%2fmcp/0.2.13") throw new Error("unexpected registry URL");
+      if (url !== "https://registry.npmjs.org/@lyrashield%2fmcp/0.2.14") throw new Error("unexpected registry URL");
       return new Response('{"error":"E404"}', { status: 404 });
     };`
     )
@@ -757,12 +757,12 @@ describe("exported validator", () => {
   })
 
   it.each([
-    ["manifest version", "manifest.json", '"version": "0.1.32"', '"version": "9.9.9"'],
-    ["generator version", "manifest.json", '"version": "0.1.32"', '"version": "9.9.9"'],
+    ["manifest version", "manifest.json", '"version": "0.1.33"', '"version": "9.9.9"'],
+    ["generator version", "manifest.json", '"version": "0.1.33"', '"version": "9.9.9"'],
     [
       "installed Codex version",
       "codex-plugin/.codex-plugin/plugin.json",
-      '"version": "0.1.32"',
+      '"version": "0.1.33"',
       '"version": "9.9.9"',
     ],
     [
@@ -774,8 +774,8 @@ describe("exported validator", () => {
     [
       "Codebuff executable pin with approved comment",
       "codebuff/lyrashield-review.ts",
-      'args: ["-y", "@lyrashield/mcp@0.2.13"]',
-      'args: ["-y", "@lyrashield/mcp@9.9.9"], // @lyrashield/mcp@0.2.13',
+      'args: ["-y", "@lyrashield/mcp@0.2.14"]',
+      'args: ["-y", "@lyrashield/mcp@9.9.9"], // @lyrashield/mcp@0.2.14',
     ],
   ])("rejects %s drift after hashes are refreshed", async (_label, file, before, after) => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
@@ -817,7 +817,7 @@ describe("exported validator", () => {
       '"command": "npx"',
       '"env": {"LYRASHIELD_API_URL":"https://app.lyrashieldai.com"}, "command": "npx"',
     ],
-    ["gemini-extension.json", "@lyrashield/mcp@0.2.13", "@lyrashield/mcp"],
+    ["gemini-extension.json", "@lyrashield/mcp@0.2.14", "@lyrashield/mcp"],
     ["codebuff/lyrashield-review.ts", '"read_files"', '"run_terminal_command", "read_files"'],
     ["openclaw/SKILL.md", "pull requests never auto-merge", "pull requests auto-merge"],
   ])("rejects unsafe distribution drift in %s", async (file, before, after) => {
@@ -909,7 +909,7 @@ describe("exported validator", () => {
     await expect(
       execFileAsync(process.execPath, [validator], {
         cwd: output,
-        env: { ...process.env, GITHUB_REF: "refs/tags/v0.1.32" },
+        env: { ...process.env, GITHUB_REF: "refs/tags/v0.1.33" },
       })
     ).resolves.toMatchObject({ stdout: expect.stringContaining("Marketplace validation passed") })
   })

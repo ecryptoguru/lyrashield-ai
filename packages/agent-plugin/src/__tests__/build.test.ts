@@ -201,7 +201,7 @@ describe("buildPlugin", () => {
       expect(testCase.prompt).toBeTruthy()
       expect(testCase.description).toMatch(/Expected:/)
     }
-    expect(openAi.publication.release_notes).toContain("0.1.32")
+    expect(openAi.publication.release_notes).toContain("0.1.33")
     await expect(access(path.join(pluginRoot, openAi.onboardingSkill))).resolves.toBeUndefined()
     const iconPath = path.resolve(pluginRoot, openAi.interface.logo)
     const relativeIconPath = path.relative(pluginRoot, iconPath)
