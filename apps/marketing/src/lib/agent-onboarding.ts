@@ -96,7 +96,7 @@ export const agentOnboarding = {
   setupHeading: "Set up and authenticate",
   setupDescription:
     "This command starts local workspace OAuth. Use the pinned CLI installer when a client guide provides one; otherwise follow its manual MCP or native setup. The CLI installs shared skills only for clients with a documented skill path. Hosted OAuth starts inside supported clients, including Pi; Aider uses the standalone CLI or CI path. Restart the client and verify discovery with a read-only authenticated call.",
-  commands: ["npx --yes lyrashield@0.2.15 login --oauth"],
+  commands: ["npx --yes lyrashield@0.2.16 login --oauth"],
   workflow: ["Target", "Review", "Evidence", "Fix proposal", "Retest", "Report"],
   safety: [
     "Pi has built-in MCP and OAuth support. Follow the current Pi guide at /docs/integrations/pi; the CLI installer does not configure Pi's native MCP connection.",

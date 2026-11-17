@@ -52,17 +52,17 @@ pi mcp login lyrashield</code></pre>
     instructions and scripts before granting project trust. Install LyraShield's shared skills
     into Pi's native paths with the pinned CLI:
   </p>
-  <pre><code>npx -y lyrashield@0.2.15 skills install pi --dry-run
-npx -y lyrashield@0.2.15 skills install pi</code></pre>
+  <pre><code>npx -y lyrashield@0.2.16 skills install pi --dry-run
+npx -y lyrashield@0.2.16 skills install pi</code></pre>
   <p>
     The CLI records files it owns and preserves unowned or customized files. Reload Pi and confirm
     the skills appear. LyraShield's Pi package/catalog route remains in preparation; this guide
     does not imply a public Pi listing or authenticated Pi runtime acceptance.
   </p>
   <h2>Use local CLI and CI when preferred</h2>
-  <pre><code>npx -y lyrashield@0.2.15 login --oauth
-npx -y lyrashield@0.2.15 check-diff
-npx -y lyrashield@0.2.15 gate --verdict --commit "$(git rev-parse HEAD)"</code></pre>
+  <pre><code>npx -y lyrashield@0.2.16 login --oauth
+npx -y lyrashield@0.2.16 check-diff
+npx -y lyrashield@0.2.16 gate --verdict --commit "$(git rev-parse HEAD)"</code></pre>
   <p>
     This standalone path remains available whether or not Pi MCP is configured. Oh My Pi is a
     separate client with its own configuration paths; do not reuse Pi paths for it.

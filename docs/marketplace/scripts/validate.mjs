@@ -586,7 +586,7 @@ for (const [label, entrypoint] of [
   )
 }
 
-const expectedPackage = "@lyrashield/mcp@0.2.13"
+const expectedPackage = "@lyrashield/mcp@0.2.14"
 const publishedMcpVerifier = await readFile(
   path.join(root, "scripts/verify-published-mcp.mjs"),
   "utf8"
@@ -700,7 +700,7 @@ for (const file of [
   )
   if (file.endsWith(".rs")) {
     assert(
-      text.includes('const PACKAGE_VERSION: &str = "0.2.13";'),
+      text.includes('const PACKAGE_VERSION: &str = "0.2.14";'),
       "Zed must pin the expected MCP package version"
     )
     assert(!text.includes("npm_package_latest_version"), "Zed must not install a floating release")
