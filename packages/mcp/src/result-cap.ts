@@ -15,7 +15,15 @@ export function capToolResult(result: McpToolResult): McpToolResult {
     JSON.stringify(result.structuredContent ?? result)
   const structured = result.structuredContent as Record<string, unknown> | undefined
   const continuation: Record<string, unknown> = {}
-  for (const key of ["id", "scanId", "operationId", "workspaceId", "nextCursor", "cursor"]) {
+  for (const key of [
+    "id",
+    "scanId",
+    "operationId",
+    "workspaceId",
+    "status",
+    "nextCursor",
+    "cursor",
+  ]) {
     const value = structured?.[key]
     if (typeof value === "string" && Buffer.byteLength(value, "utf8") < 1024) {
       continuation[key] = value

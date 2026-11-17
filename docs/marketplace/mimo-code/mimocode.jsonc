@@ -3,7 +3,7 @@
   "mcp": {
     "lyrashield": {
       "type": "local",
-      "command": ["npx", "-y", "@lyrashield/mcp@0.2.13"],
+      "command": ["npx", "-y", "@lyrashield/mcp@0.2.14"],
     },
   },
 }
