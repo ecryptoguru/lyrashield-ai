@@ -6,7 +6,7 @@
 
 ![Launch Readiness in the demo workspace: the triage score is zero, but all three targets still have insufficient evidence.](apps/marketing/public/product/current-readiness-dark.webp)
 
-*Reading this example:* the zero is a triage score, not a release verdict. The banner says all three targets lack current evidence. Open findings can guide the next review; they cannot establish that a release is ready.
+_Reading this example:_ the zero is a triage score, not a release verdict. The banner says all three targets lack current evidence. Open findings can guide the next review; they cannot establish that a release is ready.
 
 ## Why LyraShield
 
