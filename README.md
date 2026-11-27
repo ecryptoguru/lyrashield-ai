@@ -1,16 +1,16 @@
 # LyraShield AI
 
-Evidence-backed release assurance for AI-built software — for humans and for the coding agents building it.
+**What evidence do you have that the fix worked?** LyraShield helps teams shipping AI-built software answer that question before a release. It keeps the original finding, the proposed fix and the retest result together. When the evidence is missing or stale, the report leaves the question open.
 
-LyraShield AI turns a target into a release-assurance loop:
+[Product](https://lyrashieldai.com/) · [How evidence is evaluated](https://lyrashieldai.com/methodology) · [Case study](https://www.ankitdas.site/work/lyrashield) · [Contributor setup](#local-setup)
 
-`Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report`
+![Launch Readiness in the demo workspace: the triage score is zero, but all three targets still have insufficient evidence.](apps/marketing/public/product/current-readiness-dark.webp)
 
-It keeps detected findings, retest-confirmed results and inconclusive checks distinct. A score or AI suggestion is never treated as proof by itself.
+_Reading this example:_ the zero is a triage score, not a release verdict. The banner says all three targets lack current evidence. Open findings can guide the next review; they cannot establish that a release is ready.
 
 ## Why LyraShield
 
-A scanner tells you what it flagged. LyraShield tells you what was tested, what was proven, what remains unknown — and hands you a record you can show to a client, investor or reviewer. Eight design choices carry that difference:
+Follow one finding from detection to a release decision: `Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report`. These are the rules behind that record:
 
 1. **Evidence states, not confidence scores.** The three shipped states are `DETECTED`, `VALIDATED` and `INCONCLUSIVE`. `VERIFIED` is a future-only status and is not produced today. Confidence is triage metadata; engine-only absence remains inconclusive.
 2. **Built for how AI-built apps actually fail.** The public AI-Built Failure Taxonomy, eight AI App Security signals (AI-01–AI-08) mapped to the OWASP Top 10 for LLM Applications (2025), and 14 WebMCP controls that review the agent tool surface itself — agent rules, MCP configs, embedded secrets, prompt-injection exposure.
