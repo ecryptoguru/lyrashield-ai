@@ -1,0 +1,38 @@
+name: Verify Azure rollback manifests
+
+on:
+  push:
+    branches: [codex/beta-rollback-registry-readback]
+    paths: [.github/workflows/verify-azure-rollback-manifests.yml]
+  workflow_dispatch:
+
+permissions:
+  packages: read
+
+jobs:
+  manifests:
+    if: github.repository == 'ecryptoguru/lyrashield-ai'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check the three manifest hashes recorded for Azure release d5807da1
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          DOCKER_CONFIG="$(mktemp -d)"
+          export DOCKER_CONFIG
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+          unset REGISTRY_TOKEN
+          trap 'docker logout ghcr.io >/dev/null' EXIT
+          while read -r image digest; do
+            path="$RUNNER_TEMP/$image.manifest"
+            docker buildx imagetools inspect --raw "ghcr.io/ecryptoguru/lyrashield-ai/$image@sha256:$digest" > "$path"
+            printf '%s  %s\n' "$digest" "$path" | sha256sum --check --status
+            printf 'Verified %s manifest: sha256:%s\n' "$image" "$digest" | tee -a "$GITHUB_STEP_SUMMARY"
+          done <<'IMAGES'
+          lyrashield-web f837ffacf947d2c3e9f95be6bfe974eba0fbe1fa8bf8e8cda8c6b3892c2a73e3
+          lyrashield-worker 7a2e4fb61ae3e03b5b789acac7c1ab96fb6cfeff2e564c292176191901d884c1
+          lyrashield-egress-proxy 21b2af9b148029ec81fee5a8324cad165862046f0f3569c474d49bd7cd83ae44
+          IMAGES
